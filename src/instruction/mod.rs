@@ -24,6 +24,38 @@ use solana_sdk::{
     signer::Signer,
 };
 
+pub struct Create {
+    pub _name: String,
+    pub _symbol: String,
+    pub _uri: String,
+    pub _creator: Pubkey,
+}
+
+impl Create {
+    pub fn data(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity(8 + 4 + self._name.len() + 4 + self._symbol.len() + 4 + self._uri.len() + 32);
+
+        // 追加 discriminator
+        data.extend_from_slice(&[24, 30, 200, 40, 5, 28, 7, 119]); // discriminator
+
+        // 添加 name 字符串长度和内容
+        data.extend_from_slice(&(self._name.len() as u32).to_le_bytes());  // 添加 name 长度
+        data.extend_from_slice(self._name.as_bytes());  // 添加 name 内容
+
+        // 添加 symbol 字符串长度和内容
+        data.extend_from_slice(&(self._symbol.len() as u32).to_le_bytes());  // 添加 symbol 长度
+        data.extend_from_slice(self._symbol.as_bytes());  // 添加 symbol 内容
+
+        // 添加 uri 字符串长度和内容
+        data.extend_from_slice(&(self._uri.len() as u32).to_le_bytes());  // 添加 uri 长度
+        data.extend_from_slice(self._uri.as_bytes());  // 添加 uri 内容
+
+        data.extend_from_slice(&self._creator.to_bytes());
+
+        data
+    }
+}
+
 pub struct Buy {
     pub _amount: u64,
     pub _max_sol_cost: u64,
@@ -54,6 +86,47 @@ impl Sell {
     }
 }
 
+
+/// Creates an instruction to create a new token with bonding curve
+///
+/// Creates a new SPL token with an associated bonding curve that determines its price.
+///
+/// # Arguments
+///
+/// * `payer` - Keypair that will pay for account creation and transaction fees
+/// * `mint` - Keypair for the new token mint account that will be created
+/// * `args` - Create instruction data containing token name, symbol and metadata URI
+///
+/// # Returns
+///
+/// Returns a Solana instruction that when executed will create the token and its accounts
+pub fn create(payer: &Keypair, mint: &Keypair, args: Create) -> Instruction {
+    let bonding_curve: Pubkey = get_bonding_curve_pda(&mint.pubkey()).unwrap();
+    Instruction::new_with_bytes(
+        constants::accounts::PUMPFUN,
+        &args.data(),
+        vec![
+            AccountMeta::new(mint.pubkey(), true),
+            AccountMeta::new(get_mint_authority_pda(), false),
+            AccountMeta::new(bonding_curve, false),
+            AccountMeta::new(
+                get_associated_token_address(&bonding_curve, &mint.pubkey()),
+                false,
+            ),
+            AccountMeta::new_readonly(get_global_pda(), false),
+            AccountMeta::new_readonly(constants::accounts::MPL_TOKEN_METADATA, false),
+            AccountMeta::new(get_metadata_pda(&mint.pubkey()), false),
+            AccountMeta::new(payer.pubkey(), true),
+            AccountMeta::new_readonly(constants::accounts::SYSTEM_PROGRAM, false),
+            AccountMeta::new_readonly(constants::accounts::TOKEN_PROGRAM, false),
+            AccountMeta::new_readonly(constants::accounts::ASSOCIATED_TOKEN_PROGRAM, false),
+            AccountMeta::new_readonly(constants::accounts::RENT, false),
+            AccountMeta::new_readonly(constants::accounts::EVENT_AUTHORITY, false),
+            AccountMeta::new_readonly(constants::accounts::PUMPFUN, false),
+        ],
+    )
+}
+
 /// Creates an instruction to buy tokens from a bonding curve
 ///
 /// Buys tokens by providing SOL. The amount of tokens received is calculated based on
@@ -73,8 +146,8 @@ impl Sell {
 pub fn buy(
     payer: &Keypair,
     mint: &Pubkey,
-    bonding_curve: &Pubkey,
-    creator_vault: &Pubkey,
+    bonding_curve_pda: &Pubkey,
+    creator_vault_pda: &Pubkey,
     fee_recipient: &Pubkey,
     args: Buy,
 ) -> Instruction {
@@ -85,13 +158,13 @@ pub fn buy(
             AccountMeta::new_readonly(constants::global_constants::GLOBAL_ACCOUNT, false),
             AccountMeta::new(*fee_recipient, false),
             AccountMeta::new_readonly(*mint, false),
-            AccountMeta::new(*bonding_curve, false),
-            AccountMeta::new(get_associated_token_address(bonding_curve, mint), false),
+            AccountMeta::new(*bonding_curve_pda, false),
+            AccountMeta::new(get_associated_token_address(bonding_curve_pda, mint), false),
             AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(constants::accounts::SYSTEM_PROGRAM, false),
             AccountMeta::new_readonly(constants::accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new(*creator_vault, false),
+            AccountMeta::new(*creator_vault_pda, false),
             AccountMeta::new_readonly(constants::accounts::EVENT_AUTHORITY, false),
             AccountMeta::new_readonly(constants::accounts::PUMPFUN, false),
         ],
@@ -117,11 +190,11 @@ pub fn buy(
 pub fn sell(
     payer: &Keypair,
     mint: &Pubkey,
-    bonding_curve: &Pubkey,
-    creator_vault: &Pubkey,
+    creator_vault_pda: &Pubkey,
     fee_recipient: &Pubkey,
     args: Sell,
 ) -> Instruction {
+    let bonding_curve: Pubkey = get_bonding_curve_pda(mint).unwrap();
     Instruction::new_with_bytes(
         constants::accounts::PUMPFUN,
         &args.data(),
@@ -129,12 +202,12 @@ pub fn sell(
             AccountMeta::new_readonly(constants::global_constants::GLOBAL_ACCOUNT, false),
             AccountMeta::new(*fee_recipient, false),
             AccountMeta::new_readonly(*mint, false),
-            AccountMeta::new(*bonding_curve, false),
+            AccountMeta::new(bonding_curve, false),
             AccountMeta::new(get_associated_token_address(&bonding_curve, mint), false),
             AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(constants::accounts::SYSTEM_PROGRAM, false),
-            AccountMeta::new(*creator_vault, false),
+            AccountMeta::new(*creator_vault_pda, false),
             AccountMeta::new_readonly(constants::accounts::TOKEN_PROGRAM, false),
             AccountMeta::new_readonly(constants::accounts::EVENT_AUTHORITY, false),
             AccountMeta::new_readonly(constants::accounts::PUMPFUN, false),

@@ -18,11 +18,15 @@ use solana_sdk::{
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tonic::{transport::{self, Channel, Endpoint}, Status};
+use tonic::{
+    transport::{self, Channel, Endpoint}, Status
+};
 use yellowstone_grpc_client::ClientTlsConfig;
 
 use crate::swqos::common::poll_transaction_confirmation;
 use crate::common::SolanaRpcClient;
+
+use super::TradeType;
 
 #[derive(Debug, Error)]
 pub enum BlockEngineConnectionError {
@@ -81,21 +85,23 @@ pub async fn subscribe_bundle_results(
 
 pub async fn send_bundle_with_confirmation(
     rpc: Arc<SolanaRpcClient>,
+    trade_type: TradeType,
     transactions: &Vec<VersionedTransaction>,
     searcher_client: Arc<Mutex<SearcherServiceClient<Channel>>>,
 ) -> Result<Vec<Signature>, anyhow::Error> {
-    let mut signatures = send_bundle_no_wait(transactions, searcher_client).await?;
+    let start_time = Instant::now();
+    let signatures = send_bundle_no_wait(transactions, searcher_client).await?;
+    println!(" Jito{}提交: {:?}", trade_type, start_time.elapsed());
 
-    let timeout: Duration = Duration::from_secs(10);
     let start_time: Instant = Instant::now();
-    while Instant::now().duration_since(start_time) < timeout {
-        for signature in signatures.clone() {
-            match poll_transaction_confirmation(&rpc, signature).await {
-                Ok(sig) => signatures.push(sig),
-                Err(_) => continue,
-            }
+    for signature in signatures.clone() {
+        match poll_transaction_confirmation(&rpc, signature).await {
+            Ok(_) => continue,
+            Err(_) => continue,
         }
     }
+    
+    println!(" Jito{}确认: {:?}", trade_type, start_time.elapsed());
 
     Ok(signatures)
 }

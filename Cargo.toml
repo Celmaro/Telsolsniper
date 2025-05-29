@@ -21,8 +21,10 @@ solana-rpc-client-api = "2.1.16"
 solana-transaction-status = "2.1.16"
 solana-account-decoder = "2.1.16"
 solana-hash = "2.1.16"
-solana-perf = "2.1.16"
 solana-security-txt = "1.1.1"
+solana-entry = "2.1.16"
+solana-rpc-client-nonce-utils = "2.1.16"
+solana-perf = "2.1.16"
 
 spl-token = "8.0.0"
 spl-token-2022 = { version = "8.0.0", features = ["no-entrypoint"] }
@@ -48,8 +50,8 @@ tonic = { version = "0.12.3", features = ["tls", "tls-roots", "tls-webpki-roots"
 rustls = { version = "0.23.23", features = ["ring"] }
 rustls-native-certs = "0.8.1"
 tokio-rustls = "0.26.1"
+core_affinity = "0.8"
 
-bytes = "1.4.0"
 dotenvy = "0.15.7"
 pretty_env_logger = "0.5.0"
 log = "0.4.22"

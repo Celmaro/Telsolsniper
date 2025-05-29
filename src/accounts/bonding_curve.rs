@@ -28,11 +28,15 @@
 use serde::{Serialize, Deserialize};
 use solana_sdk::pubkey::Pubkey;
 
+use crate::{constants::global_constants::{INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, TOKEN_TOTAL_SUPPLY}, pumpfun::common::{get_bonding_curve_pda, get_creator_vault_pda}};
+
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BondingCurveAccount {
     /// Unique identifier for the bonding curve
     pub discriminator: u64,
+    /// Account address
+    pub account: Pubkey,
     /// Virtual token reserves used for price calculations
     pub virtual_token_reserves: u64,
     /// Virtual SOL reserves used for price calculations
@@ -60,17 +64,23 @@ impl BondingCurveAccount {
     /// * `real_sol_reserves` - Actual SOL reserves available
     /// * `token_total_supply` - Total supply of tokens
     /// * `complete` - Whether the curve is complete
-    // pub fn new(mint: &Pubkey, dev_buy_token_amount: u64, dev_buy_sol_amount: u64) -> Self {
-    //     Self {
-    //         // account: get_bonding_curve_pda(mint).unwrap(),
-    //         virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES - dev_buy_token_amount,
-    //         virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES + dev_buy_sol_amount,
-    //         real_token_reserves: INITIAL_REAL_TOKEN_RESERVES - dev_buy_token_amount,
-    //         real_sol_reserves: dev_buy_sol_amount,
-    //         token_total_supply: TOKEN_TOTAL_SUPPLY,
-    //         complete: false,
-    //     }
-    // }
+    pub fn new(mint: &Pubkey, dev_buy_token: u64, dev_cost_sol: u64, creator: Pubkey) -> Self {
+        Self {
+            discriminator: 0,
+            account: get_bonding_curve_pda(mint).unwrap(),
+            virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES - dev_buy_token,
+            virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES + dev_cost_sol,
+            real_token_reserves: INITIAL_REAL_TOKEN_RESERVES - dev_buy_token,
+            real_sol_reserves: dev_cost_sol,
+            token_total_supply: TOKEN_TOTAL_SUPPLY,
+            complete: false,
+            creator: creator,
+        }
+    }
+
+    pub fn get_creator_vault_pda(&self) -> Pubkey {
+        get_creator_vault_pda(&self.creator).unwrap()
+    }
 
     /// Calculates the amount of tokens received for a given SOL amount
     ///

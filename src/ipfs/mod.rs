@@ -63,12 +63,12 @@ pub struct CreateTokenMetadata {
     pub metadata_uri: Option<String>,
 }
 
-pub async fn create_token_metadata(metadata: CreateTokenMetadata, jwt_token: &str) -> Result<TokenMetadataIPFS, anyhow::Error> {
+pub async fn create_token_metadata(metadata: CreateTokenMetadata, api_token: &str) -> Result<TokenMetadataIPFS, anyhow::Error> {
     let ipfs_url = if metadata.file.starts_with("http") || metadata.metadata_uri.is_some() {
         metadata.file
     } else {
         let base64_string = file_to_base64(&metadata.file).await?;
-        upload_base64_file(&base64_string, jwt_token).await?
+        upload_base64_file(&base64_string, api_token).await?
     };
 
     let token_metadata = TokenMetadata {
@@ -94,7 +94,7 @@ pub async fn create_token_metadata(metadata: CreateTokenMetadata, jwt_token: &st
         let response = client
             .post("https://api.pinata.cloud/pinning/pinJSONToIPFS")
             .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", jwt_token))
+            .header("Authorization", format!("Bearer {}", api_token))
             .json(&token_metadata)
         .send()
         .await?;
@@ -110,13 +110,13 @@ pub async fn create_token_metadata(metadata: CreateTokenMetadata, jwt_token: &st
             };  
             Ok(token_metadata_ipfs)
         } else {
-            eprintln!("Error: {:?}", response.status());
+            eprintln!("Error: {:?}", response.text().await?);
             Err(anyhow::anyhow!("Failed to create token metadata"))
         }
     }
 }
 
-pub async fn upload_base64_file(base64_string: &str, jwt_token: &str) -> Result<String, anyhow::Error> {
+pub async fn upload_base64_file(base64_string: &str, api_token: &str) -> Result<String, anyhow::Error> {
     let decoded_bytes = general_purpose::STANDARD.decode(base64_string)?;
 
     let client = Client::builder()
@@ -133,7 +133,7 @@ pub async fn upload_base64_file(base64_string: &str, jwt_token: &str) -> Result<
 
     let response = client
         .post("https://api.pinata.cloud/pinning/pinFileToIPFS")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {}", api_token))
         .header("Accept", "application/json")
         .multipart(form)
         .send()

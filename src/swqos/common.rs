@@ -14,10 +14,8 @@ use base64::engine::general_purpose::STANDARD;
 use reqwest::Client;
 
 pub async fn poll_transaction_confirmation(rpc: &SolanaRpcClient, txt_sig: Signature) -> Result<Signature> {
-    // 15 second timeout
     let timeout: Duration = Duration::from_secs(5);
-    // 5 second retry interval
-    let interval: Duration = Duration::from_millis(300);
+    let interval: Duration = Duration::from_millis(1000);
     let start: Instant = Instant::now();
 
     loop {
@@ -102,14 +100,15 @@ pub async fn serialize_and_encode(
 pub async fn serialize_transaction_and_encode(
     transaction: &impl SerializableTransaction,
     encoding: UiTransactionEncoding,
-) -> Result<String> {
+) -> Result<(String, Signature)> {
+    let signature = transaction.get_signature();
     let serialized_tx = serialize(transaction)?;
     let serialized = match encoding {
         UiTransactionEncoding::Base58 => bs58::encode(serialized_tx).into_string(),
         UiTransactionEncoding::Base64 => STANDARD.encode(serialized_tx),
         _ => return Err(anyhow::anyhow!("Unsupported encoding")),
     };
-    Ok(serialized)
+    Ok((serialized, *signature))
 }
 
 pub async fn serialize_smart_transaction_and_encode(

@@ -10,8 +10,9 @@ pub mod pumpfun;
 
 use std::sync::Arc;
 
-use swqos::{FeeClient, JitoClient, NextBlockClient, ZeroSlotClient};
+use swqos::{FeeClient, JitoClient, NextBlockClient, NozomiClient, SolRpcClient, ZeroSlotClient};
 use rustls::crypto::{ring::default_provider, CryptoProvider};
+use solana_hash::Hash;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
@@ -58,7 +59,7 @@ impl PumpFun {
             cluster.clone().rpc_url,
             cluster.clone().commitment
         );   
-
+        let rpc = Arc::new(rpc);
         let mut fee_clients: Vec<Arc<FeeClient>> = vec![];
         if cluster.clone().use_jito {
             let jito_client = JitoClient::new(
@@ -79,6 +80,16 @@ impl PumpFun {
             fee_clients.push(Arc::new(zeroslot_client));
         }
 
+        if cluster.clone().use_nozomi {
+            let nozomi_client = NozomiClient::new(
+                cluster.clone().rpc_url,
+                cluster.clone().nozomi_url,
+                cluster.clone().nozomi_auth_token
+            );
+
+            fee_clients.push(Arc::new(nozomi_client));
+        }
+
         if cluster.clone().use_nextblock {
             let nextblock_client = NextBlockClient::new(
                 cluster.clone().rpc_url,
@@ -89,29 +100,100 @@ impl PumpFun {
             fee_clients.push(Arc::new(nextblock_client));
         }
 
+        if cluster.clone().use_rpc {
+            let rpc_client = SolRpcClient::new(rpc.clone());
+            fee_clients.push(Arc::new(rpc_client));
+        }
+
         Self {
             payer,
-            rpc: Arc::new(rpc),
+            rpc,
             fee_clients,
             priority_fee: cluster.clone().priority_fee,
             cluster: cluster.clone(),
         }
+    }
+
+    /// Create a new token
+    pub async fn create(
+        &self,
+        mint: Keypair,
+        ipfs: TokenMetadataIPFS,
+    ) -> Result<(), anyhow::Error> {
+        pumpfun::create::create(
+            self.rpc.clone(),
+            self.payer.clone(),
+            mint,
+            ipfs,
+            self.priority_fee.clone(),
+        ).await 
+    }
+
+    pub async fn create_and_buy(
+        &self,
+        mint: Keypair,
+        ipfs: TokenMetadataIPFS,
+        amount_sol: u64,
+        slippage_basis_points: Option<u64>,
+        recent_blockhash: Hash,
+    ) -> Result<(), anyhow::Error> {
+        pumpfun::create::create_and_buy(
+            self.rpc.clone(),
+            self.payer.clone(),
+            mint,
+            ipfs,
+            amount_sol,
+            slippage_basis_points,
+            self.priority_fee.clone(),
+            recent_blockhash,
+        ).await
+    }
+
+    pub async fn create_and_buy_with_tip(
+        &self,
+        payer: Arc<Keypair>, 
+        mint: Keypair,
+        ipfs: TokenMetadataIPFS,
+        buy_sol_cost: u64,
+        slippage_basis_points: Option<u64>,
+        recent_blockhash: Hash,
+    ) -> Result<(), anyhow::Error> { 
+        pumpfun::create::create_and_buy_with_tip(
+            self.rpc.clone(),
+            self.fee_clients.clone(),
+            payer,
+            mint,
+            ipfs,
+            buy_sol_cost,
+            slippage_basis_points,
+            self.priority_fee.clone(),
+            recent_blockhash,
+        ).await
     }
     
     /// Buy tokens
     pub async fn buy(
         &self,
         mint: Pubkey,
-        amount_sol: u64,
+        creator: Pubkey,
+        dev_buy_token: u64,
+        dev_sol_cost: u64,
+        buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::buy::buy(
             self.rpc.clone(),
             self.payer.clone(),
             mint,
-            amount_sol,
+            creator,
+            dev_buy_token,
+            dev_sol_cost,
+            buy_sol_cost,
             slippage_basis_points,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
@@ -119,17 +201,25 @@ impl PumpFun {
     pub async fn buy_with_tip(
         &self,
         mint: Pubkey,
-        amount_sol: u64,
+        creator: Pubkey,
+        dev_buy_token: u64,
+        dev_sol_cost: u64,
+        buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::buy::buy_with_tip(
-            self.rpc.clone(),
             self.fee_clients.clone(),
             self.payer.clone(),
             mint,
-            amount_sol,
+            creator,
+            dev_buy_token,
+            dev_sol_cost,
+            buy_sol_cost,
             slippage_basis_points,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
@@ -137,14 +227,19 @@ impl PumpFun {
     pub async fn sell(
         &self,
         mint: Pubkey,
-        amount_token: Option<u64>,
+        creator: Pubkey,
+        amount_token: u64,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell(
             self.rpc.clone(),
             self.payer.clone(),
             mint.clone(),
+            creator,
             amount_token,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
@@ -152,29 +247,42 @@ impl PumpFun {
     pub async fn sell_by_percent(
         &self,
         mint: Pubkey,
+        creator: Pubkey,
         percent: u64,
+        amount_token: u64,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell_by_percent(
             self.rpc.clone(),
             self.payer.clone(),
             mint.clone(),
+            creator,
             percent,
+            amount_token,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
     pub async fn sell_by_percent_with_tip(
         &self,
         mint: Pubkey,
+        creator: Pubkey,
         percent: u64,
+        amount_token: u64,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell_by_percent_with_tip(
-            self.rpc.clone(),
             self.fee_clients.clone(),
             self.payer.clone(),
             mint,
+            creator,
             percent,
+            amount_token,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
@@ -182,15 +290,19 @@ impl PumpFun {
     pub async fn sell_with_tip(
         &self,
         mint: Pubkey,
-        amount_token: Option<u64>,
+        creator: Pubkey,
+        amount_token: u64,
+        recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell_with_tip(
-            self.rpc.clone(),
             self.fee_clients.clone(),
             self.payer.clone(),
             mint,
+            creator,
             amount_token,
             self.priority_fee.clone(),
+            self.cluster.clone().lookup_table_key,
+            recent_blockhash,
         ).await
     }
 
@@ -257,5 +369,10 @@ impl PumpFun {
     #[inline]
     pub async fn transfer_sol(&self, payer: &Keypair, receive_wallet: &Pubkey, amount: u64) -> Result<(), anyhow::Error> {
         pumpfun::common::transfer_sol(&self.rpc, payer, receive_wallet, amount).await
+    }
+
+    #[inline]
+    pub async fn close_token_account(&self, mint: &Pubkey) -> Result<(), anyhow::Error> {
+        pumpfun::common::close_token_account(&self.rpc, self.payer.as_ref(), mint).await
     }
 }

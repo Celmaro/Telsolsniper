@@ -1,13 +1,13 @@
 use anyhow::anyhow;
-use spl_token::state::Account;
+use borsh::BorshDeserialize;
+use spl_token::instruction::close_account;
 use tokio::sync::RwLock;
 use std::{collections::HashMap, sync::Arc};
 use solana_sdk::{
-    commitment_config::CommitmentConfig, compute_budget::ComputeBudgetInstruction, instruction::Instruction, program_pack::Pack, pubkey::Pubkey, signature::Keypair, signer::Signer, system_instruction, transaction::Transaction
+    compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey, signature::Keypair, signer::Signer, system_instruction, transaction::Transaction
 };
 use spl_associated_token_account::get_associated_token_address;
 use crate::{accounts::{self, BondingCurveAccount}, common::{logs_data::TradeInfo, PriorityFee, SolanaRpcClient}, constants::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}};
-use borsh::BorshDeserialize;
 
 lazy_static::lazy_static! {
     static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<accounts::GlobalAccount>>> = RwLock::new(HashMap::new());
@@ -38,6 +38,53 @@ pub async fn transfer_sol(rpc: &SolanaRpcClient, payer: &Keypair, receive_wallet
         recent_blockhash,
     );  
 
+    rpc.send_and_confirm_transaction(&transaction).await?;
+
+    Ok(())
+}
+
+/// 关闭代币账户
+///
+/// 此函数用于关闭指定代币的关联代币账户，将账户中的代币余额转移给账户所有者。
+///
+/// # 参数
+///
+/// * `rpc` - Solana RPC客户端
+/// * `payer` - 支付交易费用的账户
+/// * `mint` - 代币的Mint地址
+///
+/// # 返回值
+///
+/// 返回一个Result，成功时返回()，失败时返回错误
+pub async fn close_token_account(rpc: &SolanaRpcClient, payer: &Keypair, mint: &Pubkey) -> Result<(), anyhow::Error> {
+    // 获取关联代币账户地址
+    let ata = get_associated_token_address(&payer.pubkey(), mint);
+    
+    // 检查账户是否存在
+    let account_exists = rpc.get_account(&ata).await.is_ok();
+    if !account_exists {
+        return Ok(()); // 如果账户不存在，直接返回成功
+    }
+    
+    // 构建关闭账户指令
+    let close_account_ix = close_account(
+        &spl_token::ID,
+        &ata,
+        &payer.pubkey(),
+        &payer.pubkey(),
+        &[&payer.pubkey()],
+    )?;
+
+    // 构建交易
+    let recent_blockhash = rpc.get_latest_blockhash().await?;
+    let transaction = Transaction::new_signed_with_payer(
+        &[close_account_ix],
+        Some(&payer.pubkey()),
+        &[payer],
+        recent_blockhash,
+    );
+
+    // 发送交易
     rpc.send_and_confirm_transaction(&transaction).await?;
 
     Ok(())
@@ -137,17 +184,19 @@ pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
 }
 
 #[inline]
-pub async fn get_global_account(rpc: &SolanaRpcClient) -> Result<Arc<accounts::GlobalAccount>, anyhow::Error> {
-    let global = get_global_pda();
-    if let Some(account) = ACCOUNT_CACHE.read().await.get(&global) {
-        return Ok(account.clone());
-    }
+pub async fn get_global_account(/*rpc: &SolanaRpcClient*/) -> Result<Arc<accounts::GlobalAccount>, anyhow::Error> {
+    // let global = constants::global_constants::GLOBAL_ACCOUNT;
+    // if let Some(account) = ACCOUNT_CACHE.read().await.get(&global) {
+    //     return Ok(account.clone());
+    // }
 
-    let account = rpc.get_account(&global).await?;
-    let global_account = bincode::deserialize::<accounts::GlobalAccount>(&account.data)?;
+    let global_account = accounts::GlobalAccount::new();
+
+    // let account = rpc.get_account(&global).await?;
+    // let global_account = bincode::deserialize::<accounts::GlobalAccount>(&account.data)?;
     let global_account = Arc::new(global_account);
 
-    ACCOUNT_CACHE.write().await.insert(global, global_account.clone());
+    // ACCOUNT_CACHE.write().await.insert(global, global_account.clone());
     Ok(global_account)
 }
 
@@ -175,9 +224,25 @@ pub async fn get_bonding_curve_account(
     Ok((bonding_curve, bonding_curve_pda))
 }
 
+// #[inline]
+// pub fn get_buy_token_amount(
+//     mint: &Pubkey,
+//     dev_buy_token: u64,
+//     dev_cost_sol: u64,
+//     bot_cost_sol: u64,
+//     slippage_basis_points: Option<u64>,
+// ) -> anyhow::Result<(u64, u64)> {
+//     let bonding_curve_account = BondingCurveAccount::new(mint, dev_buy_token, dev_cost_sol);
+//     let buy_token = bonding_curve_account.get_buy_price(bot_cost_sol).map_err(|e| anyhow!(e))?;
+
+//     let max_sol_cost = calculate_with_slippage_buy(bot_cost_sol, slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE));
+
+//     Ok((buy_token, max_sol_cost))
+// }
+
 #[inline]
 pub fn get_buy_token_amount(
-    bonding_curve_account: &Arc<accounts::BondingCurveAccount>,
+    bonding_curve_account: &BondingCurveAccount,
     buy_sol_cost: u64,
     slippage_basis_points: Option<u64>,
 ) -> anyhow::Result<(u64, u64)> {
@@ -229,6 +294,19 @@ pub fn get_buy_token_amount_from_sol_amount(
         .unwrap();
 
     tokens_received.min(real_token_reserves) as u64
+}
+
+
+#[inline]
+pub async fn init_bonding_curve_account(
+    mint: &Pubkey,
+    dev_buy_token: u64,
+    dev_sol_cost: u64,
+    creator: Pubkey,
+) -> Result<Arc<BondingCurveAccount>, anyhow::Error> {
+    let bonding_curve = BondingCurveAccount::new(mint, dev_buy_token, dev_sol_cost, creator);
+    let bonding_curve = Arc::new(bonding_curve);
+    Ok(bonding_curve)
 }
 
 #[inline]

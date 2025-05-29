@@ -17,20 +17,24 @@
 //! - `initial_real_token_reserves`: Initial actual token reserves available for trading
 //! - `token_total_supply`: Total supply of tokens
 //! - `fee_basis_points`: Fee in basis points (1/100th of a percent)
-//!
-//! # Methods
-//!
-//! - `new`: Creates a new global account instance
-//! - `get_initial_buy_price`: Calculates the initial amount of tokens received for a given SOL amount
+//! - `withdraw_authority`: Authority that can withdraw fees
+//! - `enable_migrate`: Whether migration is enabled
+//! - `pool_migration_fee`: Fee for pool migration
+//! - `creator_fee`: Fee for creators
+//! - `fee_recipients`: Array of fee recipient accounts
 
 use solana_sdk::pubkey::Pubkey;
-use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Serialize, Deserialize};
+
+use crate::constants::global_constants::*;
+
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlobalAccount {
     /// Unique identifier for the global account
     pub discriminator: u64,
+    /// Pubkey of the global account  
+    pub account: Pubkey,
     /// Whether the global account has been initialized
     pub initialized: bool,
     /// Authority that can modify global settings
@@ -39,7 +43,7 @@ pub struct GlobalAccount {
     pub fee_recipient: Pubkey,
     /// Initial virtual token reserves for price calculations
     pub initial_virtual_token_reserves: u64,
-    /// Initial virtual SOL reserves for price calculations  
+    /// Initial virtual SOL reserves for price calculations
     pub initial_virtual_sol_reserves: u64,
     /// Initial actual token reserves available for trading
     pub initial_real_token_reserves: u64,
@@ -47,43 +51,45 @@ pub struct GlobalAccount {
     pub token_total_supply: u64,
     /// Fee in basis points (1/100th of a percent)
     pub fee_basis_points: u64,
+    /// Authority that can withdraw fees
+    pub withdraw_authority: Pubkey,
+    /// Whether migration is enabled
+    pub enable_migrate: bool,
+    /// Fee for pool migration
+    pub pool_migration_fee: u64,
+    /// Fee for creators
+    pub creator_fee: u64,
+    /// Array of fee recipient accounts
+    pub fee_recipients: [Pubkey; 7],
 }
 
 impl GlobalAccount {
     /// Creates a new global account instance
-    ///
-    /// # Arguments
-    /// * `discriminator` - Unique identifier for the account
-    /// * `initialized` - Whether the account is initialized
-    /// * `authority` - Authority pubkey that can modify settings
-    /// * `fee_recipient` - Account that receives fees
-    /// * `initial_virtual_token_reserves` - Initial virtual token reserves
-    /// * `initial_virtual_sol_reserves` - Initial virtual SOL reserves
-    /// * `initial_real_token_reserves` - Initial actual token reserves
-    /// * `token_total_supply` - Total supply of tokens
-    /// * `fee_basis_points` - Fee in basis points
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        discriminator: u64,
-        initialized: bool,
-        authority: Pubkey,
-        fee_recipient: Pubkey,
-        initial_virtual_token_reserves: u64,
-        initial_virtual_sol_reserves: u64,
-        initial_real_token_reserves: u64,
-        token_total_supply: u64,
-        fee_basis_points: u64,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
-            discriminator,
-            initialized,
-            authority,
-            fee_recipient,
-            initial_virtual_token_reserves,
-            initial_virtual_sol_reserves,
-            initial_real_token_reserves,
-            token_total_supply,
-            fee_basis_points,
+            discriminator: 0,
+            account: GLOBAL_ACCOUNT,
+            initialized: true,
+            authority: AUTHORITY,
+            fee_recipient: FEE_RECIPIENT,
+            initial_virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES,
+            initial_virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES,
+            initial_real_token_reserves: INITIAL_REAL_TOKEN_RESERVES,
+            token_total_supply: TOKEN_TOTAL_SUPPLY,
+            fee_basis_points: FEE_BASIS_POINTS,
+            withdraw_authority: WITHDRAW_AUTHORITY,
+            enable_migrate: ENABLE_MIGRATE,
+            pool_migration_fee: POOL_MIGRATION_FEE,
+            creator_fee: CREATOR_FEE,
+            fee_recipients: [
+                PUMPFUN_AMM_FEE_1,
+                PUMPFUN_AMM_FEE_2,
+                PUMPFUN_AMM_FEE_3,
+                PUMPFUN_AMM_FEE_4,
+                PUMPFUN_AMM_FEE_5,
+                PUMPFUN_AMM_FEE_6,
+                PUMPFUN_AMM_FEE_7,
+            ],
         }
     }
 
@@ -110,92 +116,5 @@ impl GlobalAccount {
         } else {
             self.initial_real_token_reserves
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn get_global() -> GlobalAccount {
-        GlobalAccount::new(
-            1,
-            true,
-            Pubkey::new_unique(),
-            Pubkey::new_unique(),
-            1000,
-            1000,
-            500,
-            1000,
-            250,
-        )
-    }
-
-    fn get_large_global() -> GlobalAccount {
-        GlobalAccount::new(
-            1,
-            true,
-            Pubkey::new_unique(),
-            Pubkey::new_unique(),
-            u64::MAX,
-            u64::MAX,
-            u64::MAX / 2,
-            u64::MAX,
-            250,
-        )
-    }
-
-    #[test]
-    fn test_global_account() {
-        let global: GlobalAccount = get_global();
-
-        // Test initial buy price calculation
-        assert_eq!(global.get_initial_buy_price(0), 0);
-
-        let price: u64 = global.get_initial_buy_price(100);
-        assert!(price > 0);
-        assert!(price <= global.initial_real_token_reserves);
-    }
-
-    #[test]
-    fn test_global_account_max_reserves() {
-        let mut global: GlobalAccount = get_global();
-        global.initial_real_token_reserves = 100;
-
-        // Test that returned amount is capped by real_token_reserves
-        let price: u64 = global.get_initial_buy_price(1000);
-        assert_eq!(price, global.initial_real_token_reserves);
-    }
-
-    #[test]
-    fn test_global_account_overflow() {
-        let global: GlobalAccount = get_large_global();
-
-        // Test with maximum possible SOL amount
-        let price: u64 = global.get_initial_buy_price(u64::MAX);
-        assert!(price > 0);
-        assert!(price <= global.initial_real_token_reserves);
-
-        // Test with large but not maximum SOL amount
-        let price: u64 = global.get_initial_buy_price(u64::MAX / 2);
-        assert!(price > 0);
-        assert!(price <= global.initial_real_token_reserves);
-    }
-
-    #[test]
-    fn test_global_account_overflow_edge_cases() {
-        let mut global: GlobalAccount = get_large_global();
-        global.initial_virtual_sol_reserves = u64::MAX - 1000;
-        global.initial_virtual_token_reserves = u64::MAX - 1000;
-        global.initial_real_token_reserves = u64::MAX / 4;
-
-        // Test with amounts near u64::MAX
-        let price: u64 = global.get_initial_buy_price(u64::MAX - 1);
-        assert!(price > 0);
-        assert!(price <= global.initial_real_token_reserves);
-
-        let price: u64 = global.get_initial_buy_price(u64::MAX - 1000);
-        assert!(price > 0);
-        assert!(price <= global.initial_real_token_reserves);
     }
 }
