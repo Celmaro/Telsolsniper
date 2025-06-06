@@ -1,7 +1,7 @@
 use base64::engine::general_purpose;
 use base64::Engine;
 use regex::Regex;
-use crate::common::logs_data::{CreateTokenInfo, TradeInfo, EventTrait, TransferInfo, TipInfo};
+use crate::common::pumpfun::logs_data::{CreateTokenInfo, TradeInfo, EventTrait, TransferInfo, TipInfo};
 
 pub const PROGRAM_DATA: &str = "Program data: ";
 

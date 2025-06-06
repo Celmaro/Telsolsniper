@@ -15,7 +15,7 @@ use crate::{
         PriorityFee, 
         SolanaRpcClient
     }, 
-    constants::{self, global_constants::FEE_RECIPIENT}, 
+    constants::{self, pumpfun::global_constants::FEE_RECIPIENT}, 
     instruction, 
     swqos::{ClientType, FeeClient, TradeType}
 };
@@ -387,7 +387,7 @@ pub async fn build_buy_instructions(
         &payer.pubkey(),
         &payer.pubkey(),
         &mint,
-        &constants::accounts::TOKEN_PROGRAM,
+        &constants::pumpfun::accounts::TOKEN_PROGRAM,
     ));
 
     instructions.push(instruction::buy(

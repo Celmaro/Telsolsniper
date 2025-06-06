@@ -19,8 +19,8 @@ use solana_sdk::{
     signature::{Keypair, Signer},
 };
 
-use common::{logs_data::TradeInfo, logs_events::PumpfunEvent, logs_subscribe, Cluster, PriorityFee, SolanaRpcClient};
-use common::logs_subscribe::SubscriptionHandle;
+use common::{pumpfun::logs_data::TradeInfo, pumpfun::logs_events::PumpfunEvent, pumpfun::logs_subscribe, Cluster, PriorityFee, SolanaRpcClient};
+use common::pumpfun::logs_subscribe::SubscriptionHandle;
 use ipfs::TokenMetadataIPFS;
 
 pub struct PumpFun {

@@ -10,9 +10,9 @@ use solana_sdk::transaction::VersionedTransaction;
 use crate::common::AnyResult;
 
 use solana_sdk::pubkey::Pubkey;
-use crate::common::logs_data::DexInstruction;
-use crate::common::logs_events::PumpfunEvent;
-use crate::common::logs_filters::LogFilter;
+use crate::common::pumpfun::logs_data::DexInstruction;
+use crate::common::pumpfun::logs_events::PumpfunEvent;
+use crate::common::pumpfun::logs_filters::LogFilter;
 use crate::swqos::jito_grpc::shredstream::shredstream_proxy_client::ShredstreamProxyClient;
 use crate::swqos::jito_grpc::shredstream::SubscribeEntriesRequest;
 

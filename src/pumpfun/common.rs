@@ -7,7 +7,7 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey, signature::Keypair, signer::Signer, system_instruction, transaction::Transaction
 };
 use spl_associated_token_account::get_associated_token_address;
-use crate::{accounts::{self, BondingCurveAccount}, common::{logs_data::TradeInfo, PriorityFee, SolanaRpcClient}, constants::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}};
+use crate::{accounts::{self, BondingCurveAccount}, common::{pumpfun::logs_data::TradeInfo, PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}};
 
 lazy_static::lazy_static! {
     static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<accounts::GlobalAccount>>> = RwLock::new(HashMap::new());
@@ -142,7 +142,7 @@ pub async fn get_sol_balance(rpc: &SolanaRpcClient, account: &Pubkey) -> Result<
 #[inline]
 pub fn get_global_pda() -> Pubkey {
     static GLOBAL_PDA: once_cell::sync::Lazy<Pubkey> = once_cell::sync::Lazy::new(|| {
-        Pubkey::find_program_address(&[constants::seeds::GLOBAL_SEED], &constants::accounts::PUMPFUN).0
+        Pubkey::find_program_address(&[constants::pumpfun::seeds::GLOBAL_SEED], &constants::pumpfun::accounts::PUMPFUN).0
     });
     *GLOBAL_PDA
 }
@@ -150,23 +150,23 @@ pub fn get_global_pda() -> Pubkey {
 #[inline]
 pub fn get_mint_authority_pda() -> Pubkey {
     static MINT_AUTHORITY_PDA: once_cell::sync::Lazy<Pubkey> = once_cell::sync::Lazy::new(|| {
-        Pubkey::find_program_address(&[constants::seeds::MINT_AUTHORITY_SEED], &constants::accounts::PUMPFUN).0
+        Pubkey::find_program_address(&[constants::pumpfun::seeds::MINT_AUTHORITY_SEED], &constants::pumpfun::accounts::PUMPFUN).0
     });
     *MINT_AUTHORITY_PDA
 }
 
 #[inline]
 pub fn get_bonding_curve_pda(mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[constants::seeds::BONDING_CURVE_SEED, mint.as_ref()];
-    let program_id: &Pubkey = &constants::accounts::PUMPFUN;
+    let seeds: &[&[u8]; 2] = &[constants::pumpfun::seeds::BONDING_CURVE_SEED, mint.as_ref()];
+    let program_id: &Pubkey = &constants::pumpfun::accounts::PUMPFUN;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 #[inline]
 pub fn get_creator_vault_pda(creator: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[constants::seeds::CREATOR_VAULT_SEED, creator.as_ref()];
-    let program_id: &Pubkey = &constants::accounts::PUMPFUN;
+    let seeds: &[&[u8]; 2] = &[constants::pumpfun::seeds::CREATOR_VAULT_SEED, creator.as_ref()];
+    let program_id: &Pubkey = &constants::pumpfun::accounts::PUMPFUN;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
@@ -175,11 +175,11 @@ pub fn get_creator_vault_pda(creator: &Pubkey) -> Option<Pubkey> {
 pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(
         &[
-            constants::seeds::METADATA_SEED,
-            constants::accounts::MPL_TOKEN_METADATA.as_ref(),
+            constants::pumpfun::seeds::METADATA_SEED,
+            constants::pumpfun::accounts::MPL_TOKEN_METADATA.as_ref(),
             mint.as_ref(),
         ],
-        &constants::accounts::MPL_TOKEN_METADATA
+        &constants::pumpfun::accounts::MPL_TOKEN_METADATA
     ).0
 }
 

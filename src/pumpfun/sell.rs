@@ -8,7 +8,7 @@ use spl_token::instruction::close_account;
 use tokio::task::JoinHandle;
 use std::{str::FromStr, sync::Arc, time::Instant};
 
-use crate::{common::{address_lookup_cache::get_address_lookup_table_account, PriorityFee, SolanaRpcClient}, constants::{global_constants::FEE_RECIPIENT}, instruction, swqos::{FeeClient, TradeType, ClientType}};
+use crate::{common::{address_lookup_cache::get_address_lookup_table_account, PriorityFee, SolanaRpcClient}, constants::pumpfun::{global_constants::FEE_RECIPIENT}, instruction, swqos::{FeeClient, TradeType, ClientType}};
 
 use super::common::get_creator_vault_pda;
 

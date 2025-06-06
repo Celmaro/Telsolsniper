@@ -3,7 +3,7 @@ use std::str::FromStr;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 use crate::error::{ClientError, ClientResult};
-use crate::common::{
+use crate::common::pumpfun::{
     logs_data::{DexInstruction, CreateTokenInfo, TradeInfo}, 
     logs_filters::LogFilter
 };

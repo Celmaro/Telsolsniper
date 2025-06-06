@@ -1,6 +1,6 @@
 use pumpfun_sdk::{common::{
-    logs_events::PumpfunEvent,
-    logs_subscribe::{stop_subscription, tokens_subscription}, AnyResult
+    pumpfun::logs_events::PumpfunEvent,
+    pumpfun::logs_subscribe::{stop_subscription, tokens_subscription}, AnyResult
 }, grpc::ShredStreamGrpc};
 use solana_sdk::{commitment_config::CommitmentConfig, transaction::VersionedTransaction};
 

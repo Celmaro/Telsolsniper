@@ -1,5 +1,5 @@
-use crate::common::logs_data::DexInstruction;
-use crate::common::logs_parser::{parse_create_token_data, parse_trade_data, parse_instruction_create_token_data, parse_instruction_trade_data};
+use crate::common::pumpfun::logs_data::DexInstruction;
+use crate::common::pumpfun::logs_parser::{parse_create_token_data, parse_trade_data, parse_instruction_create_token_data, parse_instruction_trade_data};
 use crate::error::ClientResult;
 pub struct LogFilter;
 use solana_sdk::pubkey::Pubkey;

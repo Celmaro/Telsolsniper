@@ -15,9 +15,9 @@ use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedTransactionWithStatusMeta, UiTransactionEncoding,
 };
 
-use crate::common::logs_data::{DexInstruction, TransferInfo};
-use crate::common::logs_events::{PumpfunEvent, SystemEvent};
-use crate::common::logs_filters::LogFilter;
+use crate::common::pumpfun::logs_data::{DexInstruction, TransferInfo};
+use crate::common::pumpfun::logs_events::{PumpfunEvent, SystemEvent};
+use crate::common::pumpfun::logs_filters::LogFilter;
 use crate::common::AnyResult;
 
 type TransactionsFilterMap = HashMap<String, SubscribeRequestFilterTransactions>;

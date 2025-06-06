@@ -24,7 +24,7 @@ use anyhow::{anyhow, Result};
 use rand::{rng, seq::{IndexedRandom, IteratorRandom}};
 use solana_sdk::transaction::VersionedTransaction;
 
-use crate::{common::SolanaRpcClient, constants::accounts::{JITO_TIP_ACCOUNTS, NEXTBLOCK_TIP_ACCOUNTS, ZEROSLOT_TIP_ACCOUNTS, NOZOMI_TIP_ACCOUNTS}};
+use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::{JITO_TIP_ACCOUNTS, NEXTBLOCK_TIP_ACCOUNTS, ZEROSLOT_TIP_ACCOUNTS, NOZOMI_TIP_ACCOUNTS}};
 
 pub mod api;
 pub mod common;
