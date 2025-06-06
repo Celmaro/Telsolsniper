@@ -1,11 +1,16 @@
 use pumpfun_sdk::{common::{
-    pumpfun::logs_events::PumpfunEvent,
-    pumpfun::logs_subscribe::{stop_subscription, tokens_subscription}, AnyResult
-}, grpc::ShredStreamGrpc};
+    pumpfun::{logs_events::PumpfunEvent, logs_subscribe::{stop_subscription, tokens_subscription}}, pumpswap::{self, PumpSwapEvent}, AnyResult
+}, grpc::{ShredStreamGrpc, YellowstoneGrpc}};
 use solana_sdk::{commitment_config::CommitmentConfig, transaction::VersionedTransaction};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // test_pumpfun().await?;
+    test_pumpswap().await?;
+    Ok(())  
+}
+
+async fn test_pumpfun() -> Result<(), Box<dyn std::error::Error>> {
     let grpc = ShredStreamGrpc::new(
         "http://127.0.0.1:10800".to_string(), 
     ).await?;
@@ -44,8 +49,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     grpc.shredstream_subscribe(callback, None).await?;
 
-    Ok(())  
+    Ok(())
 }
+
+async fn test_pumpswap() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 GRPC 客户端订阅 PumpSwap 事件
+    println!("正在订阅 PumpSwap GRPC 事件...");
+
+    let grpc_client = ShredStreamGrpc::new(
+        "http://127.0.0.1:10800".to_string(), 
+    ).await?;
+
+    // 定义回调函数处理 PumpSwap 事件
+    let callback = |event: PumpSwapEvent| {
+        match event {
+            PumpSwapEvent::Buy(buy_event) => {
+                println!("buy_event: {:?}", buy_event);
+            },
+            PumpSwapEvent::Sell(sell_event) => {
+                println!("sell_event: {:?}", sell_event);
+            },
+            PumpSwapEvent::CreatePool(create_event) => {
+                println!("create_event: {:?}", create_event);
+            },
+            PumpSwapEvent::Deposit(deposit_event) => {
+                println!("deposit_event: {:?}", deposit_event);
+            },
+            PumpSwapEvent::Withdraw(withdraw_event) => {
+                println!("withdraw_event: {:?}", withdraw_event);
+            },
+            PumpSwapEvent::Disable(disable_event) => {
+                println!("disable_event: {:?}", disable_event);
+            },
+            PumpSwapEvent::UpdateAdmin(update_admin_event) => {
+                println!("update_admin_event: {:?}", update_admin_event);
+            },
+            PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
+                println!("update_fee_event: {:?}", update_fee_event);
+            },
+            PumpSwapEvent::Error(err) => {
+                println!("error: {}", err);
+            }
+        }
+    };
+    // 订阅 PumpSwap 事件
+    println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
+
+    grpc_client.shredstream_subscribe_pumpswap(callback).await?;
+
+    Ok(())
+}
+
 
 async fn test_wss() -> AnyResult<()> {
     println!("Starting token subscription\n");

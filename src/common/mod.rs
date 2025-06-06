@@ -1,4 +1,5 @@
 pub mod pumpfun;
+pub mod pumpswap;
 pub mod address_lookup;
 pub mod nonce_cache;
 pub mod tip_cache;
