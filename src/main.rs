@@ -5,14 +5,16 @@ use solana_sdk::{commitment_config::CommitmentConfig, transaction::VersionedTran
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // test_pumpfun().await?;
-    test_pumpswap().await?;
+    // test_pumpfun_with_shreds().await?;
+    // test_pumpfun_with_grpc().await?;
+    // test_pumpswap_with_shreds().await?;
+    test_pumpswap_with_grpc().await?;
     Ok(())  
 }
 
-async fn test_pumpfun() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_pumpfun_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
     let grpc = ShredStreamGrpc::new(
-        "http://127.0.0.1:10800".to_string(), 
+        "http://127.0.0.1:10000".to_string(), 
     ).await?;
 
     let callback = |event: PumpfunEvent| {
@@ -52,12 +54,44 @@ async fn test_pumpfun() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn test_pumpswap() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 GRPC 客户端订阅 PumpSwap 事件
-    println!("正在订阅 PumpSwap GRPC 事件...");
+async fn test_pumpfun_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
+    let grpc = YellowstoneGrpc::new(
+        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(), 
+        None,
+    )?;
+
+    let callback = |event: PumpfunEvent| {
+
+        match event {
+            PumpfunEvent::NewDevTrade(trade_info) => {
+                println!("Received new dev trade event: {:?}", trade_info);
+            },
+            PumpfunEvent::NewToken(token_info) => {
+                println!("Received new token event: {:?}", token_info);
+            },
+            PumpfunEvent::NewUserTrade(trade_info) => {
+                println!("Received new trade event: {:?}", trade_info);
+            },
+            PumpfunEvent::NewBotTrade(trade_info) => {
+                println!("Received new bot trade event: {:?}", trade_info);
+            },
+            PumpfunEvent::Error(err) => {
+                println!("Received error: {}", err);
+            }
+        }
+    };
+
+    grpc.subscribe_pumpfun(callback, None).await?;
+
+    Ok(())  
+}
+
+async fn test_pumpswap_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 ShredStream 客户端订阅 PumpSwap 事件
+    println!("正在订阅 PumpSwap ShredStream 事件...");
 
     let grpc_client = ShredStreamGrpc::new(
-        "http://127.0.0.1:10800".to_string(), 
+        "http://127.0.0.1:10000".to_string(), 
     ).await?;
 
     // 定义回调函数处理 PumpSwap 事件
@@ -96,6 +130,55 @@ async fn test_pumpswap() -> Result<(), Box<dyn std::error::Error>> {
     println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
 
     grpc_client.shredstream_subscribe_pumpswap(callback).await?;
+
+    Ok(())
+}
+
+async fn test_pumpswap_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 GRPC 客户端订阅 PumpSwap 事件
+    println!("正在订阅 PumpSwap GRPC 事件...");
+
+    let grpc = YellowstoneGrpc::new(
+        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
+        None
+    )?;
+
+    // 定义回调函数处理 PumpSwap 事件
+    let callback = |event: PumpSwapEvent| {
+        match event {
+            PumpSwapEvent::Buy(buy_event) => {
+                println!("buy_event: {:?}", buy_event);
+            },
+            PumpSwapEvent::Sell(sell_event) => {
+                println!("sell_event: {:?}", sell_event);
+            },
+            PumpSwapEvent::CreatePool(create_event) => {
+                println!("create_event: {:?}", create_event);
+            },
+            PumpSwapEvent::Deposit(deposit_event) => {
+                println!("deposit_event: {:?}", deposit_event);
+            },
+            PumpSwapEvent::Withdraw(withdraw_event) => {
+                println!("withdraw_event: {:?}", withdraw_event);
+            },
+            PumpSwapEvent::Disable(disable_event) => {
+                println!("disable_event: {:?}", disable_event);
+            },
+            PumpSwapEvent::UpdateAdmin(update_admin_event) => {
+                println!("update_admin_event: {:?}", update_admin_event);
+            },
+            PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
+                println!("update_fee_event: {:?}", update_fee_event);
+            },
+            PumpSwapEvent::Error(err) => {
+                println!("error: {}", err);
+            }
+        }
+    };
+    // 订阅 PumpSwap 事件
+    println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
+
+    grpc.subscribe_pumpswap(callback).await?;
 
     Ok(())
 }

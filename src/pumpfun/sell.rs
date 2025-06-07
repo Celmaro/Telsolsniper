@@ -56,6 +56,24 @@ pub async fn sell_by_percent(
     sell(rpc, payer, mint, creator, amount, priority_fee, lookup_table_key, recent_blockhash).await
 }
 
+/// Sell tokens by amount
+pub async fn sell_by_amount(
+    rpc: Arc<SolanaRpcClient>,
+    payer: Arc<Keypair>,
+    mint: Pubkey,
+    creator: Pubkey,
+    amount: u64,
+    priority_fee: PriorityFee,
+    lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
+) -> Result<(), anyhow::Error> {
+    if amount == 0 {
+        return Err(anyhow!("Amount must be greater than 0"));
+    }
+
+    sell(rpc, payer, mint, creator, amount, priority_fee, lookup_table_key, recent_blockhash).await
+}
+
 pub async fn sell_by_percent_with_tip(
     fee_clients: Vec<Arc<FeeClient>>,
     payer: Arc<Keypair>,
@@ -72,6 +90,23 @@ pub async fn sell_by_percent_with_tip(
     }
 
     let amount = amount_token * percent / 100;
+    sell_with_tip(fee_clients, payer, mint, creator, amount, priority_fee, lookup_table_key, recent_blockhash).await
+}
+
+pub async fn sell_by_amount_with_tip(
+    fee_clients: Vec<Arc<FeeClient>>,
+    payer: Arc<Keypair>,
+    mint: Pubkey,
+    creator: Pubkey,
+    amount: u64,
+    priority_fee: PriorityFee,
+    lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
+) -> Result<(), anyhow::Error> {
+    if amount == 0 {
+        return Err(anyhow!("Amount must be greater than 0"));
+    }
+
     sell_with_tip(fee_clients, payer, mint, creator, amount, priority_fee, lookup_table_key, recent_blockhash).await
 }
 
