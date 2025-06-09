@@ -22,7 +22,9 @@ use crate::{
 
 const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 250000;
 
-use super::common::{calculate_with_slippage_buy, get_buy_token_amount_from_sol_amount, init_bonding_curve_account};
+use super::common::{calculate_with_slippage_buy, get_buy_token_amount_from_sol_amount, init_bonding_curve_account, get_bonding_curve_account_v2, get_bonding_curve_pda};
+use crate::constants::pumpfun::trade_type::{SNIPER_BUY};
+use crate::PumpFun;
 
 /// 添加nonce消费指令到指令集合中
 ///
@@ -76,10 +78,11 @@ pub async fn buy(
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    trade_type: String,
 ) -> Result<(), anyhow::Error> {
     let start_time = Instant::now();
     let mint = Arc::new(mint.clone());
-    let instructions = build_buy_instructions(payer.clone(), mint.clone(), creator, dev_buy_token, dev_sol_cost, buy_sol_cost, slippage_basis_points).await?;
+    let instructions = build_buy_instructions(payer.clone(), mint.clone(), creator, dev_buy_token, dev_sol_cost, buy_sol_cost, slippage_basis_points, trade_type).await?;
     println!(" 买入交易指令: {:?}", start_time.elapsed());
 
     let start_time = Instant::now();
@@ -191,10 +194,11 @@ pub async fn buy_with_tip(
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    trade_type: String,
 ) -> Result<(), anyhow::Error> {
     let start_time = Instant::now();
     let mint = Arc::new(mint.clone());
-    let instructions = build_buy_instructions(payer.clone(), mint.clone(), creator, dev_buy_token, dev_sol_cost, buy_sol_cost, slippage_basis_points).await?;
+    let instructions = build_buy_instructions(payer.clone(), mint.clone(), creator, dev_buy_token, dev_sol_cost, buy_sol_cost, slippage_basis_points, trade_type).await?;
     println!(" 买入交易指令: {:?}", start_time.elapsed());
 
     let start_time = Instant::now();
@@ -356,7 +360,6 @@ pub async fn build_buy_transaction_with_tip(
 }
 
 pub async fn build_buy_instructions(
-    // rpc: Arc<SolanaRpcClient>,
     payer: Arc<Keypair>,
     mint: Arc<Pubkey>,
     creator: Pubkey,
@@ -364,12 +367,29 @@ pub async fn build_buy_instructions(
     dev_sol_cost: u64,
     buy_sol_cost: u64,
     slippage_basis_points: Option<u64>,
+    trade_type: String,
 ) -> Result<Vec<Instruction>, anyhow::Error> {
     if buy_sol_cost == 0 {
         return Err(anyhow!("Amount cannot be zero"));
     }
 
-    let bonding_curve = init_bonding_curve_account(&mint, dev_buy_token, dev_sol_cost, creator).await?;
+    let bonding_curve = if trade_type == SNIPER_BUY {
+        init_bonding_curve_account(&mint, dev_buy_token, dev_sol_cost, creator).await?
+    } else {
+        let (bonding_curve, _) = get_bonding_curve_account_v2(&PumpFun::get_instance().get_rpc(), &mint).await?;
+        Arc::new(crate::accounts::BondingCurveAccount {
+            discriminator: bonding_curve.discriminator,
+            account: get_bonding_curve_pda(&mint).unwrap(),
+            virtual_token_reserves: bonding_curve.virtual_token_reserves,
+            virtual_sol_reserves: bonding_curve.virtual_sol_reserves,
+            real_token_reserves: bonding_curve.real_token_reserves,
+            real_sol_reserves: bonding_curve.real_sol_reserves,
+            token_total_supply: bonding_curve.token_total_supply,
+            complete: bonding_curve.complete,
+            creator: creator,
+        })
+    };
+
     let max_sol_cost = calculate_with_slippage_buy(buy_sol_cost, slippage_basis_points.unwrap_or(100));
     let creator_vault_pda = bonding_curve.get_creator_vault_pda();
 

@@ -172,3 +172,11 @@ pub struct Symbol;
 impl Symbol {
     pub const SOLANA: &'static str = "solana";
 }
+
+pub mod trade_type {
+    pub const COPY_BUY: &'static str = "copy_buy";
+    pub const COPY_SELL: &'static str = "copy_sell";
+    pub const SNIPER_BUY: &'static str = "sniper_buy";
+    pub const SNIPER_SELL: &'static str = "sniper_sell";
+}
+

@@ -7,6 +7,7 @@ use solana_sdk::{
     compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey, signature::Keypair, signer::Signer, system_instruction, transaction::Transaction
 };
 use spl_associated_token_account::get_associated_token_address;
+use pumpfun_program::accounts::BondingCurveAccount as PumpfunBondingCurveAccount;
 use crate::{accounts::{self, BondingCurveAccount}, common::{pumpfun::logs_data::TradeInfo, PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}};
 
 lazy_static::lazy_static! {
@@ -222,6 +223,25 @@ pub async fn get_bonding_curve_account(
     let bonding_curve = Arc::new(bincode::deserialize::<accounts::BondingCurveAccount>(&account.data)?);
 
     Ok((bonding_curve, bonding_curve_pda))
+}
+
+#[inline]
+pub async fn get_bonding_curve_account_v2(
+    rpc: &SolanaRpcClient,
+    mint: &Pubkey,
+) -> Result<(Arc<PumpfunBondingCurveAccount>, Pubkey), anyhow::Error> {
+    let bonding_curve_pda = get_bonding_curve_pda(mint)
+        .ok_or(anyhow!("Bonding curve not found"))?;
+
+    let account = rpc.get_account(&bonding_curve_pda).await?;
+    if account.data.is_empty() {
+        return Err(anyhow!("Bonding curve not found"));
+    }
+
+    let bonding_curve = solana_sdk::borsh1::try_from_slice_unchecked::<PumpfunBondingCurveAccount>(&account.data)
+        .map_err(|e| anyhow::anyhow!("Failed to deserialize bonding curve account: {}", e))?;
+
+    Ok((Arc::new(bonding_curve), bonding_curve_pda))
 }
 
 // #[inline]
