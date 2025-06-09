@@ -90,13 +90,17 @@ fn current_timestamp() -> i64 {
 }
 
 /// 从指令中解析PumpSwap指令
-pub fn parse_pumpswap_instruction(instruction: &CompiledInstruction, accounts: &[Pubkey]) -> Option<PumpSwapInstruction> {
+pub fn parse_pumpswap_instruction(instruction: &CompiledInstruction, _accounts: &[Pubkey]) -> Option<PumpSwapInstruction> {
     if instruction.data.len() < 8 {
         return None;
     }
 
     let discriminator = &instruction.data[..8];
     let data = &instruction.data[8..];
+
+    let accounts: Vec<Pubkey> = instruction.accounts.iter()
+        .map(|&idx| _accounts[idx as usize])
+        .collect();
 
     match discriminator {
         d if d == discriminators::BUY_IX => {
