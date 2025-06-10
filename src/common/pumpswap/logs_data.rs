@@ -43,6 +43,9 @@ pub struct BuyEvent {
     pub user_quote_token_account: Pubkey,
     pub protocol_fee_recipient: Pubkey,
     pub protocol_fee_recipient_token_account: Pubkey,
+    pub coin_creator: Pubkey,
+    pub coin_creator_fee_basis_points: u64,
+    pub coin_creator_fee: u64,
     #[borsh(skip)]
     pub signature: String,
 }
@@ -72,6 +75,9 @@ pub struct SellEvent {
     pub user_quote_token_account: Pubkey,
     pub protocol_fee_recipient: Pubkey,
     pub protocol_fee_recipient_token_account: Pubkey,
+    pub coin_creator: Pubkey,
+    pub coin_creator_fee_basis_points: u64,
+    pub coin_creator_fee: u64,
     #[borsh(skip)]
     pub signature: String,
 }

@@ -162,39 +162,48 @@ impl ShredStreamGrpc {
     {
         let slot = transaction_with_slot.slot;
         let versioned_tx = transaction_with_slot.transaction;
+        let signature = versioned_tx.signatures[0].to_string();
         let instructions = PumpswapLogFilter::parse_pumpswap_compiled_instruction(versioned_tx).unwrap();
         for instruction in instructions {
             match instruction {
                 PumpSwapInstruction::CreatePool(mut create_event) => {
                     create_event.slot = slot;
+                    create_event.signature = signature.clone();
                     callback(PumpSwapEvent::CreatePool(create_event));
                 }
                 PumpSwapInstruction::Deposit(mut deposit_event) => {
                     deposit_event.slot = slot;
+                    deposit_event.signature = signature.clone();
                     callback(PumpSwapEvent::Deposit(deposit_event));
                 }
                 PumpSwapInstruction::Withdraw(mut withdraw_event) => {
                     withdraw_event.slot = slot;
+                    withdraw_event.signature = signature.clone();
                     callback(PumpSwapEvent::Withdraw(withdraw_event));
                 }
                 PumpSwapInstruction::Buy(mut buy_event) => {
                     buy_event.slot = slot;
+                    buy_event.signature = signature.clone();
                     callback(PumpSwapEvent::Buy(buy_event));
                 }
                 PumpSwapInstruction::Sell(mut sell_event) => {
                     sell_event.slot = slot;
+                    sell_event.signature = signature.clone();
                     callback(PumpSwapEvent::Sell(sell_event));
                 }
                 PumpSwapInstruction::UpdateFeeConfig(mut update_fee_event) => {
                     update_fee_event.slot = slot;
+                    update_fee_event.signature = signature.clone();
                     callback(PumpSwapEvent::UpdateFeeConfig(update_fee_event));
                 }
                 PumpSwapInstruction::UpdateAdmin(mut update_admin_event) => {
                     update_admin_event.slot = slot;
+                    update_admin_event.signature = signature.clone();
                     callback(PumpSwapEvent::UpdateAdmin(update_admin_event));
                 }
                 PumpSwapInstruction::Disable(mut disable_event) => {
                     disable_event.slot = slot;
+                    disable_event.signature = signature.clone();
                     callback(PumpSwapEvent::Disable(disable_event));
                 }
                 _ => {}
