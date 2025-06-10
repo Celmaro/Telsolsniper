@@ -5,17 +5,17 @@ use anyhow::anyhow;
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction,
     instruction::Instruction,
-
     pubkey::Pubkey,
     signature::{Keypair, Signer},
     system_instruction,
     transaction::VersionedTransaction,
+    native_token::sol_to_lamports,
 };
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 
 use crate::common::{address_lookup_cache::get_address_lookup_table_account, PriorityFee, SolanaRpcClient};
 use crate::pumpswap::common::{calculate_with_slippage_sell, find_pool, get_sell_sol_amount, get_token_balance};
-use crate::constants::{accounts, trade::DEFAULT_SLIPPAGE, SELL_DISCRIMINATOR};
+use crate::constants::pumpswap::{accounts, trade::DEFAULT_SLIPPAGE, SELL_DISCRIMINATOR};
 use crate::swqos::FeeClient;
 
 // Constants for compute budget
@@ -70,6 +70,23 @@ pub async fn sell_by_percent(
 
     let (balance_u64, _) = get_token_balance(rpc.as_ref(), payer.as_ref(), &mint).await?;
     let amount = balance_u64 * percent / 100;
+    sell(rpc, payer, mint, Some(amount), slippage_basis_points, priority_fee, lookup_table_key).await
+}
+
+/// Sell tokens by amount
+pub async fn sell_by_amount(
+    rpc: Arc<SolanaRpcClient>,
+    payer: Arc<Keypair>,
+    mint: Pubkey,
+    amount: u64,
+    slippage_basis_points: Option<u64>,
+    priority_fee: PriorityFee,
+    lookup_table_key: Option<Pubkey>
+) -> Result<(), anyhow::Error> {
+    if amount == 0 {
+        return Err(anyhow!("Amount must be greater than 0"));
+    }
+
     sell(rpc, payer, mint, Some(amount), slippage_basis_points, priority_fee, lookup_table_key).await
 }
 
@@ -144,6 +161,24 @@ pub async fn sell_by_percent_with_tip(
     sell_with_tip(rpc, fee_clients, payer, mint, Some(amount), slippage_basis_points, priority_fee, lookup_table_key).await
 }
 
+// Sell tokens by amount using a MEV service
+pub async fn sell_by_amount_with_tip(
+    rpc: Arc<SolanaRpcClient>,
+    fee_clients: Vec<Arc<FeeClient>>,
+    payer: Arc<Keypair>,
+    mint: Pubkey,
+    amount: u64,
+    slippage_basis_points: Option<u64>,
+    priority_fee: PriorityFee,
+    lookup_table_key: Option<Pubkey>
+) -> Result<(), anyhow::Error> {
+    if amount == 0 {
+        return Err(anyhow!("Amount must be greater than 0"));
+    }
+
+    sell_with_tip(rpc, fee_clients, payer, mint, Some(amount), slippage_basis_points, priority_fee, lookup_table_key).await
+}
+
 // Build a transaction for selling tokens
 pub async fn build_sell_transaction(
     _rpc: Arc<SolanaRpcClient>,
@@ -206,7 +241,7 @@ pub async fn build_sell_transaction_with_tip(
         system_instruction::transfer(
             &payer.pubkey(),
             &tip_account,
-            priority_fee.sell_tip_fee,
+            sol_to_lamports(priority_fee.sell_tip_fee),
         ),
     ];
 

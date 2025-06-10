@@ -1,7 +1,7 @@
 use solana_sdk::pubkey::Pubkey;
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
-use crate::{common::SolanaRpcClient, constants::accounts};
+use crate::{common::SolanaRpcClient, constants::pumpswap::accounts};
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
@@ -91,7 +91,7 @@ impl Pool {
             sort_results: None,
         };
 
-        let program_id = crate::constants::accounts::AMM_PROGRAM;
+        let program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
         println!("program_id: {:?}", program_id);
         let accounts = rpc.get_program_accounts_with_config(&program_id, config).await?;
 

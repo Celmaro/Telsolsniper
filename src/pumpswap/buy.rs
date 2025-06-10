@@ -11,12 +11,13 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     system_instruction,
     transaction::VersionedTransaction,
+    native_token::sol_to_lamports,
 };
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 
 use crate::common::{address_lookup_cache::get_address_lookup_table_account, nonce_cache::{self, NonceCache}, PriorityFee, SolanaRpcClient};
 use crate::pumpswap::common::{calculate_with_slippage_buy, find_pool, get_buy_token_amount};
-use crate::constants::{accounts, trade::DEFAULT_SLIPPAGE, BUY_DISCRIMINATOR};
+use crate::constants::pumpswap::{accounts, trade::DEFAULT_SLIPPAGE, BUY_DISCRIMINATOR};
 use crate::swqos::FeeClient;
 
 // Constants for compute budget
@@ -31,7 +32,7 @@ const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 256 * 1024;
 fn add_nonce_instruction(instructions: &mut Vec<Instruction>, payer: &Keypair) -> Result<(), anyhow::Error> {
     let nonce_cache = NonceCache::get_instance();
     let nonce_info = nonce_cache.get_nonce_info();
-    if let (Some(nonce_pubkey), Some(program_id)) = (nonce_info.nonce_account, nonce_info.program_id) {
+    if let Some(nonce_pubkey) = nonce_info.nonce_account {
         let nonce_value = nonce_info.current_nonce;
         // 暂不加锁
         // if nonce_info.lock {
@@ -47,7 +48,7 @@ fn add_nonce_instruction(instructions: &mut Vec<Instruction>, payer: &Keypair) -
         // nonce_cache.lock();
         // 创建自定义nonce消费指令
         let nonce_consume_ix = Instruction {
-            program_id,
+            program_id: crate::constants::pumpswap::accounts::AMM_PROGRAM,
             accounts: vec![
                 AccountMeta::new(nonce_pubkey, false),
                 AccountMeta::new_readonly(payer.pubkey(), true),
@@ -55,7 +56,7 @@ fn add_nonce_instruction(instructions: &mut Vec<Instruction>, payer: &Keypair) -
             // INSTR_CONSUME = 1, 使用传入的nonce值
             data: {
                 let mut data = vec![1]; // INSTR_CONSUME = 1
-                data.extend_from_slice(&nonce_value.to_le_bytes()); // 添加nonce值
+                data.extend_from_slice(&nonce_value.to_bytes()); // 添加nonce值
                 data
             },
         };
@@ -248,7 +249,7 @@ pub async fn build_buy_transaction_with_tip(
         system_instruction::transfer(
             &payer.pubkey(),
             &tip_account,
-            priority_fee.buy_tip_fee,
+            sol_to_lamports(priority_fee.buy_tip_fee),
         ),
     ];
 

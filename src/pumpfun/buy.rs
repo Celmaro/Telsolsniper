@@ -23,7 +23,7 @@ use crate::{
 const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 250000;
 
 use super::common::{calculate_with_slippage_buy, get_buy_token_amount_from_sol_amount, init_bonding_curve_account, get_bonding_curve_account_v2, get_bonding_curve_pda};
-use crate::constants::pumpfun::trade_type::{SNIPER_BUY};
+use crate::constants::trade_type::{SNIPER_BUY};
 use crate::PumpFun;
 
 /// 添加nonce消费指令到指令集合中

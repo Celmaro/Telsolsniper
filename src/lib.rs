@@ -7,6 +7,7 @@ pub mod common;
 pub mod ipfs;
 pub mod swqos;
 pub mod pumpfun;
+pub mod pumpswap;
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -24,7 +25,8 @@ use common::{pumpfun::logs_data::TradeInfo, pumpfun::logs_events::PumpfunEvent, 
 use common::pumpfun::logs_subscribe::SubscriptionHandle;
 use ipfs::TokenMetadataIPFS;
 
-use constants::pumpfun::trade_type::{COPY_BUY, SNIPER_BUY};
+use constants::trade_type::{COPY_BUY, SNIPER_BUY};
+use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
 
 pub struct PumpFun {
     pub payer: Arc<Keypair>,
@@ -228,21 +230,36 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::buy::buy(
-            self.rpc.clone(),
-            self.payer.clone(),
-            mint,
-            creator,
-            dev_buy_token,
-            dev_sol_cost,
-            buy_sol_cost,
-            slippage_basis_points,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-            COPY_BUY.to_string(),
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::buy::buy(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                dev_buy_token,
+                dev_sol_cost,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                COPY_BUY.to_string(),
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::buy::buy(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
+        }
     }
 
     /// Buy tokens using Jito
@@ -281,21 +298,37 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::buy::buy_with_tip(
-            self.fee_clients.clone(),
-            self.payer.clone(),
-            mint,
-            creator,
-            dev_buy_token,
-            dev_sol_cost,
-            buy_sol_cost,
-            slippage_basis_points,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-            COPY_BUY.to_string(),
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::buy::buy_with_tip(
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                dev_buy_token,
+                dev_sol_cost,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                COPY_BUY.to_string(),
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::buy::buy_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
+        }
     }
 
     /// Sell tokens
@@ -326,18 +359,33 @@ impl PumpFun {
         percent: u64,
         amount_token: u64,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::sell::sell_by_percent(
-            self.rpc.clone(),
-            self.payer.clone(),
-            mint.clone(),
-            creator,
-            percent,
-            amount_token,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::sell::sell_by_percent(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                percent,
+                amount_token,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::sell::sell_by_percent(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                percent,
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
+        }
     }
 
     /// Sell tokens by amount
@@ -347,17 +395,32 @@ impl PumpFun {
         creator: Pubkey,
         amount: u64,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::sell::sell_by_amount(
-            self.rpc.clone(),
-            self.payer.clone(),
-            mint.clone(),
-            creator,
-            amount,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::sell::sell_by_amount(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                amount,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::sell::sell_by_amount(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                amount,
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
+        }
     }
 
     pub async fn sell_by_percent_with_tip(
@@ -367,18 +430,34 @@ impl PumpFun {
         percent: u64,
         amount_token: u64,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::sell::sell_by_percent_with_tip(
-            self.fee_clients.clone(),
-            self.payer.clone(),
-            mint,
-            creator,
-            percent,
-            amount_token,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::sell::sell_by_percent_with_tip(
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                percent,
+                amount_token,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::sell::sell_by_percent_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                percent,
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))  
+        }
     }
 
     pub async fn sell_by_amount_with_tip(
@@ -387,17 +466,33 @@ impl PumpFun {
         creator: Pubkey,
         amount: u64,
         recent_blockhash: Hash,
+        trade_platform: String,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::sell::sell_by_amount_with_tip(
-            self.fee_clients.clone(),
-            self.payer.clone(),
-            mint,
-            creator,
-            amount,
-            self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
-            recent_blockhash,
-        ).await
+        if trade_platform == PUMPFUN {
+            pumpfun::sell::sell_by_amount_with_tip(
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                amount,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if trade_platform == PUMPFUN_SWAP {
+            pumpswap::sell::sell_by_amount_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                amount,
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
+        }
     }
 
     /// Sell tokens using Jito
