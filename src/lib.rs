@@ -603,4 +603,13 @@ impl PumpFun {
         
         Ok(actual_sol_reserves)
     }
+
+    #[inline]
+    pub async fn get_real_sol_reserves_with_pumpswap(&self, pool_address: &Pubkey) -> Result<u64, anyhow::Error> {
+        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        
+        let (_, quote_amount) = pool.get_token_balances(&self.rpc).await?;
+        
+        Ok(quote_amount)
+    }
 }
