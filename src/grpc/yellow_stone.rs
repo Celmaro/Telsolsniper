@@ -15,9 +15,9 @@ use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedTransactionWithStatusMeta, UiTransactionEncoding,
 };
 
-use crate::common::logs_data::{DexInstruction, TransferInfo};
-use crate::common::logs_events::{PumpfunEvent, SystemEvent};
-use crate::common::logs_filters::LogFilter;
+use crate::common::pumpfun::logs_data::{DexInstruction, TransferInfo};
+use crate::common::pumpfun::logs_events::{PumpfunEvent, SystemEvent};
+use crate::common::pumpfun::logs_filters::LogFilter;
 use crate::common::AnyResult;
 
 type TransactionsFilterMap = HashMap<String, SubscribeRequestFilterTransactions>;
@@ -346,6 +346,192 @@ impl YellowstoneGrpc {
             signature: transaction_pretty.signature.to_string(),
             tx: trade_raw.transaction.decode(),
         }));
+
+        Ok(())
+    }
+
+
+    // ------------------------------------------------------------
+    // PumpSwap
+    // ------------------------------------------------------------
+    
+    /// 订阅PumpSwap事件
+    pub async fn subscribe_pumpswap<F>(&self, callback: F) -> AnyResult<()> 
+    where
+        F: Fn(crate::common::pumpswap::logs_events::PumpSwapEvent) + Send + Sync + 'static,
+    {
+        // 使用constants中定义的AMM_PROGRAM
+        let pump_program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
+        let addrs = vec![pump_program_id.to_string()];
+
+        // 创建过滤器
+        let transactions = self.get_subscribe_request_filter(addrs, vec![], vec![]);
+
+        // 订阅事件
+        let (mut subscribe_tx, mut stream) = self.subscribe_with_request(transactions).await?;
+
+        // 创建通道
+        let (mut tx, mut rx) = mpsc::channel::<TransactionPretty>(1000);
+
+        // 创建回调函数
+        let callback = Box::new(callback);
+
+        // 启动处理流的任务
+        tokio::spawn(async move {
+            while let Some(message) = stream.next().await {
+                match message {
+                    Ok(msg) => {
+                        if let Err(e) = Self::handle_stream_message(msg, &mut tx, &mut subscribe_tx).await {
+                            error!("Error handling message: {:?}", e);
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        error!("Stream error: {error:?}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 处理交易
+        while let Some(transaction_pretty) = rx.next().await {
+            if let Err(e) = Self::process_pumpswap_transaction(transaction_pretty, &*callback).await {
+                error!("Error processing transaction: {:?}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 使用过滤器订阅PumpSwap事件
+    pub async fn subscribe_pumpswap_with_filter<F>(
+        &self,
+        callback: F,
+        account_include: Option<Vec<String>>,
+        account_exclude: Option<Vec<String>>
+    ) -> AnyResult<()> 
+    where
+        F: Fn(crate::common::pumpswap::logs_events::PumpSwapEvent) + Send + Sync + 'static,
+    {
+        // 使用constants中定义的AMM_PROGRAM
+        let pump_program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
+        let addrs = vec![pump_program_id.to_string()];
+
+        // 创建过滤器
+        let account_include = account_include.unwrap_or_default();
+        let account_exclude = account_exclude.unwrap_or_default();
+        let transactions = self.get_subscribe_request_filter(account_include, account_exclude, addrs);
+
+        // 订阅事件
+        let (mut subscribe_tx, mut stream) = self.subscribe_with_request(transactions).await?;
+
+        // 创建通道
+        let (mut tx, mut rx) = mpsc::channel::<TransactionPretty>(1000);
+
+        // 创建回调函数
+        let callback = Box::new(callback);
+
+        // 启动处理流的任务
+        tokio::spawn(async move {
+            while let Some(message) = stream.next().await {
+                match message {
+                    Ok(msg) => {
+                        if let Err(e) = Self::handle_stream_message(msg, &mut tx, &mut subscribe_tx).await {
+                            error!("Error handling message: {:?}", e);
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        error!("Stream error: {error:?}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 处理交易
+        while let Some(transaction_pretty) = rx.next().await {
+            if let Err(e) = Self::process_pumpswap_transaction(transaction_pretty, &*callback).await {
+                error!("Error processing transaction: {:?}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 处理PumpSwap交易
+    async fn process_pumpswap_transaction<F>(
+        transaction_pretty: TransactionPretty,
+        callback: &F
+    ) -> AnyResult<()>
+    where
+        F: Fn(crate::common::pumpswap::logs_events::PumpSwapEvent) + Send + Sync,
+    {
+        let slot = transaction_pretty.slot;
+        let trade_raw: solana_transaction_status::EncodedTransactionWithStatusMeta = transaction_pretty.tx;
+
+        // 检查交易元数据
+        let meta = trade_raw.meta.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Missing transaction metadata"))?;
+
+        // 检查交易是否成功
+        if meta.err.is_some() {
+            return Ok(());
+        }
+
+        // 获取日志
+        let logs = if let solana_transaction_status::option_serializer::OptionSerializer::Some(logs) = &meta.log_messages {
+            logs
+        } else {
+            &vec![]
+        };
+
+        // 解析PumpSwap事件
+        let events = crate::common::pumpswap::logs_filters::LogFilter::parse_pumpswap_logs(logs);
+
+        // 处理事件
+        for mut event in events {
+            // 设置签名和slot
+            match &mut event {
+                crate::common::pumpswap::logs_events::PumpSwapEvent::Buy(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::Sell(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::CreatePool(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::Deposit(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::Withdraw(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::Disable(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::UpdateAdmin(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                crate::common::pumpswap::logs_events::PumpSwapEvent::UpdateFeeConfig(e) => {
+                    e.signature = transaction_pretty.signature.to_string();
+                    e.slot = slot;
+                },
+                _ => {}
+            }
+
+            // 调用回调函数
+            callback(event);
+        }
 
         Ok(())
     }

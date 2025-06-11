@@ -351,14 +351,14 @@ pub async fn extend_pumpfun_address_to_lookup_table(
 pub fn get_pumpfun_addresses(payer: Pubkey, include_addresses: Vec<Pubkey>) -> Vec<Pubkey> {
     let mut addresses = vec![
         payer,
-        constants::accounts::PUMPFUN,
-        constants::accounts::SYSTEM_PROGRAM,
-        constants::accounts::TOKEN_PROGRAM,
-        constants::accounts::RENT,
-        constants::accounts::EVENT_AUTHORITY,
-        constants::accounts::ASSOCIATED_TOKEN_PROGRAM,
-        constants::global_constants::GLOBAL_ACCOUNT,
-        constants::global_constants::FEE_RECIPIENT,
+        constants::pumpfun::accounts::PUMPFUN,
+        constants::pumpfun::accounts::SYSTEM_PROGRAM,
+        constants::pumpfun::accounts::TOKEN_PROGRAM,
+        constants::pumpfun::accounts::RENT,
+        constants::pumpfun::accounts::EVENT_AUTHORITY,
+        constants::pumpfun::accounts::ASSOCIATED_TOKEN_PROGRAM,
+        constants::pumpfun::global_constants::GLOBAL_ACCOUNT,
+        constants::pumpfun::global_constants::FEE_RECIPIENT,
     ];
 
     addresses.extend(include_addresses);
@@ -369,22 +369,22 @@ pub fn get_pumpfun_addresses(payer: Pubkey, include_addresses: Vec<Pubkey>) -> V
 pub fn get_pumpfun_filtered_addresses(payer: Pubkey, include_addresses: Vec<Pubkey>) -> Vec<Pubkey> {
     let mut addresses = vec![
         payer,
-        constants::accounts::PUMPFUN, 
-        constants::accounts::SYSTEM_PROGRAM,
-        constants::accounts::TOKEN_PROGRAM,
-        constants::accounts::RENT,
-        constants::accounts::EVENT_AUTHORITY,
-        constants::accounts::ASSOCIATED_TOKEN_PROGRAM,
-        constants::global_constants::GLOBAL_ACCOUNT,
-        constants::global_constants::FEE_RECIPIENT,
-        constants::global_constants::PUMPFUN_AMM_FEE_1,
-        constants::global_constants::PUMPFUN_AMM_FEE_2,
-        constants::global_constants::PUMPFUN_AMM_FEE_3,
-        constants::global_constants::PUMPFUN_AMM_FEE_4,
-        constants::global_constants::PUMPFUN_AMM_FEE_5,
-        constants::global_constants::PUMPFUN_AMM_FEE_6,
-        constants::global_constants::PUMPFUN_AMM_FEE_7,
-        // constants::global_constants::PUMPFUN_AMM_FEE_8,
+        constants::pumpfun::accounts::PUMPFUN, 
+        constants::pumpfun::accounts::SYSTEM_PROGRAM,
+        constants::pumpfun::accounts::TOKEN_PROGRAM,
+        constants::pumpfun::accounts::RENT,
+        constants::pumpfun::accounts::EVENT_AUTHORITY,
+        constants::pumpfun::accounts::ASSOCIATED_TOKEN_PROGRAM,
+        constants::pumpfun::global_constants::GLOBAL_ACCOUNT,
+        constants::pumpfun::global_constants::FEE_RECIPIENT,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_1,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_2,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_3,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_4,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_5,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_6,
+        constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_7,
+        // constants::pumpfun::global_constants::PUMPFUN_AMM_FEE_8,
     ];
 
     addresses.extend(include_addresses);

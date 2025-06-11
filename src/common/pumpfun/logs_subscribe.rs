@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use futures::StreamExt;
-use crate::{constants, common::{
+use crate::{constants, common::pumpfun::{
     logs_data::DexInstruction, logs_events::DexEvent, logs_filters::LogFilter
 }};
 
@@ -41,7 +41,7 @@ pub async fn tokens_subscription<F>(
 where
     F: Fn(PumpfunEvent) + Send + Sync + 'static,
 {
-    let program_address = constants::accounts::PUMPFUN.to_string();
+    let program_address = constants::pumpfun::accounts::PUMPFUN.to_string();
     let logs_filter = RpcTransactionLogsFilter::Mentions(vec![program_address]);
 
     let logs_config = RpcTransactionLogsConfig {

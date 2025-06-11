@@ -26,7 +26,7 @@
 use solana_sdk::pubkey::Pubkey;
 use serde::{Serialize, Deserialize};
 
-use crate::constants::global_constants::*;
+use crate::constants::pumpfun::global_constants::*;
 
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]

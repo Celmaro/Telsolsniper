@@ -219,7 +219,7 @@ pub async fn build_create_and_buy_instructions(
         &payer.pubkey(),
         &payer.pubkey(),
         &mint.pubkey(),
-        &constants::accounts::TOKEN_PROGRAM,
+        &constants::pumpfun::accounts::TOKEN_PROGRAM,
     ));
 
     instructions.push(instruction::buy(
@@ -227,7 +227,7 @@ pub async fn build_create_and_buy_instructions(
         &mint.pubkey(),
         &bonding_curve_pda,
         &creator_vault_pda,
-        &constants::global_constants::FEE_RECIPIENT,
+        &constants::pumpfun::global_constants::FEE_RECIPIENT,
         instruction::Buy {
             _amount: buy_token_amount,
             _max_sol_cost: max_sol_cost,
