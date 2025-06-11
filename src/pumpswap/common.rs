@@ -64,3 +64,22 @@ pub async fn get_sell_sol_amount(
     let pool_data = crate::pumpswap::pool::Pool::fetch(rpc, pool).await?;
     pool_data.calculate_sell_amount(rpc, token_amount).await
 }
+
+pub(crate) fn coin_creator_vault_authority(coin_creator: Pubkey) -> Pubkey {
+    let (pump_pool_authority, _) = Pubkey::find_program_address(
+        &[b"creator_vault", &coin_creator.to_bytes()],
+        &crate::constants::pumpswap::accounts::AMM_PROGRAM,
+    );
+    pump_pool_authority
+}
+
+pub(crate) fn coin_creator_vault_ata(coin_creator: Pubkey) -> Pubkey {
+    let creator_vault_authority = coin_creator_vault_authority(coin_creator);
+    let associated_token_creator_vault_authority =
+        spl_associated_token_account::get_associated_token_address_with_program_id(
+            &creator_vault_authority,
+            &crate::constants::pumpswap::accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::pumpswap::accounts::TOKEN_PROGRAM,
+        );
+    associated_token_creator_vault_authority
+}

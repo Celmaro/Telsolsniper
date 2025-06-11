@@ -73,7 +73,7 @@ impl Pool {
     ) -> Result<(Pubkey, Self), anyhow::Error> {
         // 使用getProgramAccounts查找给定mint的池子
         let filters = vec![
-            solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
+            // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
             solana_rpc_client_api::filter::RpcFilterType::Memcmp(
                 solana_client::rpc_filter::Memcmp::new_base58_encoded(43, &mint.to_bytes()),
             ),

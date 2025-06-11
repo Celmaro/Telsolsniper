@@ -252,10 +252,16 @@ impl PumpFun {
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
+                creator,
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
@@ -321,10 +327,16 @@ impl PumpFun {
                 self.fee_clients.clone(),
                 self.payer.clone(),
                 mint,
+                creator,
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
@@ -378,10 +390,16 @@ impl PumpFun {
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
+                creator,
                 percent,
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
@@ -413,10 +431,16 @@ impl PumpFun {
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
+                creator,
                 amount,
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
@@ -450,10 +474,16 @@ impl PumpFun {
                 self.fee_clients.clone(),
                 self.payer.clone(),
                 mint,
+                creator,
                 percent,
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))  
@@ -485,10 +515,16 @@ impl PumpFun {
                 self.fee_clients.clone(),
                 self.payer.clone(),
                 mint,
+                creator,
                 amount,
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                None,
+                None,
+                None,
+                None,
+                None,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))

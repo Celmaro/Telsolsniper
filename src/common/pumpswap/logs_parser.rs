@@ -113,7 +113,7 @@ pub fn parse_pumpswap_instruction(instruction: &CompiledInstruction, _accounts: 
             }
             let base_amount_out = u64::from_le_bytes(data[0..8].try_into().ok()?);
             let max_quote_amount_in = u64::from_le_bytes(data[8..16].try_into().ok()?);
-            
+
             Some(PumpSwapInstruction::Buy(BuyEvent {
                 base_amount_out,
                 max_quote_amount_in,
@@ -124,6 +124,13 @@ pub fn parse_pumpswap_instruction(instruction: &CompiledInstruction, _accounts: 
                 protocol_fee_recipient: accounts[9],
                 protocol_fee_recipient_token_account: accounts[10],
                 timestamp: current_timestamp(),
+
+                base_mint: accounts[3],
+                quote_mint: accounts[4],
+                pool_base_token_account: accounts[7],
+                pool_quote_token_account: accounts[8],
+                coin_creator_vault_ata: if accounts.len() > 17 { accounts[17] } else { Pubkey::default() },
+                coin_creator_vault_authority: if accounts.len() > 18 { accounts[18] } else { Pubkey::default() }, 
                 ..Default::default()
             }))
         },
@@ -148,6 +155,13 @@ pub fn parse_pumpswap_instruction(instruction: &CompiledInstruction, _accounts: 
                 protocol_fee_recipient: accounts[9],
                 protocol_fee_recipient_token_account: accounts[10],
                 timestamp: current_timestamp(),
+                
+                base_mint: accounts[3],
+                quote_mint: accounts[4],
+                pool_base_token_account: accounts[7],
+                pool_quote_token_account: accounts[8],
+                coin_creator_vault_ata: if accounts.len() > 17 { accounts[17] } else { Pubkey::default() },
+                coin_creator_vault_authority: if accounts.len() > 18 { accounts[18] } else { Pubkey::default() }, 
                 ..Default::default()
             }))
         },

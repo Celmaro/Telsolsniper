@@ -48,6 +48,19 @@ pub struct BuyEvent {
     pub coin_creator_fee: u64,
     #[borsh(skip)]
     pub signature: String,
+
+    #[borsh(skip)]
+    pub base_mint: Pubkey,
+    #[borsh(skip)]
+    pub quote_mint: Pubkey,
+    #[borsh(skip)]
+    pub pool_base_token_account: Pubkey,
+    #[borsh(skip)]
+    pub pool_quote_token_account: Pubkey,
+    #[borsh(skip)]
+    pub coin_creator_vault_ata: Pubkey,
+    #[borsh(skip)]
+    pub coin_creator_vault_authority: Pubkey,
 }
 
 /// 卖出事件
@@ -80,6 +93,19 @@ pub struct SellEvent {
     pub coin_creator_fee: u64,
     #[borsh(skip)]
     pub signature: String,
+
+    #[borsh(skip)]
+    pub base_mint: Pubkey,
+    #[borsh(skip)]
+    pub quote_mint: Pubkey,
+    #[borsh(skip)]
+    pub pool_base_token_account: Pubkey,
+    #[borsh(skip)]
+    pub pool_quote_token_account: Pubkey,
+    #[borsh(skip)]
+    pub coin_creator_vault_ata: Pubkey,
+    #[borsh(skip)]
+    pub coin_creator_vault_authority: Pubkey,
 }
 
 /// 创建池子事件
