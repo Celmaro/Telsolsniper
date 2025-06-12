@@ -641,6 +641,23 @@ impl PumpFun {
     }
 
     #[inline]
+    pub async fn get_current_price_with_pumpswap(&self, pool_address: &Pubkey) -> Result<f64, anyhow::Error> {
+        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        
+        let (base_amount, quote_amount) = pool.get_token_balances(&self.rpc).await?;
+        
+        // Calculate price using constant product formula (x * y = k)
+        // Price = quote_amount / base_amount
+        if base_amount == 0 {
+            return Err(anyhow::anyhow!("Base amount is zero, cannot calculate price"));
+        }
+        
+        let price = quote_amount as f64 / base_amount as f64;
+        
+        Ok(price)
+    }
+
+    #[inline]
     pub async fn get_real_sol_reserves_with_pumpswap(&self, pool_address: &Pubkey) -> Result<u64, anyhow::Error> {
         let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
         
