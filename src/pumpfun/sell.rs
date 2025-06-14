@@ -273,6 +273,11 @@ pub async fn build_sell_instructions(
     // Get token balance using get_payer_token_balance
     let balance_u64 = PumpFun::get_instance().get_payer_token_balance(&mint).await?;
 
+    let mut amount_token = amount_token;
+    if amount_token > balance_u64 {
+        amount_token = balance_u64;
+    }
+
     let mut instructions = vec![
         instruction::sell(
             payer.as_ref(),
