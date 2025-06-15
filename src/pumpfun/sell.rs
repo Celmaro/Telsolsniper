@@ -270,8 +270,11 @@ pub async fn build_sell_instructions(
     let creator_vault_pda = get_creator_vault_pda(&creator).unwrap();
     let ata = get_associated_token_address(&payer.pubkey(), &mint);
 
-    // Get token balance using get_payer_token_balance
-    let balance_u64 = PumpFun::get_instance().get_payer_token_balance(&mint).await?;
+    // Get token balance
+    let rpc = PumpFun::get_instance().get_rpc().clone();
+    let balance = rpc.get_token_account_balance(&ata).await?;
+    let balance_u64 = balance.amount.parse::<u64>()
+        .map_err(|_| anyhow!("Failed to parse token balance"))?;
 
     let mut amount_token = amount_token;
     if amount_token > balance_u64 {
