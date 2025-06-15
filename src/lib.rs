@@ -674,4 +674,13 @@ impl PumpFun {
         
         Ok(quote_amount)
     }
+
+    #[inline]
+    pub async fn get_payer_token_balance_with_pumpswap(&self, pool_address: &Pubkey) -> Result<u64, anyhow::Error> {
+        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        
+        let (base_amount, _) = pool.get_token_balances(&self.rpc).await?;
+        
+        Ok(base_amount)
+    }
 }
