@@ -101,7 +101,7 @@ async fn test_pumpswap_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // 使用 ShredStream 客户端订阅 PumpSwap 事件
     println!("正在订阅 PumpSwap ShredStream 事件...");
 
-    let grpc_client = ShredStreamGrpc::new("http://140.82.2.197:10800".to_string()).await?;
+    let grpc_client = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
 
     // 定义回调函数处理 PumpSwap 事件
     let callback = |event: PumpSwapEvent| {
