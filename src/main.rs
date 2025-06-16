@@ -8,6 +8,7 @@ use sol_trade_sdk::{
             logs_subscribe::{stop_subscription, tokens_subscription},
         },
         pumpswap::{self, PumpSwapEvent},
+        raydium::{self, RaydiumEvent},
         AnyResult, Cluster, PriorityFee,
     },
     grpc::{ShredStreamGrpc, YellowstoneGrpc},
@@ -25,7 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // test_pumpfun_with_grpc().await?;
     // test_pumpswap_with_shreds().await?;
     // test_pumpswap_with_grpc().await?;
-    test_sell().await?;
+    // test_raydium_with_shreds().await?;
+    test_raydium_with_grpc().await?;
+    // test_sell().await?;
     Ok(())
 }
 
@@ -186,6 +189,69 @@ async fn test_pumpswap_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
     println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
 
     grpc.subscribe_pumpswap(callback).await?;
+
+    Ok(())
+}
+
+async fn test_raydium_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 ShredStream 客户端订阅 Raydium 事件
+    println!("正在订阅 Raydium ShredStream 事件...");
+
+    let grpc_client = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
+
+    // 定义回调函数处理 Raydium 事件
+    let callback = |event: RaydiumEvent| {
+        match event {
+            RaydiumEvent::V4Swap(v4_swap_event) => {
+                println!("v4_swap_event: {:?}", v4_swap_event);
+            }
+            RaydiumEvent::SwapBaseInput(swap_base_input_event) => {
+                println!("swap_base_input_event: {:?}", swap_base_input_event);
+            }
+            RaydiumEvent::SwapBaseOutput(swap_base_output_event) => {
+                println!("swap_base_output_event: {:?}", swap_base_output_event);
+            }
+            RaydiumEvent::Error(err) => {
+                println!("error: {}", err);
+            }
+        }
+    };
+    // 订阅 Raydium 事件
+    println!("开始监听 Raydium 事件，按 Ctrl+C 停止...");
+
+    grpc_client.shredstream_subscribe_raydium(callback).await?;
+
+    Ok(())
+}
+
+async fn test_raydium_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 GRPC 客户端订阅 Raydium 事件
+    println!("正在订阅 Raydium GRPC 事件...");
+
+    let grpc = YellowstoneGrpc::new(
+        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
+        None,
+    )?;
+
+    // 定义回调函数处理 PumpSwap 事件
+    let callback = |event: RaydiumEvent| match event {
+        RaydiumEvent::V4Swap(v4_swap_event) => {
+            println!("v4_swap_event: {:?}", v4_swap_event);
+        }
+        RaydiumEvent::SwapBaseInput(swap_base_input_event) => {
+            println!("swap_base_input_event: {:?}", swap_base_input_event);
+        }
+        RaydiumEvent::SwapBaseOutput(swap_base_output_event) => {
+            println!("swap_base_output_event: {:?}", swap_base_output_event);
+        }
+        RaydiumEvent::Error(err) => {
+            println!("error: {}", err);
+        }
+    };
+    // 订阅 Raydium 事件
+    println!("开始监听 Raydium 事件，按 Ctrl+C 停止...");
+
+    grpc.subscribe_raydium(callback).await?;
 
     Ok(())
 }
