@@ -25,7 +25,7 @@ pumpfun-sdk = { path = "./pumpfun-sdk", version = "2.4.3" }
 
 ### logs subscription for token create and trade  transaction
 ```rust
-use pumpfun_sdk::{common::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
+use sol_trade_sdk::{common::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
 
 // create grpc client
 let grpc_url = "http://127.0.0.1:10000";
@@ -59,7 +59,7 @@ client.subscribe_pumpfun(callback, Some(payer_keypair.pubkey())).await?;
 ### Init pumpfun instance for configs
 ```rust
 use std::sync::Arc;
-use pumpfun_sdk::{common::{Cluster, PriorityFee}, PumpFun};
+use sol_trade_sdk::{common::{Cluster, PriorityFee}, PumpFun};
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair, signer::Signer};
 
 let priority_fee = PriorityFee{
@@ -93,7 +93,7 @@ let pumpfun = PumpFun::new(
 
 ### pumpfun buy token
 ```rust
-use pumpfun_sdk::PumpFun;
+use sol_trade_sdk::PumpFun;
 use solana_sdk::{native_token::sol_to_lamports, signature::Keypair, signer::Signer};
 
 // create pumpfun instance
@@ -109,7 +109,7 @@ pumpfun.buy_with_tip(mint_pubkey, 10000, None).await?;
 
 ### pumpfun sell token
 ```rust
-use pumpfun_sdk::PumpFun;
+use sol_trade_sdk::PumpFun;
 use solana_sdk::{native_token::sol_to_lamports, signature::Keypair, signer::Signer};
 
 // create pumpfun instance
