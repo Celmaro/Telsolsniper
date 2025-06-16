@@ -10,6 +10,7 @@ use solana_sdk::{
     system_instruction,
     transaction::VersionedTransaction,
 };
+use solana_hash::Hash;
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -33,17 +34,15 @@ const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 256 * 1024;
 
 /// 添加nonce消费指令到指令集合中
 ///
-/// 只有当同时提供了nonce_pubkey和nonce_program_id时才使用nonce功能
+/// 只有提供了nonce_pubkey时才使用nonce功能
 /// 如果nonce被锁定、已使用或未准备好，将返回错误
 /// 成功时会锁定并标记nonce为已使用
-fn add_nonce_instruction(
-    instructions: &mut Vec<Instruction>,
-    payer: &Keypair,
-) -> Result<(), anyhow::Error> {
+fn add_nonce_instruction(instructions: &mut Vec<Instruction>, payer: &Keypair) -> Result<(), anyhow::Error> {
     let nonce_cache = NonceCache::get_instance();
     let nonce_info = nonce_cache.get_nonce_info();
+
+    // 只检查nonce_account是否存在
     if let Some(nonce_pubkey) = nonce_info.nonce_account {
-        let nonce_value = nonce_info.current_nonce;
         // 暂不加锁
         // if nonce_info.lock {
         //     return Err(anyhow!("Nonce is locked"));
@@ -51,55 +50,28 @@ fn add_nonce_instruction(
         if nonce_info.used {
             return Err(anyhow!("Nonce is used"));
         }
-        if nonce_info.next_buy_time == 0
-            || chrono::Utc::now().timestamp() < nonce_info.next_buy_time
-        {
+        if nonce_info.current_nonce == Hash::default() {
             return Err(anyhow!("Nonce is not ready"));
         }
+        // if nonce_info.next_buy_time == 0 || chrono::Utc::now().timestamp() < nonce_info.next_buy_time {
+        //     return Err(anyhow!("Nonce is not ready"));
+        // }
         // 加锁 - 暂不加锁
         // nonce_cache.lock();
-        // 创建自定义nonce消费指令
-        let nonce_consume_ix = Instruction {
-            program_id: crate::constants::pumpswap::accounts::AMM_PROGRAM,
-            accounts: vec![
-                AccountMeta::new(nonce_pubkey, false),
-                AccountMeta::new_readonly(payer.pubkey(), true),
-            ],
-            // INSTR_CONSUME = 1, 使用传入的nonce值
-            data: {
-                let mut data = vec![1]; // INSTR_CONSUME = 1
-                data.extend_from_slice(&nonce_value.to_bytes()); // 添加nonce值
-                data
-            },
-        };
-        instructions.push(nonce_consume_ix);
+
+        // 创建Solana系统nonce推进指令 - 使用系统程序ID
+        let nonce_advance_ix = system_instruction::advance_nonce_account(
+            &nonce_pubkey,
+            &payer.pubkey(),
+        );
+
+
+        instructions.push(nonce_advance_ix);
     }
 
     Ok(())
 }
 
-/// 验证地址表是否被成功用于编译后的消息中
-fn verify_lookup_table_usage(
-    v0_message: &v0::Message,
-    address_lookup_table_accounts: &[AddressLookupTableAccount],
-) {
-    if !address_lookup_table_accounts.is_empty() {
-        println!("消息已编译，使用了地址表引用");
-        // 如果地址表有地址，但没有被使用，给出警告
-        if v0_message.address_table_lookups.is_empty() {
-            println!("警告：编译后的消息没有使用地址表引用！");
-        } else {
-            for (i, lookup) in v0_message.address_table_lookups.iter().enumerate() {
-                println!(
-                    "使用地址表 {}: 可写索引 {} 个, 只读索引 {} 个",
-                    i,
-                    lookup.writable_indexes.len(),
-                    lookup.readonly_indexes.len()
-                );
-            }
-        }
-    }
-}
 
 // Buy tokens from a Pumpswap pool
 pub async fn buy(
@@ -111,6 +83,7 @@ pub async fn buy(
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
     // 可选（必须全部传）
     pool: Option<Pubkey>,
     pool_base_token_account: Option<Pubkey>,
@@ -171,6 +144,7 @@ pub async fn buy(
         priority_fee.clone(),
         instructions,
         lookup_table_key,
+        recent_blockhash,
     )
     .await?;
     println!(" Buy transaction signature: {:?}", start_time.elapsed());
@@ -193,6 +167,7 @@ pub async fn buy_with_tip(
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
     // 可选（必须全部传）
     pool: Option<Pubkey>,
     pool_base_token_account: Option<Pubkey>,
@@ -260,6 +235,7 @@ pub async fn buy_with_tip(
             priority_fee.clone(),
             instructions.clone(),
             lookup_table_key,
+            recent_blockhash,
         )
         .await?;
 
@@ -298,57 +274,42 @@ pub async fn build_buy_transaction(
     priority_fee: PriorityFee,
     build_instructions: Vec<Instruction>,
     lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
 ) -> Result<VersionedTransaction, anyhow::Error> {
-    let mut instructions = vec![
-        ComputeBudgetInstruction::set_loaded_accounts_data_size_limit(
-            MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
-        ),
-        ComputeBudgetInstruction::set_compute_unit_price(priority_fee.unit_price),
-        ComputeBudgetInstruction::set_compute_unit_limit(priority_fee.unit_limit),
-    ];
-
-    // 添加nonce消费指令
+    let mut instructions = vec![];
     if let Err(e) = add_nonce_instruction(&mut instructions, payer.as_ref()) {
         return Err(e);
     }
 
-    instructions.extend(build_instructions);
+     // 添加计算预算指令
+     instructions.push(ComputeBudgetInstruction::set_loaded_accounts_data_size_limit(MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT));
+     instructions.push(ComputeBudgetInstruction::set_compute_unit_price( priority_fee.rpc_unit_price ));
+     instructions.push(ComputeBudgetInstruction::set_compute_unit_limit( priority_fee.rpc_unit_limit ));
+     instructions.extend(build_instructions);
+ 
+     let nonce_cache = NonceCache::get_instance();
+     let nonce_info = nonce_cache.get_nonce_info();
+ 
+     let blockhash = if nonce_info.nonce_account.is_some() && instructions.len() > 0 {
+         nonce_info.current_nonce
+     } else {
+         recent_blockhash
+     };
 
-    let blockhash = rpc.get_latest_blockhash().await?;
-
-    // 确保所有需要签名的账户都被正确标记
-    for instruction in &instructions {
-        for account_meta in &instruction.accounts {
-            if account_meta.is_signer && account_meta.pubkey != payer.pubkey() {
-                return Err(anyhow!(
-                    "Transaction requires a signature from an account other than the payer: {}",
-                    account_meta.pubkey
-                ));
-            }
-        }
-    }
-
-    let mut address_lookup_table_accounts = vec![];
-    if let Some(lookup_table_key) = lookup_table_key {
-        let account = get_address_lookup_table_account(&lookup_table_key).await;
-        address_lookup_table_accounts.push(account);
-    }
-
-    let v0_message = v0::Message::try_compile(
-        &payer.pubkey(),
-        &instructions,
-        &address_lookup_table_accounts,
-        blockhash,
-    )
-    .map_err(|e| anyhow!(e))?;
-
-    let versioned_message = VersionedMessage::V0(v0_message.clone());
-    let transaction = VersionedTransaction::try_new(versioned_message, &[&payer])?;
-
-    // 验证地址表使用情况
-    verify_lookup_table_usage(&v0_message, &address_lookup_table_accounts);
-
-    Ok(transaction)
+     let mut address_lookup_table_accounts = vec![];
+     if let Some(lookup_table_key) = lookup_table_key {
+         let account = get_address_lookup_table_account(&lookup_table_key).await;
+         address_lookup_table_accounts.push(account);
+     }
+ 
+     let v0_message: v0::Message =
+         v0::Message::try_compile(&payer.pubkey(), &instructions, &address_lookup_table_accounts, blockhash)?;
+     let versioned_message: VersionedMessage = VersionedMessage::V0(v0_message.clone());
+     let transaction = VersionedTransaction::try_new(versioned_message, &[payer.as_ref()])?;
+ 
+     // verify_lookup_table_usage(&v0_message, &address_lookup_table_accounts);
+ 
+     Ok(transaction)
 }
 
 // Build a transaction with tip for buying tokens
@@ -359,40 +320,35 @@ pub async fn build_buy_transaction_with_tip(
     priority_fee: PriorityFee,
     build_instructions: Vec<Instruction>,
     lookup_table_key: Option<Pubkey>,
+    recent_blockhash: Hash,
 ) -> Result<VersionedTransaction, anyhow::Error> {
-    let mut instructions = vec![
-        ComputeBudgetInstruction::set_loaded_accounts_data_size_limit(
-            MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
-        ),
-        ComputeBudgetInstruction::set_compute_unit_price(priority_fee.unit_price),
-        ComputeBudgetInstruction::set_compute_unit_limit(priority_fee.unit_limit),
-        system_instruction::transfer(
-            &payer.pubkey(),
-            &tip_account,
-            sol_to_lamports(priority_fee.buy_tip_fee),
-        ),
-    ];
+    let mut instructions = vec![];
 
     // 添加nonce消费指令
     if let Err(e) = add_nonce_instruction(&mut instructions, payer.as_ref()) {
         return Err(e);
     }
 
+    // 添加计算预算指令和小费转账指令
+    instructions.push(ComputeBudgetInstruction::set_loaded_accounts_data_size_limit(MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT));
+    instructions.push(ComputeBudgetInstruction::set_compute_unit_price(priority_fee.unit_price));
+    instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(priority_fee.unit_limit));
     instructions.extend(build_instructions);
+    instructions.push(system_instruction::transfer(
+        &payer.pubkey(),
+        &tip_account,
+        sol_to_lamports(priority_fee.buy_tip_fee),
+    ));
 
-    let blockhash = rpc.get_latest_blockhash().await?;
+    let nonce_cache = NonceCache::get_instance();
+    let nonce_info = nonce_cache.get_nonce_info();
 
-    // 确保所有需要签名的账户都被正确标记
-    for instruction in &instructions {
-        for account_meta in &instruction.accounts {
-            if account_meta.is_signer && account_meta.pubkey != payer.pubkey() {
-                return Err(anyhow!(
-                    "Transaction requires a signature from an account other than the payer: {}",
-                    account_meta.pubkey
-                ));
-            }
-        }
-    }
+    // 如果使用了nonce账户，则使用nonce账户中的blockhash
+    let blockhash_to_use = if nonce_info.nonce_account.is_some() && instructions.len() > 0 {
+        nonce_info.current_nonce
+    } else {
+        recent_blockhash
+    };
 
     let mut address_lookup_table_accounts = vec![];
     if let Some(lookup_table_key) = lookup_table_key {
@@ -400,19 +356,13 @@ pub async fn build_buy_transaction_with_tip(
         address_lookup_table_accounts.push(account);
     }
 
-    let v0_message = v0::Message::try_compile(
-        &payer.pubkey(),
-        &instructions,
-        &address_lookup_table_accounts,
-        blockhash,
-    )
-    .map_err(|e| anyhow!(e))?;
+    let v0_message: v0::Message =
+        v0::Message::try_compile(&payer.pubkey(), &instructions,  &address_lookup_table_accounts, blockhash_to_use)?;
+    let versioned_message: VersionedMessage = VersionedMessage::V0(v0_message.clone());
+    let transaction = VersionedTransaction::try_new(versioned_message, &[payer.as_ref()])?;
 
-    let versioned_message = VersionedMessage::V0(v0_message.clone());
-    let transaction = VersionedTransaction::try_new(versioned_message, &[&payer])?;
-
-    // 验证地址表使用情况
-    verify_lookup_table_usage(&v0_message, &address_lookup_table_accounts);
+    // nonce_cache.mark_used();
+    // verify_lookup_table_usage(&v0_message, &address_lookup_table_accounts);
 
     Ok(transaction)
 }
