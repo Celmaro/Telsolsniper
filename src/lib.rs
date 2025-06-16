@@ -641,6 +641,15 @@ impl PumpFun {
     }
 
     #[inline]
+    pub async fn get_creator(&self, mint: &Pubkey) -> Result<Pubkey, anyhow::Error> {
+        let (bonding_curve, _) = pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
+        
+        let creator = bonding_curve.creator;
+        
+        Ok(creator)
+    }
+
+    #[inline]
     pub async fn get_current_price_with_pumpswap(&self, pool_address: &Pubkey) -> Result<f64, anyhow::Error> {
         let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
         
@@ -664,5 +673,14 @@ impl PumpFun {
         let (_, quote_amount) = pool.get_token_balances(&self.rpc).await?;
         
         Ok(quote_amount)
+    }
+
+    #[inline]
+    pub async fn get_payer_token_balance_with_pumpswap(&self, pool_address: &Pubkey) -> Result<u64, anyhow::Error> {
+        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        
+        let (base_amount, _) = pool.get_token_balances(&self.rpc).await?;
+        
+        Ok(base_amount)
     }
 }

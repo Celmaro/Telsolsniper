@@ -7,7 +7,7 @@ use spl_associated_token_account::get_associated_token_address;
 use spl_token::instruction::close_account;
 use tokio::task::JoinHandle;
 use std::{str::FromStr, sync::Arc, time::Instant};
-
+use crate::PumpFun;
 use crate::{common::{address_lookup_cache::get_address_lookup_table_account, PriorityFee, SolanaRpcClient}, constants::pumpfun::{global_constants::FEE_RECIPIENT}, instruction, swqos::{FeeClient, TradeType, ClientType}};
 
 use super::common::get_creator_vault_pda;
@@ -270,7 +270,18 @@ pub async fn build_sell_instructions(
     let creator_vault_pda = get_creator_vault_pda(&creator).unwrap();
     let ata = get_associated_token_address(&payer.pubkey(), &mint);
 
-    let instructions = vec![
+    // Get token balance
+    let rpc = PumpFun::get_instance().get_rpc().clone();
+    let balance = rpc.get_token_account_balance(&ata).await?;
+    let balance_u64 = balance.amount.parse::<u64>()
+        .map_err(|_| anyhow!("Failed to parse token balance"))?;
+
+    let mut amount_token = amount_token;
+    if amount_token > balance_u64 {
+        amount_token = balance_u64;
+    }
+
+    let mut instructions = vec![
         instruction::sell(
             payer.as_ref(),
             &mint,
@@ -281,15 +292,20 @@ pub async fn build_sell_instructions(
                 _min_sol_output: 1,
             },
         ),
-    
-        close_account(
-            &spl_token::ID,
-            &ata,
-            &payer.pubkey(),
-            &payer.pubkey(),
-            &[&payer.pubkey()],
-        )?
     ];
+
+    // Only add close account instruction if amount is less than balance
+    if amount_token >= balance_u64 {
+        instructions.push(
+            close_account(
+                &spl_token::ID,
+                &ata,
+                &payer.pubkey(),
+                &payer.pubkey(),
+                &[&payer.pubkey()],
+            )?
+        );
+    }
 
     Ok(instructions)
 }
