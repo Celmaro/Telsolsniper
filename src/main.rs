@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use pumpfun_sdk::{
+use sol_trade_sdk::{
     common::{
         pumpfun::{
             self,
