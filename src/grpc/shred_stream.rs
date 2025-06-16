@@ -8,6 +8,7 @@ use log::error;
 use solana_sdk::transaction::VersionedTransaction;
 
 use crate::common::pumpswap::PumpSwapInstruction;
+use crate::common::raydium::{RaydiumEvent, RaydiumInstruction};
 use crate::common::AnyResult;
 
 use solana_sdk::pubkey::Pubkey;
@@ -16,6 +17,7 @@ use crate::common::pumpfun::logs_events::PumpfunEvent;
 use crate::common::pumpswap::logs_events::PumpSwapEvent;
 use crate::common::pumpfun::logs_filters::LogFilter;
 use crate::common::pumpswap::logs_filters::LogFilter as PumpswapLogFilter;
+use crate::common::raydium::logs_filters::LogFilter as RaydiumLogFilter;
 use crate::swqos::jito_grpc::shredstream::shredstream_proxy_client::ShredstreamProxyClient;
 use crate::swqos::jito_grpc::shredstream::SubscribeEntriesRequest;
 
@@ -121,6 +123,47 @@ impl ShredStreamGrpc {
         Ok(())
     }
 
+    pub async fn shredstream_subscribe_raydium<F>(&self, callback: F) -> AnyResult<()> 
+    where
+        F: Fn(RaydiumEvent) + Send + Sync + 'static,
+    {
+        let request = tonic::Request::new(SubscribeEntriesRequest {});
+        let mut client = (*self.shredstream_client).clone();
+        let mut stream = client.subscribe_entries(request).await?.into_inner();
+        let (mut tx, mut rx) = mpsc::channel::<TransactionWithSlot>(CHANNEL_SIZE);
+        let callback = Box::new(callback);
+        tokio::spawn(async move {
+            while let Some(message) = stream.next().await {
+                match message {
+                    Ok(msg) => {
+                        if let Ok(entries) = bincode::deserialize::<Vec<Entry>>(&msg.entries) {
+                            for entry in entries {
+                                for transaction in entry.transactions {
+                                    let _ = tx.try_send(TransactionWithSlot {
+                                        transaction: transaction.clone(),
+                                        slot: msg.slot,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        error!("Stream error: {error:?}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        while let Some(transaction_with_slot) = rx.next().await {
+            if let Err(e) = Self::process_raydium_transaction(transaction_with_slot, &*callback).await {
+                error!("Error processing transaction: {:?}", e);
+            }
+        }
+    
+        Ok(())
+    }
+
     async fn process_pumpfun_transaction<F>(transaction_with_slot: TransactionWithSlot, callback: &F, bot_wallet: Option<Pubkey>) -> AnyResult<()> 
     where
         F: Fn(PumpfunEvent) + Send + Sync,
@@ -205,6 +248,37 @@ impl ShredStreamGrpc {
                     disable_event.slot = slot;
                     disable_event.signature = signature.clone();
                     callback(PumpSwapEvent::Disable(disable_event));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    async fn process_raydium_transaction<F>(transaction_with_slot: TransactionWithSlot, callback: &F) -> AnyResult<()> 
+    where
+        F: Fn(RaydiumEvent) + Send + Sync,
+    {
+        let slot = transaction_with_slot.slot;
+        let versioned_tx = transaction_with_slot.transaction;
+        let signature = versioned_tx.signatures[0].to_string();
+        let instructions: Vec<RaydiumInstruction> = RaydiumLogFilter::parse_raydium_compiled_instruction(versioned_tx).unwrap();
+        for instruction in instructions {
+            match instruction {
+                RaydiumInstruction::V4Swap(mut v4_swap_event) => {
+                    v4_swap_event.slot = slot;
+                    v4_swap_event.signature = signature.clone();
+                    callback(RaydiumEvent::V4Swap(v4_swap_event));
+                }
+                RaydiumInstruction::SwapBaseInput(mut swap_base_input_event) => {
+                    swap_base_input_event.slot = slot;
+                    swap_base_input_event.signature = signature.clone();
+                    callback(RaydiumEvent::SwapBaseInput(swap_base_input_event));
+                }
+                RaydiumInstruction::SwapBaseOutput(mut swap_base_output_event) => {
+                    swap_base_output_event.slot = slot;
+                    swap_base_output_event.signature = signature.clone();
+                    callback(RaydiumEvent::SwapBaseOutput(swap_base_output_event));
                 }
                 _ => {}
             }

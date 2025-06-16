@@ -535,4 +535,113 @@ impl YellowstoneGrpc {
 
         Ok(())
     }
+
+    // ------------------------------------------------------------
+    // Raydium
+    // ------------------------------------------------------------
+
+    /// 订阅Raydium事件
+    pub async fn subscribe_raydium<F>(&self, callback: F) -> AnyResult<()>
+    where
+        F: Fn(crate::common::raydium::logs_events::RaydiumEvent) + Send + Sync + 'static,
+    {
+        // 使用constants中定义的AMM_PROGRAM
+        let raydium_v4_program_id = crate::constants::raydium::accounts::AMMV4_PROGRAM;
+        let raydium_cpmm_program_id = crate::constants::raydium::accounts::CPMM_PROGRAM;
+        let addrs = vec![raydium_v4_program_id.to_string(), raydium_cpmm_program_id.to_string()];
+
+        // 创建过滤器
+        let transactions = self.get_subscribe_request_filter(addrs, vec![], vec![]);
+
+        // 订阅事件
+        let (mut subscribe_tx, mut stream) = self.subscribe_with_request(transactions).await?;
+
+        // 创建通道
+        let (mut tx, mut rx) = mpsc::channel::<TransactionPretty>(1000);
+
+        // 创建回调函数
+        let callback = Box::new(callback);
+
+        // 启动处理流的任务
+        tokio::spawn(async move {
+            while let Some(message) = stream.next().await {
+                match message {
+                    Ok(msg) => {
+                        if let Err(e) =
+                            Self::handle_stream_message(msg, &mut tx, &mut subscribe_tx).await
+                        {
+                            error!("Error handling message: {:?}", e);
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        error!("Stream error: {error:?}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 处理交易
+        while let Some(transaction_pretty) = rx.next().await {
+            if let Err(e) = Self::process_raydium_transaction(transaction_pretty, &*callback).await
+            {
+                error!("Error processing transaction: {:?}", e);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 处理Raydium交易
+    async fn process_raydium_transaction<F>(
+        transaction_pretty: TransactionPretty,
+        callback: &F,
+    ) -> AnyResult<()>
+    where
+        F: Fn(crate::common::raydium::logs_events::RaydiumEvent) + Send + Sync,
+    {
+        let slot = transaction_pretty.slot;
+        let trade_raw: solana_transaction_status::EncodedTransactionWithStatusMeta =
+            transaction_pretty.tx;
+
+        // 检查交易元数据
+        let meta = trade_raw
+            .meta
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Missing transaction metadata"))?;
+
+        // 检查交易是否成功
+        if meta.err.is_some() {
+            return Ok(());
+        }
+
+        if let Some(versioned_tx) = trade_raw.transaction.decode() {
+            let signature = versioned_tx.signatures[0].to_string();
+            let instructions: Vec<crate::common::raydium::logs_data::RaydiumInstruction> =
+                crate::common::raydium::logs_filters::LogFilter::parse_raydium_compiled_instruction(versioned_tx).unwrap();
+            for instruction in instructions {
+                match instruction {
+                    crate::common::raydium::logs_data::RaydiumInstruction::V4Swap(mut v4_swap_event) => {
+                        v4_swap_event.slot = slot;
+                        v4_swap_event.signature = signature.clone();
+                        callback(crate::common::raydium::logs_events::RaydiumEvent::V4Swap(v4_swap_event));
+                    }
+                    crate::common::raydium::logs_data::RaydiumInstruction::SwapBaseInput(mut swap_base_input_event) => {
+                        swap_base_input_event.slot = slot;
+                        swap_base_input_event.signature = signature.clone();
+                        callback(crate::common::raydium::logs_events::RaydiumEvent::SwapBaseInput(swap_base_input_event));
+                    }
+                    crate::common::raydium::logs_data::RaydiumInstruction::SwapBaseOutput(mut swap_base_output_event) => {
+                        swap_base_output_event.slot = slot;
+                        swap_base_output_event.signature = signature.clone();
+                        callback(crate::common::raydium::logs_events::RaydiumEvent::SwapBaseOutput(swap_base_output_event));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
