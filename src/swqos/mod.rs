@@ -95,6 +95,7 @@ impl FeeClientTrait for SolRpcClient {
             Ok(_) => (),
             Err(_) => (),
         }
+        println!(" signature: {:?}", signature);
         println!(" rpc{}确认: {:?}", trade_type, start_time.elapsed());
 
         Ok(signature)

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 use serde::Deserialize;
-use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::FeeClient};
+use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::FeeClient};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FeeType {
@@ -87,8 +87,8 @@ impl Default for PriorityFee {
         Self { 
             unit_limit: DEFAULT_COMPUTE_UNIT_LIMIT, 
             unit_price: DEFAULT_COMPUTE_UNIT_PRICE, 
-            rpc_unit_limit: 0,
-            rpc_unit_price: 0,
+            rpc_unit_limit: DEFAULT_RPC_UNIT_LIMIT,
+            rpc_unit_price: DEFAULT_RPC_UNIT_PRICE,
             buy_tip_fee: DEFAULT_BUY_TIP_FEE, 
             buy_tip_fees: vec![],
             sell_tip_fee: DEFAULT_SELL_TIP_FEE 
