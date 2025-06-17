@@ -8,6 +8,7 @@ pub mod ipfs;
 pub mod swqos;
 pub mod pumpfun;
 pub mod pumpswap;
+pub mod trading;
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -397,6 +398,7 @@ impl PumpFun {
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                recent_blockhash,
                 None,
                 None,
                 None,
@@ -438,6 +440,7 @@ impl PumpFun {
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                recent_blockhash,
                 None,
                 None,
                 None,
@@ -481,6 +484,7 @@ impl PumpFun {
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                recent_blockhash,
                 None,
                 None,
                 None,
@@ -522,6 +526,7 @@ impl PumpFun {
                 None,
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
+                recent_blockhash,
                 None,
                 None,
                 None,
