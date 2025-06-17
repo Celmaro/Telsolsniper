@@ -125,6 +125,16 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let creator_vault_pda = get_creator_vault_pda(&params.creator).unwrap();
         let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
 
+        // 检查账户是否存在
+        if let Some(rpc) = &params.rpc {
+            let account_info = rpc.get_account(&ata).await;
+            if account_info.is_err() {
+                return Err(anyhow!("account not exists"));
+            }
+        } else {
+            return Err(anyhow!("RPC client is required to check account existence"));
+        }
+
         // 获取代币余额
         let balance_u64 = if let Some(rpc) = &params.rpc {
             let balance = rpc.get_token_account_balance(&ata).await?;
