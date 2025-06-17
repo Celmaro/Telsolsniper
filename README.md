@@ -139,6 +139,20 @@ let ipfs_response = create_token_metadata(metadata, api_token).await?;
 pumpfun.create(mint_keypair, ipfs_response).await?;
 ```
 
+### 3.1. Create and Buy Token (with MEV protection)
+
+```rust
+// Create token and buy simultaneously with MEV protection
+pumpfun.create_and_buy_with_tip(
+    payer.clone(),  // payer keypair
+    mint_keypair,   // mint keypair
+    ipfs_response,  // IPFS response
+    50000000,       // buy_sol_cost (purchase amount in lamports, 0.05 SOL)
+    Some(100),      // slippage (1%)
+    recent_blockhash,
+).await?;
+```
+
 ### 4. Buy Tokens
 
 ```rust
@@ -350,6 +364,7 @@ src/
 ├── pumpfun/      # PumpFun trading functionality
 ├── pumpswap/     # PumpSwap trading functionality
 ├── swqos/        # MEV service clients
+├── trading/      # Unified trading engine
 ├── lib.rs        # Main library file
 └── main.rs       # Example program
 ```
