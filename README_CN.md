@@ -139,6 +139,20 @@ let ipfs_response = create_token_metadata(metadata, api_token).await?;
 pumpfun.create(mint_keypair, ipfs_response).await?;
 ```
 
+### 3.1. 创建并购买代币（带小费）
+
+```rust
+// 创建代币的同时购买，并使用MEV保护
+pumpfun.create_and_buy_with_tip(
+    payer.clone(),  // payer keypair
+    mint_keypair,   // mint keypair
+    ipfs_response,  // IPFS响应
+    50000000,       // buy_sol_cost (购买金额，lamports，0.05 SOL)
+    Some(100),      // slippage (1%)
+    recent_blockhash,
+).await?;
+```
+
 ### 4. 购买代币
 
 ```rust
@@ -350,6 +364,7 @@ src/
 ├── pumpfun/      # PumpFun交易功能
 ├── pumpswap/     # PumpSwap交易功能
 ├── swqos/        # MEV服务客户端
+├── trading/      # 统一交易引擎
 ├── lib.rs        # 主库文件
 └── main.rs       # 示例程序
 ```
