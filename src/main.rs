@@ -14,6 +14,7 @@ use sol_trade_sdk::{
     grpc::{ShredStreamGrpc, YellowstoneGrpc},
     PumpFun,
 };
+use solana_client::rpc_client::RpcClient;
 use solana_hash::Hash;
 use solana_sdk::{
     commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair,
@@ -27,8 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // test_pumpswap_with_shreds().await?;
     // test_pumpswap_with_grpc().await?;
     // test_raydium_with_shreds().await?;
-    test_raydium_with_grpc().await?;
-    // test_sell().await?;
+    // test_raydium_with_grpc().await?;
+    test_sell().await?;
     Ok(())
 }
 
@@ -278,16 +279,16 @@ async fn test_sell() -> AnyResult<()> {
         lookup_table_key: None,
         use_rpc: true,
     };
-
     let pumpswap = PumpFun::new(Arc::new(payer), &cluster).await;
-    let creator = Pubkey::from_str("8BtoThi2ZoXnF7QQK1Wjmh2JuBw9FjVvhnGMVZ2vpump")?;
+    let creator = Pubkey::from_str("43tFsRkZyhE1JXGivxWthApHPqWCnDqs7E1ZNdy7gkNz")?;
     let dev_buy_token = 0;
     let dev_sol_cost = 0;
-    let buy_sol_cost = 100_000_000;
+    let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
-    let recent_blockhash = Hash::default();
+    let rpc = RpcClient::new(cluster.rpc_url);
+    let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let trade_platform = "pumpswap".to_string();
-    let mint_pubkey = Pubkey::from_str("8BtoThi2ZoXnF7QQK1Wjmh2JuBw9FjVvhnGMVZ2vpump")?;
+    let mint_pubkey = Pubkey::from_str("FMnWxuES8X7n33SJryf9MKbZNH57tPREtjWqCTMupump")?;
     println!("Buying tokens from PumpSwap...");
     pumpswap
         .copy_buy(
@@ -298,26 +299,19 @@ async fn test_sell() -> AnyResult<()> {
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
-            trade_platform,
+            trade_platform.clone(),
         )
         .await?;
-    // 需要先转sol到wsol才能buy
-    // pumpswap
-    //     .buy(
-    //         mint_pubkey,
-    //         10_000_000, // 0.01 SOL
-    //         Some(100),  // 1% slippage
-    //     )
-    //     .await?;
-    // println!("Selling tokens to PumpSwap...");
     // pumpswap
     //     .sell_by_percent(
     //         mint_pubkey,
-    //         100,       // Sell 100% of tokens
-    //         Some(500), // 5% slippage
+    //         creator,
+    //         100,
+    //         0,
+    //         recent_blockhash,
+    //         trade_platform.clone(),
     //     )
     //     .await?;
-
     Ok(())
 }
 
