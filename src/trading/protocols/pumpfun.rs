@@ -51,20 +51,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             )
             .await?
         } else {
-            let (bonding_curve, _) =
-                get_bonding_curve_account_v2(&PumpFun::get_instance().get_rpc(), &params.mint)
-                    .await?;
-            Arc::new(BondingCurveAccount {
-                discriminator: bonding_curve.discriminator,
-                account: get_bonding_curve_pda(&params.mint).unwrap(),
-                virtual_token_reserves: bonding_curve.virtual_token_reserves,
-                virtual_sol_reserves: bonding_curve.virtual_sol_reserves,
-                real_token_reserves: bonding_curve.real_token_reserves,
-                real_sol_reserves: bonding_curve.real_sol_reserves,
-                token_total_supply: bonding_curve.token_total_supply,
-                complete: bonding_curve.complete,
-                creator: params.creator,
-            })
+            protocol_params.bonding_curve.clone().unwrap()
         };
 
         let max_sol_cost = calculate_with_slippage_buy(
@@ -107,8 +94,6 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                 _max_sol_cost: max_sol_cost,
             },
         ));
-
-        println!("max_sol_cost: {:?}", max_sol_cost);
 
         Ok(instructions)
     }

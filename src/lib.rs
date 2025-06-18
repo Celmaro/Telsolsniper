@@ -28,6 +28,7 @@ use ipfs::TokenMetadataIPFS;
 
 use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
+use accounts::BondingCurveAccount;
 
 pub struct PumpFun {
     pub payer: Arc<Keypair>,
@@ -218,6 +219,7 @@ impl PumpFun {
             self.priority_fee.clone(),
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
+            None,
             SNIPER_BUY.to_string(),
         ).await
     }
@@ -231,6 +233,7 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        bonding_curve: Option<Arc<BondingCurveAccount>>,
         trade_platform: String,
     ) -> Result<(), anyhow::Error> {
         if trade_platform == PUMPFUN {
@@ -246,6 +249,7 @@ impl PumpFun {
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
                 recent_blockhash,
+                bonding_curve,
                 COPY_BUY.to_string(),
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
@@ -293,6 +297,7 @@ impl PumpFun {
             self.priority_fee.clone(),
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
+            None,
             SNIPER_BUY.to_string(),
         ).await
     }
@@ -306,6 +311,7 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        bonding_curve: Option<Arc<BondingCurveAccount>>,
         trade_platform: String,
     ) -> Result<(), anyhow::Error> {
         if trade_platform == PUMPFUN {
@@ -321,6 +327,7 @@ impl PumpFun {
                 self.priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
                 recent_blockhash,
+                bonding_curve,
                 COPY_BUY.to_string(),
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
