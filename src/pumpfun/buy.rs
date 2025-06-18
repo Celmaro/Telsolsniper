@@ -6,6 +6,7 @@ use crate::{
     swqos::FeeClient,
     trading::{core::params::PumpFunParams, factory::Protocol, BuyParams, TradeFactory},
 };
+use crate::accounts::BondingCurveAccount;
 const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 250000;
 
 pub async fn buy(
@@ -20,6 +21,7 @@ pub async fn buy(
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    bonding_curve: Option<Arc<BondingCurveAccount>>,
     trade_type: String,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
@@ -29,6 +31,7 @@ pub async fn buy(
         dev_buy_token: dev_buy_token,
         dev_sol_cost: dev_sol_cost,
         trade_type: trade_type,
+        bonding_curve: bonding_curve,
     });
     // 创建买入参数
     let buy_params = BuyParams {
@@ -61,6 +64,7 @@ pub async fn buy_with_tip(
     priority_fee: PriorityFee,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    bonding_curve: Option<Arc<BondingCurveAccount>>,
     trade_type: String,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
@@ -70,6 +74,7 @@ pub async fn buy_with_tip(
         dev_buy_token: dev_buy_token,
         dev_sol_cost: dev_sol_cost,
         trade_type: trade_type,
+        bonding_curve: bonding_curve,
     });
     // 创建买入参数
     let buy_params = BuyParams {
