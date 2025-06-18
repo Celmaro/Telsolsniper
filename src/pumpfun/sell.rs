@@ -98,6 +98,7 @@ pub async fn sell_by_amount(
 }
 
 pub async fn sell_by_percent_with_tip(
+    rpc: Arc<SolanaRpcClient>,
     fee_clients: Vec<Arc<FeeClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
@@ -113,6 +114,7 @@ pub async fn sell_by_percent_with_tip(
     }
     let amount = amount_token * percent / 100;
     sell_with_tip(
+        rpc,
         fee_clients,
         payer,
         mint,
@@ -126,6 +128,7 @@ pub async fn sell_by_percent_with_tip(
 }
 
 pub async fn sell_by_amount_with_tip(
+    rpc: Arc<SolanaRpcClient>,
     fee_clients: Vec<Arc<FeeClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
@@ -139,6 +142,7 @@ pub async fn sell_by_amount_with_tip(
         return Err(anyhow!("Amount must be greater than 0"));
     }
     sell_with_tip(
+        rpc,
         fee_clients,
         payer,
         mint,
@@ -153,6 +157,7 @@ pub async fn sell_by_amount_with_tip(
 
 /// Sell tokens using Jito
 pub async fn sell_with_tip(
+    rpc: Arc<SolanaRpcClient>,
     fee_clients: Vec<Arc<FeeClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
@@ -167,7 +172,7 @@ pub async fn sell_with_tip(
     let protocol_params = Box::new(PumpFunSellParams {});
     // 创建卖出参数
     let sell_params = SellParams {
-        rpc: None,
+        rpc: Some(rpc.clone()),
         payer: payer.clone(),
         mint,
         creator,

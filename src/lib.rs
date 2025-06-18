@@ -470,6 +470,7 @@ impl PumpFun {
     ) -> Result<(), anyhow::Error> {
         if trade_platform == PUMPFUN {
             pumpfun::sell::sell_by_percent_with_tip(
+                self.rpc.clone(),
                 self.fee_clients.clone(),
                 self.payer.clone(),
                 mint,
@@ -513,6 +514,7 @@ impl PumpFun {
     ) -> Result<(), anyhow::Error> {
         if trade_platform == PUMPFUN {
             pumpfun::sell::sell_by_amount_with_tip(
+                self.rpc.clone(),
                 self.fee_clients.clone(),
                 self.payer.clone(),
                 mint,
@@ -554,6 +556,7 @@ impl PumpFun {
         recent_blockhash: Hash,
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell_with_tip(
+            self.rpc.clone(),
             self.fee_clients.clone(),
             self.payer.clone(),
             mint,
