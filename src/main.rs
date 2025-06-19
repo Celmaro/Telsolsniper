@@ -20,6 +20,7 @@ use solana_sdk::{
     commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair,
     transaction::VersionedTransaction,
 };
+use sol_trade_sdk::pumpfun::common::init_bonding_curve_account;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -279,7 +280,7 @@ async fn test_sell() -> AnyResult<()> {
         lookup_table_key: None,
         use_rpc: true,
     };
-    let pumpswap = PumpFun::new(Arc::new(payer), &cluster).await;
+    let pumpfun_client = PumpFun::new(Arc::new(payer), &cluster).await;
     let creator = Pubkey::from_str("43tFsRkZyhE1JXGivxWthApHPqWCnDqs7E1ZNdy7gkNz")?;
     let dev_buy_token = 0;
     let dev_sol_cost = 0;
@@ -289,8 +290,9 @@ async fn test_sell() -> AnyResult<()> {
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let trade_platform = "pumpswap".to_string();
     let mint_pubkey = Pubkey::from_str("FMnWxuES8X7n33SJryf9MKbZNH57tPREtjWqCTMupump")?;
+    let bonding_curve = init_bonding_curve_account(&mint_pubkey, dev_buy_token, dev_sol_cost, creator).await?;
     println!("Buying tokens from PumpSwap...");
-    pumpswap
+    pumpfun_client
         .copy_buy(
             mint_pubkey,
             creator,
@@ -299,10 +301,11 @@ async fn test_sell() -> AnyResult<()> {
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
+            Some(bonding_curve),
             trade_platform.clone(),
         )
         .await?;
-    // pumpswap
+    // pumpfun_client
     //     .sell_by_percent(
     //         mint_pubkey,
     //         creator,
