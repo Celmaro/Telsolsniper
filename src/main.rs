@@ -20,7 +20,6 @@ use solana_sdk::{
     commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair,
     transaction::VersionedTransaction,
 };
-use sol_trade_sdk::pumpfun::common::init_bonding_curve_account;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -290,7 +289,6 @@ async fn test_sell() -> AnyResult<()> {
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let trade_platform = "pumpswap".to_string();
     let mint_pubkey = Pubkey::from_str("FMnWxuES8X7n33SJryf9MKbZNH57tPREtjWqCTMupump")?;
-    let bonding_curve = init_bonding_curve_account(&mint_pubkey, dev_buy_token, dev_sol_cost, creator).await?;
     println!("Buying tokens from PumpSwap...");
     pumpfun_client
         .copy_buy(
@@ -301,7 +299,7 @@ async fn test_sell() -> AnyResult<()> {
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
-            Some(bonding_curve),
+            None,
             trade_platform.clone(),
         )
         .await?;
