@@ -79,6 +79,7 @@ pub struct PriorityFee {
     pub rpc_unit_price: u64,
     pub buy_tip_fee: f64,
     pub buy_tip_fees: Vec<f64>,
+    pub smart_buy_tip_fee: f64,
     pub sell_tip_fee: f64,
 }
 
@@ -91,6 +92,7 @@ impl Default for PriorityFee {
             rpc_unit_price: DEFAULT_RPC_UNIT_PRICE,
             buy_tip_fee: DEFAULT_BUY_TIP_FEE, 
             buy_tip_fees: vec![],
+            smart_buy_tip_fee: 0.0,
             sell_tip_fee: DEFAULT_SELL_TIP_FEE 
         }
     }

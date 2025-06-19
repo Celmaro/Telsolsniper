@@ -313,7 +313,13 @@ impl PumpFun {
         recent_blockhash: Hash,
         bonding_curve: Option<Arc<BondingCurveAccount>>,
         trade_platform: String,
+        custom_buy_tip_fee: Option<f64>,
     ) -> Result<(), anyhow::Error> {
+        let mut priority_fee = self.priority_fee.clone();
+        if custom_buy_tip_fee.is_some() {
+            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+        }
         if trade_platform == PUMPFUN {
             pumpfun::buy::buy_with_tip(
                 self.fee_clients.clone(),
@@ -324,7 +330,7 @@ impl PumpFun {
                 dev_sol_cost,
                 buy_sol_cost,
                 slippage_basis_points,
-                self.priority_fee.clone(),
+                priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
                 recent_blockhash,
                 bonding_curve,
@@ -339,7 +345,7 @@ impl PumpFun {
                 creator,
                 buy_sol_cost,
                 slippage_basis_points,
-                self.priority_fee.clone(),
+                priority_fee.clone(),
                 self.cluster.clone().lookup_table_key,
                 recent_blockhash,
                 None,
