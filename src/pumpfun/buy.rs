@@ -1,12 +1,12 @@
-use solana_hash::Hash;
-use solana_sdk::{pubkey::Pubkey, signature::Keypair};
-use std::sync::Arc;
+use crate::accounts::BondingCurveAccount;
 use crate::{
     common::{PriorityFee, SolanaRpcClient},
     swqos::FeeClient,
     trading::{core::params::PumpFunParams, factory::Protocol, BuyParams, TradeFactory},
 };
-use crate::accounts::BondingCurveAccount;
+use solana_hash::Hash;
+use solana_sdk::{pubkey::Pubkey, signature::Keypair};
+use std::sync::Arc;
 const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 250000;
 
 pub async fn buy(
@@ -14,8 +14,6 @@ pub async fn buy(
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
-    dev_buy_token: u64,
-    dev_sol_cost: u64,
     buy_sol_cost: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
@@ -28,8 +26,6 @@ pub async fn buy(
     let executor = TradeFactory::create_executor(Protocol::PumpFun);
     // 创建协议特定参数
     let protocol_params = Box::new(PumpFunParams {
-        dev_buy_token: dev_buy_token,
-        dev_sol_cost: dev_sol_cost,
         trade_type: trade_type,
         bonding_curve: bonding_curve,
     });
@@ -57,8 +53,6 @@ pub async fn buy_with_tip(
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
-    dev_buy_token: u64,
-    dev_sol_cost: u64,
     buy_sol_cost: u64,
     slippage_basis_points: Option<u64>,
     priority_fee: PriorityFee,
@@ -71,8 +65,6 @@ pub async fn buy_with_tip(
     let executor = TradeFactory::create_executor(Protocol::PumpFun);
     // 创建协议特定参数
     let protocol_params = Box::new(PumpFunParams {
-        dev_buy_token: dev_buy_token,
-        dev_sol_cost: dev_sol_cost,
         trade_type: trade_type,
         bonding_curve: bonding_curve,
     });

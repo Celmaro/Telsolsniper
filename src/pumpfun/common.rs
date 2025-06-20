@@ -244,22 +244,6 @@ pub async fn get_bonding_curve_account_v2(
     Ok((Arc::new(bonding_curve), bonding_curve_pda))
 }
 
-// #[inline]
-// pub fn get_buy_token_amount(
-//     mint: &Pubkey,
-//     dev_buy_token: u64,
-//     dev_cost_sol: u64,
-//     bot_cost_sol: u64,
-//     slippage_basis_points: Option<u64>,
-// ) -> anyhow::Result<(u64, u64)> {
-//     let bonding_curve_account = BondingCurveAccount::new(mint, dev_buy_token, dev_cost_sol);
-//     let buy_token = bonding_curve_account.get_buy_price(bot_cost_sol).map_err(|e| anyhow!(e))?;
-
-//     let max_sol_cost = calculate_with_slippage_buy(bot_cost_sol, slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE));
-
-//     Ok((buy_token, max_sol_cost))
-// }
-
 #[inline]
 pub fn get_buy_token_amount(
     bonding_curve_account: &BondingCurveAccount,

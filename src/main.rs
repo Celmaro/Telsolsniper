@@ -281,8 +281,6 @@ async fn test_sell() -> AnyResult<()> {
     };
     let pumpfun_client = PumpFun::new(Arc::new(payer), &cluster).await;
     let creator = Pubkey::from_str("43tFsRkZyhE1JXGivxWthApHPqWCnDqs7E1ZNdy7gkNz")?;
-    let dev_buy_token = 0;
-    let dev_sol_cost = 0;
     let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
     let rpc = RpcClient::new(cluster.rpc_url);
@@ -294,8 +292,6 @@ async fn test_sell() -> AnyResult<()> {
         .copy_buy(
             mint_pubkey,
             creator,
-            dev_buy_token,
-            dev_sol_cost,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
