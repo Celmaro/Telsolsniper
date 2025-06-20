@@ -74,8 +74,6 @@ pub struct SellWithTipParams {
 /// PumpFun协议特定参数
 #[derive(Clone)]
 pub struct PumpFunParams {
-    pub dev_buy_token: u64,
-    pub dev_sol_cost: u64,
     pub trade_type: String,
     pub bonding_curve: Option<Arc<BondingCurveAccount>>,
 }

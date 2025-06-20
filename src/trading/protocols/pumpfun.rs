@@ -41,17 +41,10 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        // 获取或初始化bonding curve账户
-        let bonding_curve = if protocol_params.trade_type == SNIPER_BUY {
-            init_bonding_curve_account(
-                &params.mint,
-                protocol_params.dev_buy_token,
-                protocol_params.dev_sol_cost,
-                params.creator,
-            )
-            .await?
-        } else {
+        let bonding_curve = if protocol_params.bonding_curve.is_some() {
             protocol_params.bonding_curve.clone().unwrap()
+        } else {
+            return Err(anyhow!("Bonding curve not found"));
         };
 
         let max_sol_cost = calculate_with_slippage_buy(
