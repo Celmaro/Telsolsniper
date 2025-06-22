@@ -267,6 +267,7 @@ impl PumpFun {
                 None,
                 None,
                 None,
+                true,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))
@@ -350,6 +351,7 @@ impl PumpFun {
                 protocol_params.pool_quote_token_account.clone(),
                 protocol_params.user_base_token_account.clone(),
                 protocol_params.user_quote_token_account.clone(),
+                protocol_params.auto_handle_wsol,
             ).await
         } else {
             return Err(anyhow::anyhow!("Invalid protocol params for PumpFun"));
@@ -403,6 +405,7 @@ impl PumpFun {
                 None,
                 None,
                 None,
+                true,
             ).await
         } else {
             Err(anyhow::anyhow!("Unsupported trade platform: {}", trade_platform))

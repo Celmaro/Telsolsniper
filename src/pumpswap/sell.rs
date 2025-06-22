@@ -34,6 +34,7 @@ pub async fn sell(
         pool_quote_token_account,
         user_base_token_account,
         user_quote_token_account,
+        auto_handle_wsol: true,
     });
     // 创建卖出参数
     let sell_params = SellParams {
@@ -163,6 +164,7 @@ pub async fn sell_with_tip(
         pool_quote_token_account,
         user_base_token_account,
         user_quote_token_account,
+        auto_handle_wsol: true,
     });
     // 创建卖出参数
     let sell_params = SellParams {

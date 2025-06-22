@@ -480,6 +480,30 @@ impl YellowstoneGrpc {
             return Ok(());
         }
 
+        let mut buy_instruction_events = vec![];
+        let mut sell_instruction_events = vec![];
+
+        if let Some(versioned_tx) = trade_raw.transaction.decode() {
+            let signature = versioned_tx.signatures[0].to_string();
+            let instructions: Vec<crate::common::pumpswap::logs_data::PumpSwapInstruction> =
+                crate::common::pumpswap::logs_filters::LogFilter::parse_pumpswap_compiled_instruction(versioned_tx).unwrap();
+            for instruction in instructions {
+                match instruction {
+                    crate::common::pumpswap::logs_data::PumpSwapInstruction::Buy(mut e) => {
+                        e.signature = signature.clone();
+                        e.slot = slot;
+                        buy_instruction_events.push(e);
+                    }
+                    crate::common::pumpswap::logs_data::PumpSwapInstruction::Sell(mut e) => {
+                        e.signature = signature.clone();
+                        e.slot = slot;
+                        sell_instruction_events.push(e);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         // 获取日志
         let logs = if let solana_transaction_status::option_serializer::OptionSerializer::Some(logs) = &meta.log_messages {
             logs
@@ -497,10 +521,26 @@ impl YellowstoneGrpc {
                 crate::common::pumpswap::logs_events::PumpSwapEvent::Buy(e) => {
                     e.signature = transaction_pretty.signature.to_string();
                     e.slot = slot;
+                    if let Some(ie) = buy_instruction_events.iter().find(|ie| ie.signature == e.signature && ie.slot == e.slot && ie.pool == e.pool && ie.user == e.user) {
+                        e.base_mint = ie.base_mint;
+                        e.quote_mint = ie.quote_mint;
+                        e.pool_base_token_account = ie.pool_base_token_account;
+                        e.pool_quote_token_account = ie.pool_quote_token_account;
+                        e.coin_creator_vault_ata = ie.coin_creator_vault_ata;
+                        e.coin_creator_vault_authority = ie.coin_creator_vault_authority;
+                    }
                 },
                 crate::common::pumpswap::logs_events::PumpSwapEvent::Sell(e) => {
                     e.signature = transaction_pretty.signature.to_string();
                     e.slot = slot;
+                    if let Some(ie) = sell_instruction_events.iter().find(|ie| ie.signature == e.signature && ie.slot == e.slot && ie.pool == e.pool && ie.user == e.user) {
+                        e.base_mint = ie.base_mint;
+                        e.quote_mint = ie.quote_mint;
+                        e.pool_base_token_account = ie.pool_base_token_account;
+                        e.pool_quote_token_account = ie.pool_quote_token_account;
+                        e.coin_creator_vault_ata = ie.coin_creator_vault_ata;
+                        e.coin_creator_vault_authority = ie.coin_creator_vault_authority;
+                    }
                 },
                 crate::common::pumpswap::logs_events::PumpSwapEvent::CreatePool(e) => {
                     e.signature = transaction_pretty.signature.to_string();
