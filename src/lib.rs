@@ -274,6 +274,7 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        bonding_curve: Option<Arc<BondingCurveAccount>>,
     ) -> Result<(), anyhow::Error> {
         pumpfun::buy::buy_with_tip(
             self.fee_clients.clone(),
@@ -285,7 +286,7 @@ impl PumpFun {
             self.priority_fee.clone(),
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
-            None,
+            bonding_curve,
             SNIPER_BUY.to_string(),
         ).await
     }
