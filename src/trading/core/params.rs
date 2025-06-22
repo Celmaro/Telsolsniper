@@ -109,6 +109,7 @@ pub struct PumpSwapParams {
     pub pool_quote_token_account: Option<Pubkey>,
     pub user_base_token_account: Option<Pubkey>,
     pub user_quote_token_account: Option<Pubkey>,
+    pub auto_handle_wsol: bool,
 }
 
 impl ProtocolParams for PumpSwapParams {

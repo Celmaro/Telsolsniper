@@ -58,6 +58,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                     *pool_quote_token_account,
                     *user_base_token_account,
                     *user_quote_token_account,
+                    protocol_params.auto_handle_wsol,
                 )
                 .await
             }
@@ -148,6 +149,7 @@ impl PumpSwapInstructionBuilder {
             pool_quote_token_account,
             user_base_token_account,
             user_quote_token_account,
+            true,
         )
         .await
     }
@@ -210,6 +212,7 @@ impl PumpSwapInstructionBuilder {
         pool_quote_token_account: Pubkey,
         user_base_token_account: Pubkey,
         user_quote_token_account: Pubkey,
+        auto_handle_wsol: bool,
     ) -> Result<Vec<Instruction>> {
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
@@ -225,6 +228,36 @@ impl PumpSwapInstructionBuilder {
         );
 
         let mut instructions = vec![];
+
+        if auto_handle_wsol {
+            // 插入wsol
+            instructions.push(
+                // 创建wSOL ATA账户，如果不存在
+                create_associated_token_account_idempotent(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &accounts::WSOL_TOKEN_ACCOUNT,
+                    &accounts::TOKEN_PROGRAM,
+                ),
+            );
+            instructions.push(
+                // 将SOL转入wSOL ATA账户
+                solana_sdk::system_instruction::transfer(
+                    &params.payer.pubkey(),
+                    &user_quote_token_account,
+                    max_sol_amount,
+                ),
+            );
+
+            // 同步wSOL余额
+            instructions.push(
+                spl_token::instruction::sync_native(
+                    &accounts::TOKEN_PROGRAM,
+                    &user_quote_token_account,
+                )
+                .unwrap(),
+            );
+        }
 
         // 创建用户的基础代币账户
         instructions.push(create_associated_token_account_idempotent(
@@ -274,6 +307,20 @@ impl PumpSwapInstructionBuilder {
             accounts,
             data,
         });
+
+        if auto_handle_wsol {
+            // 关闭wSOL ATA账户，回收租金
+            instructions.push(
+                spl_token::instruction::close_account(
+                    &accounts::TOKEN_PROGRAM,
+                    &user_quote_token_account,
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &[],
+                )
+                .unwrap(),
+            );
+        }
 
         Ok(instructions)
     }

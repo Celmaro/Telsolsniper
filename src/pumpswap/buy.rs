@@ -27,6 +27,7 @@ pub async fn buy(
     pool_quote_token_account: Option<Pubkey>,
     user_base_token_account: Option<Pubkey>,
     user_quote_token_account: Option<Pubkey>,
+    auto_handle_wsol: bool,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
     let executor = TradeFactory::create_executor(Protocol::PumpSwap);
@@ -37,6 +38,7 @@ pub async fn buy(
         pool_quote_token_account: pool_quote_token_account,
         user_base_token_account: user_base_token_account,
         user_quote_token_account: user_quote_token_account,
+        auto_handle_wsol: auto_handle_wsol,
     });
     // 创建买入参数
     let buy_params = BuyParams {
@@ -75,6 +77,7 @@ pub async fn buy_with_tip(
     pool_quote_token_account: Option<Pubkey>,
     user_base_token_account: Option<Pubkey>,
     user_quote_token_account: Option<Pubkey>,
+    auto_handle_wsol: bool,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
     let executor = TradeFactory::create_executor(Protocol::PumpSwap);
@@ -85,6 +88,7 @@ pub async fn buy_with_tip(
         pool_quote_token_account: pool_quote_token_account,
         user_base_token_account: user_base_token_account,
         user_quote_token_account: user_quote_token_account,
+        auto_handle_wsol: auto_handle_wsol,
     });
     // 创建买入参数
     let buy_params = BuyParams {
