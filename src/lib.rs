@@ -30,6 +30,13 @@ use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
 use accounts::BondingCurveAccount;
 
+use crate::trading::core::params::PumpFunParams;
+use crate::trading::core::params::PumpFunSellParams;
+use crate::trading::core::params::PumpSwapParams;
+use crate::trading::BuyWithTipParams;
+use crate::trading::SellParams;
+use crate::trading::SellWithTipParams;
+
 pub struct PumpFun {
     pub payer: Arc<Keypair>,
     pub rpc: Arc<SolanaRpcClient>,
@@ -290,6 +297,64 @@ impl PumpFun {
         ).await
     }
 
+    pub async fn copy_buy_with_tip_use_buy_params(
+        &self,
+        buy_params: BuyWithTipParams,
+        custom_buy_tip_fee: Option<f64>,
+    ) -> Result<(), anyhow::Error> {
+        let mut priority_fee = buy_params.priority_fee.clone();
+        if custom_buy_tip_fee.is_some() {
+            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+        }
+        let mint = buy_params.mint;
+        let creator = buy_params.creator;
+        let buy_sol_cost = buy_params.amount_sol;
+        let slippage_basis_points = buy_params.slippage_basis_points;
+        let recent_blockhash = buy_params.recent_blockhash;
+        if let Some(protocol_params) = buy_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunParams>() {
+            pumpfun::buy::buy_with_tip(
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                buy_sol_cost,
+                slippage_basis_points,
+                priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.bonding_curve.clone(),
+                COPY_BUY.to_string(),
+            ).await
+        } else if let Some(protocol_params) = buy_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::buy::buy_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                buy_sol_cost,
+                slippage_basis_points,
+                priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+            ).await
+        } else {
+            return Err(anyhow::anyhow!("Invalid protocol params for PumpFun"));
+        }
+    }
+
     pub async fn copy_buy_with_tip(
         &self,
         mint: Pubkey,
@@ -343,7 +408,7 @@ impl PumpFun {
         }
     }
 
-    /// Sell tokens
+    // Sell tokens
     pub async fn sell(
         &self,
         mint: Pubkey,
@@ -556,6 +621,207 @@ impl PumpFun {
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
         ).await
+    }
+
+
+    /// -------- use sell params --------
+
+    /// Sell tokens by percentage
+    pub async fn sell_by_percent_use_sell_params(
+        &self,
+        sell_params: SellParams,
+        percent: u64,
+    ) -> Result<(), anyhow::Error> {
+        let mint = sell_params.mint;
+        let creator = sell_params.creator;
+        let amount_token = sell_params.amount_token;
+        let recent_blockhash = sell_params.recent_blockhash;
+        if let Some(_) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunSellParams>() {
+            pumpfun::sell::sell_by_percent(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                percent,
+                amount_token.unwrap_or(0),
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if let Some(protocol_params) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::sell::sell_by_percent(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                percent,
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+            ).await
+        } else {
+            return Err(anyhow::anyhow!("Invalid protocol params for PumpFun"));
+        }
+    }
+
+    /// Sell tokens by amount
+    pub async fn sell_by_amount_use_sell_params(
+        &self,
+        sell_params: SellParams,
+    ) -> Result<(), anyhow::Error> {
+        let mint = sell_params.mint;
+        let creator = sell_params.creator;
+        let amount = sell_params.amount_token;
+        let recent_blockhash = sell_params.recent_blockhash;
+        if let Some(_) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunSellParams>() {
+            pumpfun::sell::sell_by_amount(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                amount.unwrap_or(0),
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if let Some(protocol_params) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::sell::sell_by_amount(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint.clone(),
+                creator,
+                amount.unwrap_or(0),
+                None,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Invalid protocol params for PumpFun"))
+        }
+    }
+
+    pub async fn sell_by_percent_with_tip_use_sell_params(
+        &self,
+        sell_params: SellWithTipParams,
+        percent: u64,
+    ) -> Result<(), anyhow::Error> {
+        let mint = sell_params.mint;
+        let creator = sell_params.creator;
+        let amount_token = sell_params.amount_token;
+        let recent_blockhash = sell_params.recent_blockhash;
+        if let Some(_) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunSellParams>() {
+            pumpfun::sell::sell_by_percent_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                percent,
+                amount_token.unwrap_or(0),
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if let Some(protocol_params) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::sell::sell_by_percent_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                percent,
+                sell_params.slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Invalid protocol params for PumpFun"))  
+        }
+    }
+
+    pub async fn sell_by_amount_with_tip_use_sell_params(
+        &self,
+        sell_params: SellWithTipParams,
+    ) -> Result<(), anyhow::Error> {
+        let mint = sell_params.mint;
+        let creator = sell_params.creator;
+        let amount = sell_params.amount_token;
+        let recent_blockhash = sell_params.recent_blockhash;
+        if let Some(_) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunSellParams>() {
+            pumpfun::sell::sell_by_amount_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                amount.unwrap_or(0),
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+            ).await
+        } else if let Some(protocol_params) = sell_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::sell::sell_by_amount_with_tip(
+                self.rpc.clone(),
+                self.fee_clients.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                amount.unwrap_or(0),
+                sell_params.slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+            ).await
+        } else {
+            Err(anyhow::anyhow!("Invalid protocol params for PumpFun"))
+        }
     }
 
     #[inline]
