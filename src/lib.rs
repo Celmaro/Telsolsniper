@@ -37,7 +37,7 @@ use crate::trading::BuyWithTipParams;
 use crate::trading::SellParams;
 use crate::trading::SellWithTipParams;
 
-pub struct PumpFun {
+pub struct SolanaTrade {
     pub payer: Arc<Keypair>,
     pub rpc: Arc<SolanaRpcClient>,
     pub fee_clients: Vec<Arc<FeeClient>>,
@@ -45,9 +45,9 @@ pub struct PumpFun {
     pub cluster: Cluster,
 }
 
-static INSTANCE: Mutex<Option<Arc<PumpFun>>> = Mutex::new(None);
+static INSTANCE: Mutex<Option<Arc<SolanaTrade>>> = Mutex::new(None);
 
-impl Clone for PumpFun {
+impl Clone for SolanaTrade {
     fn clone(&self) -> Self {
         Self {
             payer: self.payer.clone(),
@@ -59,7 +59,7 @@ impl Clone for PumpFun {
     }
 }
 
-impl PumpFun {
+impl SolanaTrade {
     #[inline]
     pub async fn new(
         payer: Arc<Keypair>,
@@ -211,6 +211,7 @@ impl PumpFun {
         buy_sol_cost: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
+        bonding_curve: Option<Arc<BondingCurveAccount>>,
     ) -> Result<(), anyhow::Error> {
         pumpfun::buy::buy(
             self.rpc.clone(),
@@ -222,12 +223,12 @@ impl PumpFun {
             self.priority_fee.clone(),
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
-            None,
+            bonding_curve,
             SNIPER_BUY.to_string(),
         ).await
     }
 
-    pub async fn copy_buy(
+    pub async fn buy(
         &self,
         mint: Pubkey,
         creator: Pubkey,
@@ -274,6 +275,64 @@ impl PumpFun {
         }
     }
 
+    pub async fn buy_use_buy_params(
+        &self,
+        buy_params: BuyWithTipParams,
+        custom_buy_tip_fee: Option<f64>,
+    ) -> Result<(), anyhow::Error> {
+        let mut priority_fee = buy_params.priority_fee.clone();
+        if custom_buy_tip_fee.is_some() {
+            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+        }
+        let mint = buy_params.mint;
+        let creator = buy_params.creator;
+        let buy_sol_cost = buy_params.amount_sol;
+        let slippage_basis_points = buy_params.slippage_basis_points;
+        let recent_blockhash = buy_params.recent_blockhash;
+        if let Some(protocol_params) = buy_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunParams>() {
+            pumpfun::buy::buy(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.bonding_curve.clone(),
+                COPY_BUY.to_string(),
+            ).await
+        } else if let Some(protocol_params) = buy_params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>() {
+            pumpswap::buy::buy(
+                self.rpc.clone(),
+                self.payer.clone(),
+                mint,
+                creator,
+                buy_sol_cost,
+                slippage_basis_points,
+                self.priority_fee.clone(),
+                self.cluster.clone().lookup_table_key,
+                recent_blockhash,
+                protocol_params.pool.clone(),
+                protocol_params.pool_base_token_account.clone(),
+                protocol_params.pool_quote_token_account.clone(),
+                protocol_params.user_base_token_account.clone(),
+                protocol_params.user_quote_token_account.clone(),
+                protocol_params.auto_handle_wsol,
+            ).await
+        } else {
+            return Err(anyhow::anyhow!("Invalid protocol params for PumpFun"));
+        }
+    }
+
     /// Buy tokens using Jito
     pub async fn sniper_buy_with_tip(
         &self,
@@ -299,7 +358,7 @@ impl PumpFun {
         ).await
     }
 
-    pub async fn copy_buy_with_tip_use_buy_params(
+    pub async fn buy_with_tip_use_buy_params(
         &self,
         buy_params: BuyWithTipParams,
         custom_buy_tip_fee: Option<f64>,
@@ -358,7 +417,7 @@ impl PumpFun {
         }
     }
 
-    pub async fn copy_buy_with_tip(
+    pub async fn buy_with_tip(
         &self,
         mint: Pubkey,
         creator: Pubkey,

@@ -21,7 +21,6 @@ use crate::{
         params::{BuyParams, PumpFunParams, SellParams},
         traits::InstructionBuilder,
     },
-    PumpFun,
 };
 
 /// PumpFun协议的指令构建器
