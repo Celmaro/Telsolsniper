@@ -6,12 +6,14 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 
 1. **PumpFun Trading**: Support for `create`, `buy`, `sell` operations
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
-3. **Logs Subscription**: Subscribe to PumpFun program transaction logs
-4. **Yellowstone gRPC**: Subscribe to program logs using gRPC
-5. **Multiple MEV Protection**: Support for Jito, Nextblock, 0slot, Nozomi services
-6. **Concurrent Transactions**: Submit transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
-7. **IPFS Integration**: Support for token metadata IPFS uploads
-8. **Real-time Pricing**: Get real-time token prices and liquidity information
+3. **Raydium Trading**: Support for Raydium DEX trading operations
+4. **Logs Subscription**: Subscribe to PumpFun, PumpSwap, and Raydium program transaction logs
+5. **Yellowstone gRPC**: Subscribe to program logs using Yellowstone gRPC
+6. **ShredStream Support**: Subscribe to program logs using ShredStream
+7. **Multiple MEV Protection**: Support for Jito, Nextblock, 0slot, Nozomi services
+8. **Concurrent Transactions**: Submit transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
+9. **IPFS Integration**: Support for token metadata IPFS uploads
+10. **Real-time Pricing**: Get real-time token prices and liquidity information
 
 ## Installation
 
@@ -37,41 +39,38 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.1.0" }
 use sol_trade_sdk::{common::pumpfun::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
 use solana_sdk::signature::Keypair;
 
-// Create gRPC client
-let grpc_url = "http://127.0.0.1:10000";
+// Create gRPC client with Yellowstone
+let grpc_url = "https://solana-yellowstone-grpc.publicnode.com:443";
 let x_token = None; // Optional auth token
 let client = YellowstoneGrpc::new(grpc_url.to_string(), x_token)?;
 
 // Define callback function
-let callback = |event: PumpfunEvent| {
-    match event {
-        PumpfunEvent::NewToken(token_info) => {
-            println!("Received new token event: {:?}", token_info);
-        },
-        PumpfunEvent::NewDevTrade(trade_info) => {
-            println!("Received dev trade event: {:?}", trade_info);
-        },
-        PumpfunEvent::NewUserTrade(trade_info) => {
-            println!("Received new trade event: {:?}", trade_info);
-        },
-        PumpfunEvent::NewBotTrade(trade_info) => {
-            println!("Received new bot trade event: {:?}", trade_info);
-        }
-        PumpfunEvent::Error(err) => {
-            println!("Received error: {}", err);
-        }
+let callback = |event: PumpfunEvent| match event {
+    PumpfunEvent::NewDevTrade(trade_info) => {
+        println!("Received new dev trade event: {:?}", trade_info);
+    }
+    PumpfunEvent::NewToken(token_info) => {
+        println!("Received new token event: {:?}", token_info);
+    }
+    PumpfunEvent::NewUserTrade(trade_info) => {
+        println!("Received new trade event: {:?}", trade_info);
+    }
+    PumpfunEvent::NewBotTrade(trade_info) => {
+        println!("Received new bot trade event: {:?}", trade_info);
+    }
+    PumpfunEvent::Error(err) => {
+        println!("Received error: {}", err);
     }
 };
 
-let payer_keypair = Keypair::from_base58_string("your_private_key");
-client.subscribe_pumpfun(callback, Some(payer_keypair.pubkey())).await?;
+client.subscribe_pumpfun(callback, None).await?;
 ```
 
-### 2. Initialize PumpFun Instance
+### 2. Initialize SolanaTrade Instance
 
 ```rust
 use std::sync::Arc;
-use sol_trade_sdk::{common::{Cluster, PriorityFee}, PumpFun};
+use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
 
 // Configure priority fees
@@ -105,15 +104,15 @@ let cluster = Cluster {
     lookup_table_key: None, // Optional lookup table
 };
 
-// Create PumpFun instance
+// Create SolanaTrade instance
 let payer = Keypair::from_base58_string("your_private_key");
-let pumpfun = PumpFun::new(Arc::new(payer), &cluster).await;
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
 ```
 
 ### 3. Create Token
 
 ```rust
-use sol_trade_sdk::{PumpFun, ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
+use sol_trade_sdk::{ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
 use solana_sdk::signature::Keypair;
 
 // Create token keypair
@@ -136,14 +135,14 @@ let api_token = "your_pinata_api_token";
 let ipfs_response = create_token_metadata(metadata, api_token).await?;
 
 // Create token
-pumpfun.create(mint_keypair, ipfs_response).await?;
+solana_trade_client.create(mint_keypair, ipfs_response).await?;
 ```
 
 ### 3.1. Create and Buy Token (with MEV protection)
 
 ```rust
 // Create token and buy simultaneously with MEV protection
-pumpfun.create_and_buy_with_tip(
+solana_trade_client.create_and_buy_with_tip(
     payer.clone(),  // payer keypair
     mint_keypair,   // mint keypair
     ipfs_response,  // IPFS response
@@ -157,32 +156,39 @@ pumpfun.create_and_buy_with_tip(
 
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use sol_trade_sdk::accounts::BondingCurveAccount;
 
 let mint_pubkey = Pubkey::from_str("token_address")?;
 let creator = Pubkey::from_str("creator_address")?;
 let recent_blockhash = Hash::default(); // Get latest blockhash
+let buy_sol_cost = 50000; // 0.00005 SOL
+let slippage_basis_points = Some(100); // 1%
 
 // Sniper buy (fast purchase when new token launches)
-pumpfun.sniper_buy_with_tip(
+let dev_buy_token = 100_000; // test value
+let dev_cost_sol = 10_000; // test value
+let bonding_curve = BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
+
+solana_trade_client.sniper_buy(
     mint_pubkey,
     creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost  
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
+    buy_sol_cost,
+    slippage_basis_points,
     recent_blockhash,
+    Some(Arc::new(bonding_curve)),
 ).await?;
 
-// Copy buy (follow other traders)
-pumpfun.copy_buy_with_tip(
+// Buy with tip for MEV protection
+solana_trade_client.buy_with_tip(
     mint_pubkey,
     creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
+    buy_sol_cost,
+    slippage_basis_points,
     recent_blockhash,
+    Some(Arc::new(bonding_curve)),
     "pumpfun".to_string(), // trading platform
+    None, // custom tip fee
 ).await?;
 ```
 
@@ -190,22 +196,22 @@ pumpfun.copy_buy_with_tip(
 
 ```rust
 // Sell by amount
-pumpfun.sell_by_amount_with_tip(
+solana_trade_client.sell_by_amount_with_tip(
     mint_pubkey,
     creator,
     1000000, // token amount
     recent_blockhash,
-    "pumpfun".to_string(),
+    "pumpfun".to_string(), // trading platform
 ).await?;
 
 // Sell by percentage
-pumpfun.sell_by_percent_with_tip(
+solana_trade_client.sell_by_percent_with_tip(
     mint_pubkey,
     creator,
     50,      // percentage (50%)
     2000000, // total token amount
     recent_blockhash,
-    "pumpfun".to_string(),
+    "pumpfun".to_string(), // trading platform
 ).await?;
 ```
 
@@ -213,19 +219,19 @@ pumpfun.sell_by_percent_with_tip(
 
 ```rust
 // Get current token price
-let price = pumpfun.get_current_price(&mint_pubkey).await?;
+let price = solana_trade_client.get_current_price(&mint_pubkey).await?;
 println!("Current price: {}", price);
 
 // Get SOL balance
-let sol_balance = pumpfun.get_payer_sol_balance().await?;
+let sol_balance = solana_trade_client.get_payer_sol_balance().await?;
 println!("SOL balance: {} lamports", sol_balance);
 
 // Get token balance
-let token_balance = pumpfun.get_payer_token_balance(&mint_pubkey).await?;
+let token_balance = solana_trade_client.get_payer_token_balance(&mint_pubkey).await?;
 println!("Token balance: {}", token_balance);
 
 // Get liquidity information
-let sol_reserves = pumpfun.get_real_sol_reserves(&mint_pubkey).await?;
+let sol_reserves = solana_trade_client.get_real_sol_reserves(&mint_pubkey).await?;
 println!("SOL reserves: {} lamports", sol_reserves);
 ```
 
@@ -234,87 +240,109 @@ println!("SOL reserves: {} lamports", sol_reserves);
 ```rust
 use sol_trade_sdk::{common::pumpswap::logs_events::PumpSwapEvent, grpc::YellowstoneGrpc};
 
-// Create gRPC client (same as above)
-let grpc_url = "http://127.0.0.1:10000";
+// Create gRPC client with Yellowstone
+let grpc_url = "https://solana-yellowstone-grpc.publicnode.com:443";
 let x_token = None;
 let client = YellowstoneGrpc::new(grpc_url.to_string(), x_token)?;
 
 // Define callback function for PumpSwap events
-let callback = |event: PumpSwapEvent| {
-    match event {
-        PumpSwapEvent::Buy(buy_event) => {
-            println!("PumpSwap Buy Event: {:?}", buy_event);
-        },
-        PumpSwapEvent::Sell(sell_event) => {
-            println!("PumpSwap Sell Event: {:?}", sell_event);
-        },
-        PumpSwapEvent::CreatePool(pool_event) => {
-            println!("PumpSwap Pool Created: {:?}", pool_event);
-        },
-        PumpSwapEvent::Deposit(deposit_event) => {
-            println!("PumpSwap Deposit: {:?}", deposit_event);
-        },
-        PumpSwapEvent::Withdraw(withdraw_event) => {
-            println!("PumpSwap Withdraw: {:?}", withdraw_event);
-        },
-        PumpSwapEvent::Disable(disable_event) => {
-            println!("PumpSwap Pool Disabled: {:?}", disable_event);
-        },
-        PumpSwapEvent::UpdateAdmin(admin_event) => {
-            println!("PumpSwap Admin Updated: {:?}", admin_event);
-        },
-        PumpSwapEvent::UpdateFeeConfig(fee_event) => {
-            println!("PumpSwap Fee Config Updated: {:?}", fee_event);
-        },
-        PumpSwapEvent::Error(err) => {
-            println!("PumpSwap Error: {}", err);
-        }
+let callback = |event: PumpSwapEvent| match event {
+    PumpSwapEvent::Buy(buy_event) => {
+        println!("buy_event: {:?}", buy_event);
+    }
+    PumpSwapEvent::Sell(sell_event) => {
+        println!("sell_event: {:?}", sell_event);
+    }
+    PumpSwapEvent::CreatePool(create_event) => {
+        println!("create_event: {:?}", create_event);
+    }
+    PumpSwapEvent::Deposit(deposit_event) => {
+        println!("deposit_event: {:?}", deposit_event);
+    }
+    PumpSwapEvent::Withdraw(withdraw_event) => {
+        println!("withdraw_event: {:?}", withdraw_event);
+    }
+    PumpSwapEvent::Disable(disable_event) => {
+        println!("disable_event: {:?}", disable_event);
+    }
+    PumpSwapEvent::UpdateAdmin(update_admin_event) => {
+        println!("update_admin_event: {:?}", update_admin_event);
+    }
+    PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
+        println!("update_fee_event: {:?}", update_fee_event);
+    }
+    PumpSwapEvent::Error(err) => {
+        println!("error: {}", err);
     }
 };
 
 // Subscribe to PumpSwap events
+println!("Monitoring PumpSwap events, press Ctrl+C to stop...");
 client.subscribe_pumpswap(callback).await?;
 ```
 
 ### 8. PumpSwap Trading Operations
 
 ```rust
-use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use solana_sdk::{pubkey::Pubkey, hash::Hash, signature::Keypair};
+use solana_client::rpc_client::RpcClient;
+use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 
-let mint_pubkey = Pubkey::from_str("token_address")?;
-let creator = Pubkey::from_str("creator_address")?;
-let recent_blockhash = Hash::default();
+let payer = Keypair::new();
+// Define cluster configuration
+let cluster = Cluster {
+    rpc_url: "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY".to_string(),
+    commitment: CommitmentConfig::confirmed(),
+    priority_fee: PriorityFee::default(),
+    use_jito: false,
+    use_zeroslot: false,
+    use_nozomi: false,
+    use_nextblock: false,
+    block_engine_url: "".to_string(),
+    zeroslot_url: "".to_string(),
+    zeroslot_auth_token: "".to_string(),
+    nozomi_url: "".to_string(),
+    nozomi_auth_token: "".to_string(),
+    nextblock_url: "".to_string(),
+    nextblock_auth_token: "".to_string(),
+    lookup_table_key: None,
+    use_rpc: true,
+};
 
-// Buy tokens on PumpSwap
-pumpfun.copy_buy_with_tip(
-    mint_pubkey,
-    creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
-    recent_blockhash,
-    "pumpswap".to_string(), // Use PumpSwap platform
-).await?;
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
+let buy_sol_cost = 500_000; // 0.0005 SOL
+let slippage_basis_points = Some(100);
+let rpc = RpcClient::new(cluster.rpc_url);
+let recent_blockhash = rpc.get_latest_blockhash().unwrap();
+let trade_platform = "pumpswap".to_string();
+let mint_pubkey = Pubkey::from_str("YOUR_TOKEN_MINT")?; // token mint
 
-// Sell tokens on PumpSwap by amount
-pumpfun.sell_by_amount_with_tip(
-    mint_pubkey,
-    creator,
-    1000000, // token amount
-    recent_blockhash,
-    "pumpswap".to_string(), // Use PumpSwap platform
-).await?;
+println!("Buying tokens from PumpSwap...");
+solana_trade_client
+    .buy(
+        mint_pubkey,
+        creator,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        trade_platform.clone(),
+    )
+    .await?;
 
-// Sell tokens on PumpSwap by percentage
-pumpfun.sell_by_percent_with_tip(
-    mint_pubkey,
-    creator,
-    50,      // percentage (50%)
-    2000000, // total token amount
-    recent_blockhash,
-    "pumpswap".to_string(), // Use PumpSwap platform
-).await?;
+// Sell 30% * amount_token quantity
+solana_trade_client
+    .sell_by_percent(
+        mint_pubkey,
+        creator,
+        30,      // percentage (30%)
+        100,     // total token amount
+        recent_blockhash,
+        trade_platform.clone(),
+    )
+    .await?;
 ```
 
 ### 9. PumpSwap Pool Information
@@ -325,15 +353,15 @@ use solana_sdk::pubkey::Pubkey;
 let pool_address = Pubkey::from_str("pool_address")?;
 
 // Get current price from PumpSwap pool
-let price = pumpfun.get_current_price_with_pumpswap(&pool_address).await?;
+let price = solana_trade_client.get_current_price_with_pumpswap(&pool_address).await?;
 println!("PumpSwap pool price: {}", price);
 
 // Get SOL reserves in PumpSwap pool
-let sol_reserves = pumpfun.get_real_sol_reserves_with_pumpswap(&pool_address).await?;
+let sol_reserves = solana_trade_client.get_real_sol_reserves_with_pumpswap(&pool_address).await?;
 println!("PumpSwap SOL reserves: {} lamports", sol_reserves);
 
 // Get token balance in PumpSwap pool
-let token_balance = pumpfun.get_payer_token_balance_with_pumpswap(&pool_address).await?;
+let token_balance = solana_trade_client.get_payer_token_balance_with_pumpswap(&pool_address).await?;
 println!("PumpSwap token balance: {}", token_balance);
 ```
 

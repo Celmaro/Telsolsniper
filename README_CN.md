@@ -6,12 +6,14 @@
 
 1. **PumpFun交易**: 支持`创建代币`、`购买`、`卖出`功能
 2. **PumpSwap交易**: 支持PumpSwap池的交易操作
-3. **日志订阅**: 订阅PumpFun程序的交易日志
-4. **Yellowstone gRPC**: 使用gRPC订阅程序日志
-5. **多种MEV保护**: 支持Jito、Nextblock、0slot、Nozomi等服务
-6. **并发交易**: 同时使用多个MEV服务发送交易，最快的成功，其他失败
-7. **IPFS集成**: 支持代币元数据的IPFS上传
-8. **实时价格**: 获取代币实时价格和流动性信息
+3. **Raydium交易**: 支持Raydium DEX的交易操作
+4. **日志订阅**: 订阅PumpFun、PumpSwap和Raydium程序的交易日志
+5. **Yellowstone gRPC**: 使用Yellowstone gRPC订阅程序日志
+6. **ShredStream支持**: 使用ShredStream订阅程序日志
+7. **多种MEV保护**: 支持Jito、Nextblock、0slot、Nozomi等服务
+8. **并发交易**: 同时使用多个MEV服务发送交易，最快的成功，其他失败
+9. **IPFS集成**: 支持代币元数据的IPFS上传
+10. **实时价格**: 获取代币实时价格和流动性信息
 
 ## 安装
 
@@ -37,41 +39,38 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.1.0" }
 use sol_trade_sdk::{common::pumpfun::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
 use solana_sdk::signature::Keypair;
 
-// 创建gRPC客户端
-let grpc_url = "http://127.0.0.1:10000";
+// 创建Yellowstone gRPC客户端
+let grpc_url = "https://solana-yellowstone-grpc.publicnode.com:443";
 let x_token = None; // 可选的认证令牌
 let client = YellowstoneGrpc::new(grpc_url.to_string(), x_token)?;
 
 // 定义回调函数
-let callback = |event: PumpfunEvent| {
-    match event {
-        PumpfunEvent::NewToken(token_info) => {
-            println!("收到新代币事件: {:?}", token_info);
-        },
-        PumpfunEvent::NewDevTrade(trade_info) => {
-            println!("收到开发者交易事件: {:?}", trade_info);
-        },
-        PumpfunEvent::NewUserTrade(trade_info) => {
-            println!("收到用户交易事件: {:?}", trade_info);
-        },
-        PumpfunEvent::NewBotTrade(trade_info) => {
-            println!("收到机器人交易事件: {:?}", trade_info);
-        }
-        PumpfunEvent::Error(err) => {
-            println!("收到错误: {}", err);
-        }
+let callback = |event: PumpfunEvent| match event {
+    PumpfunEvent::NewDevTrade(trade_info) => {
+        println!("收到开发者交易事件: {:?}", trade_info);
+    }
+    PumpfunEvent::NewToken(token_info) => {
+        println!("收到新代币事件: {:?}", token_info);
+    }
+    PumpfunEvent::NewUserTrade(trade_info) => {
+        println!("收到用户交易事件: {:?}", trade_info);
+    }
+    PumpfunEvent::NewBotTrade(trade_info) => {
+        println!("收到机器人交易事件: {:?}", trade_info);
+    }
+    PumpfunEvent::Error(err) => {
+        println!("收到错误: {}", err);
     }
 };
 
-let payer_keypair = Keypair::from_base58_string("your_private_key");
-client.subscribe_pumpfun(callback, Some(payer_keypair.pubkey())).await?;
+client.subscribe_pumpfun(callback, None).await?;
 ```
 
-### 2. 初始化PumpFun实例
+### 2. 初始化SolanaTrade实例
 
 ```rust
 use std::sync::Arc;
-use sol_trade_sdk::{common::{Cluster, PriorityFee}, PumpFun};
+use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
 
 // 配置优先费用
@@ -105,15 +104,15 @@ let cluster = Cluster {
     lookup_table_key: None, // 可选的查找表
 };
 
-// 创建PumpFun实例
+// 创建SolanaTrade实例
 let payer = Keypair::from_base58_string("your_private_key");
-let pumpfun = PumpFun::new(Arc::new(payer), &cluster).await;
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
 ```
 
 ### 3. 创建代币
 
 ```rust
-use sol_trade_sdk::{PumpFun, ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
+use sol_trade_sdk::{ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
 use solana_sdk::signature::Keypair;
 
 // 创建代币密钥对
@@ -136,14 +135,14 @@ let api_token = "your_pinata_api_token";
 let ipfs_response = create_token_metadata(metadata, api_token).await?;
 
 // 创建代币
-pumpfun.create(mint_keypair, ipfs_response).await?;
+solana_trade_client.create(mint_keypair, ipfs_response).await?;
 ```
 
 ### 3.1. 创建并购买代币（带小费）
 
 ```rust
 // 创建代币的同时购买，并使用MEV保护
-pumpfun.create_and_buy_with_tip(
+solana_trade_client.create_and_buy_with_tip(
     payer.clone(),  // payer keypair
     mint_keypair,   // mint keypair
     ipfs_response,  // IPFS响应
@@ -157,32 +156,39 @@ pumpfun.create_and_buy_with_tip(
 
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use sol_trade_sdk::accounts::BondingCurveAccount;
 
 let mint_pubkey = Pubkey::from_str("代币地址")?;
 let creator = Pubkey::from_str("创建者地址")?;
 let recent_blockhash = Hash::default(); // 获取最新区块哈希
+let buy_sol_cost = 50000; // 0.00005 SOL
+let slippage_basis_points = Some(100); // 1%
 
 // 狙击购买（新代币上线时快速购买）
-pumpfun.sniper_buy_with_tip(
+let dev_buy_token = 100_000; // 测试值
+let dev_cost_sol = 10_000; // 测试值
+let bonding_curve = BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
+
+solana_trade_client.sniper_buy(
     mint_pubkey,
     creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost  
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
+    buy_sol_cost,
+    slippage_basis_points,
     recent_blockhash,
+    Some(Arc::new(bonding_curve)),
 ).await?;
 
-// 复制购买（跟随其他交易者）
-pumpfun.copy_buy_with_tip(
+// 使用小费进行MEV保护的购买
+solana_trade_client.buy_with_tip(
     mint_pubkey,
     creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
+    buy_sol_cost,
+    slippage_basis_points,
     recent_blockhash,
+    Some(Arc::new(bonding_curve)),
     "pumpfun".to_string(), // 交易平台
+    None, // 自定义小费
 ).await?;
 ```
 
@@ -190,22 +196,22 @@ pumpfun.copy_buy_with_tip(
 
 ```rust
 // 按数量卖出
-pumpfun.sell_by_amount_with_tip(
+solana_trade_client.sell_by_amount_with_tip(
     mint_pubkey,
     creator,
     1000000, // 代币数量
     recent_blockhash,
-    "pumpfun".to_string(),
+    "pumpfun".to_string(), // 交易平台
 ).await?;
 
 // 按百分比卖出
-pumpfun.sell_by_percent_with_tip(
+solana_trade_client.sell_by_percent_with_tip(
     mint_pubkey,
     creator,
     50,      // 百分比 (50%)
     2000000, // 总代币数量
     recent_blockhash,
-    "pumpfun".to_string(),
+    "pumpfun".to_string(), // 交易平台
 ).await?;
 ```
 
@@ -213,19 +219,19 @@ pumpfun.sell_by_percent_with_tip(
 
 ```rust
 // 获取代币当前价格
-let price = pumpfun.get_current_price(&mint_pubkey).await?;
+let price = solana_trade_client.get_current_price(&mint_pubkey).await?;
 println!("当前价格: {}", price);
 
 // 获取SOL余额
-let sol_balance = pumpfun.get_payer_sol_balance().await?;
+let sol_balance = solana_trade_client.get_payer_sol_balance().await?;
 println!("SOL余额: {} lamports", sol_balance);
 
 // 获取代币余额
-let token_balance = pumpfun.get_payer_token_balance(&mint_pubkey).await?;
+let token_balance = solana_trade_client.get_payer_token_balance(&mint_pubkey).await?;
 println!("代币余额: {}", token_balance);
 
 // 获取流动性信息
-let sol_reserves = pumpfun.get_real_sol_reserves(&mint_pubkey).await?;
+let sol_reserves = solana_trade_client.get_real_sol_reserves(&mint_pubkey).await?;
 println!("SOL储备: {} lamports", sol_reserves);
 ```
 
@@ -234,87 +240,109 @@ println!("SOL储备: {} lamports", sol_reserves);
 ```rust
 use sol_trade_sdk::{common::pumpswap::logs_events::PumpSwapEvent, grpc::YellowstoneGrpc};
 
-// 创建gRPC客户端（与上面相同）
-let grpc_url = "http://127.0.0.1:10000";
+// 创建Yellowstone gRPC客户端
+let grpc_url = "https://solana-yellowstone-grpc.publicnode.com:443";
 let x_token = None;
 let client = YellowstoneGrpc::new(grpc_url.to_string(), x_token)?;
 
 // 定义PumpSwap事件的回调函数
-let callback = |event: PumpSwapEvent| {
-    match event {
-        PumpSwapEvent::Buy(buy_event) => {
-            println!("PumpSwap购买事件: {:?}", buy_event);
-        },
-        PumpSwapEvent::Sell(sell_event) => {
-            println!("PumpSwap卖出事件: {:?}", sell_event);
-        },
-        PumpSwapEvent::CreatePool(pool_event) => {
-            println!("PumpSwap池创建: {:?}", pool_event);
-        },
-        PumpSwapEvent::Deposit(deposit_event) => {
-            println!("PumpSwap存款: {:?}", deposit_event);
-        },
-        PumpSwapEvent::Withdraw(withdraw_event) => {
-            println!("PumpSwap提款: {:?}", withdraw_event);
-        },
-        PumpSwapEvent::Disable(disable_event) => {
-            println!("PumpSwap池禁用: {:?}", disable_event);
-        },
-        PumpSwapEvent::UpdateAdmin(admin_event) => {
-            println!("PumpSwap管理员更新: {:?}", admin_event);
-        },
-        PumpSwapEvent::UpdateFeeConfig(fee_event) => {
-            println!("PumpSwap费用配置更新: {:?}", fee_event);
-        },
-        PumpSwapEvent::Error(err) => {
-            println!("PumpSwap错误: {}", err);
-        }
+let callback = |event: PumpSwapEvent| match event {
+    PumpSwapEvent::Buy(buy_event) => {
+        println!("buy_event: {:?}", buy_event);
+    }
+    PumpSwapEvent::Sell(sell_event) => {
+        println!("sell_event: {:?}", sell_event);
+    }
+    PumpSwapEvent::CreatePool(create_event) => {
+        println!("create_event: {:?}", create_event);
+    }
+    PumpSwapEvent::Deposit(deposit_event) => {
+        println!("deposit_event: {:?}", deposit_event);
+    }
+    PumpSwapEvent::Withdraw(withdraw_event) => {
+        println!("withdraw_event: {:?}", withdraw_event);
+    }
+    PumpSwapEvent::Disable(disable_event) => {
+        println!("disable_event: {:?}", disable_event);
+    }
+    PumpSwapEvent::UpdateAdmin(update_admin_event) => {
+        println!("update_admin_event: {:?}", update_admin_event);
+    }
+    PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
+        println!("update_fee_event: {:?}", update_fee_event);
+    }
+    PumpSwapEvent::Error(err) => {
+        println!("error: {}", err);
     }
 };
 
 // 订阅PumpSwap事件
+println!("开始监听PumpSwap事件，按Ctrl+C停止...");
 client.subscribe_pumpswap(callback).await?;
 ```
 
 ### 8. PumpSwap交易操作
 
 ```rust
-use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use solana_sdk::{pubkey::Pubkey, hash::Hash, signature::Keypair};
+use solana_client::rpc_client::RpcClient;
+use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 
-let mint_pubkey = Pubkey::from_str("代币地址")?;
-let creator = Pubkey::from_str("创建者地址")?;
-let recent_blockhash = Hash::default();
+let payer = Keypair::new();
+// 配置集群
+let cluster = Cluster {
+    rpc_url: "https://mainnet.helius-rpc.com/?api-key=您的API密钥".to_string(),
+    commitment: CommitmentConfig::confirmed(),
+    priority_fee: PriorityFee::default(),
+    use_jito: false,
+    use_zeroslot: false,
+    use_nozomi: false,
+    use_nextblock: false,
+    block_engine_url: "".to_string(),
+    zeroslot_url: "".to_string(),
+    zeroslot_auth_token: "".to_string(),
+    nozomi_url: "".to_string(),
+    nozomi_auth_token: "".to_string(),
+    nextblock_url: "".to_string(),
+    nextblock_auth_token: "".to_string(),
+    lookup_table_key: None,
+    use_rpc: true,
+};
 
-// 在PumpSwap上购买代币
-pumpfun.copy_buy_with_tip(
-    mint_pubkey,
-    creator,
-    1000000,  // dev_buy_token
-    10000,    // dev_sol_cost
-    50000,    // buy_sol_cost (lamports)
-    Some(100), // slippage (1%)
-    recent_blockhash,
-    "pumpswap".to_string(), // 使用PumpSwap平台
-).await?;
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+let creator = Pubkey::from_str("11111111111111111111111111111111")?; // 开发者账户
+let buy_sol_cost = 500_000; // 0.0005 SOL
+let slippage_basis_points = Some(100);
+let rpc = RpcClient::new(cluster.rpc_url);
+let recent_blockhash = rpc.get_latest_blockhash().unwrap();
+let trade_platform = "pumpswap".to_string();
+let mint_pubkey = Pubkey::from_str("您的代币铸造地址")?; // 代币铸造地址
 
-// 在PumpSwap上按数量卖出代币
-pumpfun.sell_by_amount_with_tip(
-    mint_pubkey,
-    creator,
-    1000000, // 代币数量
-    recent_blockhash,
-    "pumpswap".to_string(), // 使用PumpSwap平台
-).await?;
+println!("从PumpSwap购买代币...");
+solana_trade_client
+    .buy(
+        mint_pubkey,
+        creator,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        trade_platform.clone(),
+    )
+    .await?;
 
-// 在PumpSwap上按百分比卖出代币
-pumpfun.sell_by_percent_with_tip(
-    mint_pubkey,
-    creator,
-    50,      // 百分比 (50%)
-    2000000, // 总代币数量
-    recent_blockhash,
-    "pumpswap".to_string(), // 使用PumpSwap平台
-).await?;
+// 卖出30%的代币数量
+solana_trade_client
+    .sell_by_percent(
+        mint_pubkey,
+        creator,
+        30,      // 百分比 (30%)
+        100,     // 总代币数量
+        recent_blockhash,
+        trade_platform.clone(),
+    )
+    .await?;
 ```
 
 ### 9. PumpSwap池信息
@@ -325,15 +353,15 @@ use solana_sdk::pubkey::Pubkey;
 let pool_address = Pubkey::from_str("池地址")?;
 
 // 从PumpSwap池获取当前价格
-let price = pumpfun.get_current_price_with_pumpswap(&pool_address).await?;
+let price = solana_trade_client.get_current_price_with_pumpswap(&pool_address).await?;
 println!("PumpSwap池价格: {}", price);
 
 // 获取PumpSwap池中的SOL储备
-let sol_reserves = pumpfun.get_real_sol_reserves_with_pumpswap(&pool_address).await?;
+let sol_reserves = solana_trade_client.get_real_sol_reserves_with_pumpswap(&pool_address).await?;
 println!("PumpSwap SOL储备: {} lamports", sol_reserves);
 
 // 获取PumpSwap池中的代币余额
-let token_balance = pumpfun.get_payer_token_balance_with_pumpswap(&pool_address).await?;
+let token_balance = solana_trade_client.get_payer_token_balance_with_pumpswap(&pool_address).await?;
 println!("PumpSwap代币余额: {}", token_balance);
 ```
 
