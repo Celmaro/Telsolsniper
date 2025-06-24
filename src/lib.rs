@@ -283,7 +283,7 @@ impl SolanaTrade {
         let mut priority_fee = buy_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
             priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap()];
         }
         let mint = buy_params.mint;
         let creator = buy_params.creator;
@@ -342,7 +342,13 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         bonding_curve: Option<Arc<BondingCurveAccount>>,
+        custom_buy_tip_fee: Option<f64>,
     ) -> Result<(), anyhow::Error> {
+        let mut priority_fee = self.priority_fee.clone();
+        if custom_buy_tip_fee.is_some() {
+            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap()];
+        }
         pumpfun::buy::buy_with_tip(
             self.fee_clients.clone(),
             self.payer.clone(),
@@ -350,7 +356,7 @@ impl SolanaTrade {
             creator,
             buy_sol_cost,
             slippage_basis_points,
-            self.priority_fee.clone(),
+            priority_fee.clone(),
             self.cluster.clone().lookup_table_key,
             recent_blockhash,
             bonding_curve,
@@ -366,7 +372,7 @@ impl SolanaTrade {
         let mut priority_fee = buy_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
             priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap()];
         }
         let mint = buy_params.mint;
         let creator = buy_params.creator;
@@ -431,7 +437,7 @@ impl SolanaTrade {
         let mut priority_fee = self.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
             priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap()];
+            priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap()];
         }
         if trade_platform == PUMPFUN {
             pumpfun::buy::buy_with_tip(
