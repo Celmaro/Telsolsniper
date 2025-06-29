@@ -154,6 +154,7 @@ solana_trade_client.create_and_buy_with_tip(
 
 ### 4. Buy Tokens
 
+### 4.1 Buy Tokens --- Sniping
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -165,9 +166,9 @@ let recent_blockhash = Hash::default(); // Get latest blockhash
 let buy_sol_cost = 50000; // 0.00005 SOL
 let slippage_basis_points = Some(100); // 1%
 
-// Sniper buy (fast purchase when new token launches)
-let dev_buy_token = 100_000; // test value
-let dev_cost_sol = 10_000; // test value
+// Sniping buy (quick purchase when new token launches)
+let dev_buy_token = 100_000; // Test value
+let dev_cost_sol = 10_000; // Test value
 let bonding_curve = BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
 
 solana_trade_client.sniper_buy(
@@ -179,7 +180,58 @@ solana_trade_client.sniper_buy(
     Some(Arc::new(bonding_curve)),
 ).await?;
 
-// Buy with tip for MEV protection
+// Buy with MEV protection using tips
+solana_trade_client.sniper_buy_with_tip(
+    mint_pubkey,
+    creator,
+    buy_sol_cost,
+    slippage_basis_points,
+    recent_blockhash,
+    Some(Arc::new(bonding_curve)),
+    None, // Custom tip
+).await?;
+```
+
+### 4.2 Buy Tokens --- Copy Trading
+```rust
+use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use sol_trade_sdk::accounts::BondingCurveAccount;
+use sol_trade_sdk::{constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type::COPY_BUY}, pumpfun::common::get_bonding_curve_pda};
+
+let mint_pubkey = Pubkey::from_str("token_address")?;
+let creator = Pubkey::from_str("creator_address")?;
+let recent_blockhash = Hash::default(); // Get latest blockhash
+let buy_sol_cost = 50000; // 0.00005 SOL
+let slippage_basis_points = Some(100); // 1%
+
+// Copy trading buy
+let dev_buy_token = 100_000; // Test value
+let dev_cost_sol = 10_000; // Test value
+// trade_info comes from pumpfun parsed data, refer to section 1. Logs Subscription above
+let bonding_curve = Some(Arc::new(BondingCurveAccount {
+    discriminator: 0,
+    account: get_bonding_curve_pda(&trade_info.mint).unwrap(),
+    virtual_token_reserves: trade_info.virtual_token_reserves,
+    virtual_sol_reserves: trade_info.virtual_sol_reserves,
+    real_token_reserves: trade_info.real_token_reserves,
+    real_sol_reserves: trade_info.real_sol_reserves,
+    token_total_supply: TOKEN_TOTAL_SUPPLY,
+    complete: false,
+    creator: Pubkey::from_str(&creator).unwrap(),
+}));
+
+solana_trade_client.buy(
+    mint_pubkey,
+    creator,
+    buy_sol_cost,
+    slippage_basis_points,
+    recent_blockhash,
+    Some(Arc::new(bonding_curve)),
+    "pumpfun".to_string(), 
+).await?;
+
+// Buy with MEV protection using tips
 solana_trade_client.buy_with_tip(
     mint_pubkey,
     creator,
@@ -187,8 +239,8 @@ solana_trade_client.buy_with_tip(
     slippage_basis_points,
     recent_blockhash,
     Some(Arc::new(bonding_curve)),
-    "pumpfun".to_string(), // trading platform
-    None, // custom tip fee
+    "pumpfun".to_string(), 
+    None, // Custom tip
 ).await?;
 ```
 

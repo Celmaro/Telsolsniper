@@ -154,6 +154,7 @@ solana_trade_client.create_and_buy_with_tip(
 
 ### 4. 购买代币
 
+### 4.1 购买代币 --- 狙击
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -180,6 +181,57 @@ solana_trade_client.sniper_buy(
 ).await?;
 
 // 使用小费进行MEV保护的购买
+solana_trade_client.sniper_buy_with_tip(
+    mint_pubkey,
+    creator,
+    buy_sol_cost,
+    slippage_basis_points,
+    recent_blockhash,
+    Some(Arc::new(bonding_curve)),
+    None, // 自定义小费
+).await?;
+```
+
+### 4.2 购买代币 --- 跟单
+```rust
+use solana_sdk::{pubkey::Pubkey, hash::Hash};
+use std::sync::Arc;
+use sol_trade_sdk::accounts::BondingCurveAccount;
+use sol_trade_sdk::{constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type::COPY_BUY}, pumpfun::common::get_bonding_curve_pda};
+
+let mint_pubkey = Pubkey::from_str("代币地址")?;
+let creator = Pubkey::from_str("创建者地址")?;
+let recent_blockhash = Hash::default(); // 获取最新区块哈希
+let buy_sol_cost = 50000; // 0.00005 SOL
+let slippage_basis_points = Some(100); // 1%
+
+// 跟单购买
+let dev_buy_token = 100_000; // 测试值
+let dev_cost_sol = 10_000; // 测试值
+// trade_info来自pumpfun解析出来的数据，可以参考上面 1. 日志订阅
+let bonding_curve = Some(Arc::new(BondingCurveAccount {
+    discriminator: 0,
+    account: get_bonding_curve_pda(&trade_info.mint).unwrap(),
+    virtual_token_reserves: trade_info.virtual_token_reserves,
+    virtual_sol_reserves: trade_info.virtual_sol_reserves,
+    real_token_reserves: trade_info.real_token_reserves,
+    real_sol_reserves: trade_info.real_sol_reserves,
+    token_total_supply: TOKEN_TOTAL_SUPPLY,
+    complete: false,
+    creator: Pubkey::from_str(&creator).unwrap(),
+}));
+
+solana_trade_client.buy(
+    mint_pubkey,
+    creator,
+    buy_sol_cost,
+    slippage_basis_points,
+    recent_blockhash,
+    Some(Arc::new(bonding_curve)),
+    "pumpfun".to_string(), 
+).await?;
+
+// 使用小费进行MEV保护的购买
 solana_trade_client.buy_with_tip(
     mint_pubkey,
     creator,
@@ -187,7 +239,7 @@ solana_trade_client.buy_with_tip(
     slippage_basis_points,
     recent_blockhash,
     Some(Arc::new(bonding_curve)),
-    "pumpfun".to_string(), // 交易平台
+    "pumpfun".to_string(), 
     None, // 自定义小费
 ).await?;
 ```
