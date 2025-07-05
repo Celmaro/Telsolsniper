@@ -4,7 +4,7 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 
 ## Features
 
-1. **PumpFun Trading**: Support for `create`, `buy`, `sell` operations
+1. **PumpFun Trading**: Support for `buy`, `sell` operations
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
 3. **Raydium Trading**: Support for Raydium DEX trading operations
 4. **Logs Subscription**: Subscribe to PumpFun, PumpSwap, and Raydium program transaction logs
@@ -12,8 +12,7 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 6. **ShredStream Support**: Subscribe to program logs using ShredStream
 7. **Multiple MEV Protection**: Support for Jito, Nextblock, 0slot, Nozomi services
 8. **Concurrent Transactions**: Submit transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
-9. **IPFS Integration**: Support for token metadata IPFS uploads
-10. **Real-time Pricing**: Get real-time token prices and liquidity information
+9. **Real-time Pricing**: Get real-time token prices and liquidity information
 
 ## Installation
 
@@ -33,7 +32,7 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.1.0" }
 
 ## Usage Examples
 
-### 1. Logs Subscription - Monitor Token Creation and Trading
+### 1. Logs Subscription - Monitor Token Trading
 
 ```rust
 use sol_trade_sdk::{common::pumpfun::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
@@ -109,52 +108,9 @@ let payer = Keypair::from_base58_string("your_private_key");
 let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
 ```
 
-### 3. Create Token
+### 3. Buy Tokens
 
-```rust
-use sol_trade_sdk::{ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
-use solana_sdk::signature::Keypair;
-
-// Create token keypair
-let mint_keypair = Keypair::new();
-
-// Prepare token metadata
-let metadata = CreateTokenMetadata {
-    name: "My Token".to_string(),
-    symbol: "MTK".to_string(),
-    description: "This is a test token".to_string(),
-    file: "path/to/image.png".to_string(), // Local file path
-    twitter: Some("https://twitter.com/example".to_string()),
-    telegram: Some("https://t.me/example".to_string()),
-    website: Some("https://example.com".to_string()),
-    metadata_uri: None, // Will be generated
-};
-
-// Upload metadata to IPFS
-let api_token = "your_pinata_api_token";
-let ipfs_response = create_token_metadata(metadata, api_token).await?;
-
-// Create token
-solana_trade_client.create(mint_keypair, ipfs_response).await?;
-```
-
-### 3.1. Create and Buy Token (with MEV protection)
-
-```rust
-// Create token and buy simultaneously with MEV protection
-solana_trade_client.create_and_buy_with_tip(
-    payer.clone(),  // payer keypair
-    mint_keypair,   // mint keypair
-    ipfs_response,  // IPFS response
-    50000000,       // buy_sol_cost (purchase amount in lamports, 0.05 SOL)
-    Some(100),      // slippage (1%)
-    recent_blockhash,
-).await?;
-```
-
-### 4. Buy Tokens
-
-### 4.1 Buy Tokens --- Sniping
+### 3.1 Buy Tokens --- Sniping
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -192,7 +148,7 @@ solana_trade_client.sniper_buy_with_tip(
 ).await?;
 ```
 
-### 4.2 Buy Tokens --- Copy Trading
+### 3.2 Buy Tokens --- Copy Trading
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -244,7 +200,7 @@ solana_trade_client.buy_with_tip(
 ).await?;
 ```
 
-### 5. Sell Tokens
+### 4. Sell Tokens
 
 ```rust
 // Sell by amount
@@ -267,7 +223,7 @@ solana_trade_client.sell_by_percent_with_tip(
 ).await?;
 ```
 
-### 6. Get Price and Balance Information
+### 5. Get Price and Balance Information
 
 ```rust
 // Get current token price
@@ -287,7 +243,7 @@ let sol_reserves = solana_trade_client.get_real_sol_reserves(&mint_pubkey).await
 println!("SOL reserves: {} lamports", sol_reserves);
 ```
 
-### 7. PumpSwap Subscription - Monitor AMM Events
+### 6. PumpSwap Subscription - Monitor AMM Events
 
 ```rust
 use sol_trade_sdk::{common::pumpswap::logs_events::PumpSwapEvent, grpc::YellowstoneGrpc};
@@ -333,7 +289,7 @@ println!("Monitoring PumpSwap events, press Ctrl+C to stop...");
 client.subscribe_pumpswap(callback).await?;
 ```
 
-### 8. PumpSwap Trading Operations
+### 7. PumpSwap Trading Operations
 
 ```rust
 use std::sync::Arc;
@@ -397,7 +353,7 @@ solana_trade_client
     .await?;
 ```
 
-### 9. PumpSwap Pool Information
+### 8. PumpSwap Pool Information
 
 ```rust
 use solana_sdk::pubkey::Pubkey;
@@ -440,7 +396,6 @@ src/
 ├── error/        # Error handling
 ├── grpc/         # gRPC clients
 ├── instruction/  # Instruction building
-├── ipfs/         # IPFS integration
 ├── pumpfun/      # PumpFun trading functionality
 ├── pumpswap/     # PumpSwap trading functionality
 ├── swqos/        # MEV service clients
