@@ -18,7 +18,7 @@ use tonic::transport::ClientTlsConfig;
 
 use anyhow::Result;
 use solana_sdk::transaction::VersionedTransaction;
-use crate::swqos::{ClientType, TradeType};
+use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
 use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::NEXTBLOCK_TIP_ACCOUNTS};
@@ -67,8 +67,8 @@ impl SwqosClientTrait for NextBlockClient {
         Ok(tip_account.to_string())
     }
 
-    fn get_client_type(&self) -> ClientType {
-        ClientType::NextBlock
+    fn get_swqos_type(&self) -> SwqosType {
+        SwqosType::NextBlock
     }
 }
 

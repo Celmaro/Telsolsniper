@@ -12,14 +12,14 @@ use solana_transaction_status::UiTransactionEncoding;
 
 use anyhow::Result;
 use solana_sdk::transaction::VersionedTransaction;
-use crate::swqos::{ClientType, TradeType};
+use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
 use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::NOZOMI_TIP_ACCOUNTS};
 
 
 #[derive(Clone)]
-pub struct NozomiClient {
+pub struct TemporalClient {
     pub rpc_client: Arc<SolanaRpcClient>,
     pub endpoint: String,
     pub auth_token: String,
@@ -27,7 +27,7 @@ pub struct NozomiClient {
 }
 
 #[async_trait::async_trait]
-impl SwqosClientTrait for NozomiClient {
+impl SwqosClientTrait for TemporalClient {
     async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
         self.send_transaction(trade_type, transaction).await
     }
@@ -41,12 +41,12 @@ impl SwqosClientTrait for NozomiClient {
         Ok(tip_account.to_string())
     }
 
-    fn get_client_type(&self) -> ClientType {
-        ClientType::Nozomi
+    fn get_swqos_type(&self) -> SwqosType {
+        SwqosType::Temporal
     }
 }
 
-impl NozomiClient {
+impl TemporalClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()

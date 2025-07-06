@@ -8,7 +8,7 @@ use std::sync::Arc;
 use solana_sdk::{transaction::VersionedTransaction, signature::Signature};
 use crate::protos::searcher::searcher_service_client::SearcherServiceClient;
 use crate::protos::searcher_client::{self, get_searcher_client_no_auth, send_bundle_with_confirmation};
-use crate::swqos::{ClientType, TradeType};
+use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
 use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::JITO_TIP_ACCOUNTS};
@@ -37,8 +37,8 @@ impl SwqosClientTrait for JitoClient {
         }
     }
 
-    fn get_client_type(&self) -> ClientType {
-        ClientType::Jito
+    fn get_swqos_type(&self) -> SwqosType {
+        SwqosType::Jito
     }
 }
 

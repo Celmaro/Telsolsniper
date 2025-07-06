@@ -4,14 +4,16 @@ pub mod solana_rpc;
 pub mod jito;
 pub mod nextblock;
 pub mod zeroslot;
-pub mod nozomi;
-pub mod types;
+pub mod temporal;
+pub mod define;
 
 use solana_sdk::signature::Signature;
 use solana_sdk::transaction::VersionedTransaction;
 use tokio::sync::RwLock;
 
 use anyhow::Result;
+
+use crate::swqos::define::{SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT};
 
 lazy_static::lazy_static! {
     static ref TIP_ACCOUNT_CACHE: RwLock<Vec<String>> = RwLock::new(Vec::new());
@@ -37,12 +39,12 @@ impl std::fmt::Display for TradeType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ClientType {
+#[derive(Debug, Clone, PartialEq)]
+pub enum SwqosType {
     Jito,
     NextBlock,
     ZeroSlot,
-    Nozomi,
+    Temporal,
     Rpc,
 }
 
@@ -53,5 +55,35 @@ pub trait SwqosClientTrait {
     async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature>;
     async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>>;
     fn get_tip_account(&self) -> Result<String>;
-    fn get_client_type(&self) -> ClientType;
+    fn get_swqos_type(&self) -> SwqosType;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SwqosRegion {
+    NewYork,
+    Amsterdam,
+    Frankfurt,
+}
+
+#[derive(Debug, Clone)]
+pub struct SwqosConfig {
+    pub endpoint: String,
+    pub auth_token: String,
+    pub swqos_type: SwqosType,
+}
+
+impl SwqosConfig {
+    pub fn new(endpoint: Option<String>, auth_token: Option<String>, swqos_type: SwqosType, region: SwqosRegion) -> Self {
+        let endpoint = endpoint.unwrap_or_else(|| match swqos_type {
+            SwqosType::Jito => SWQOS_ENDPOINTS_JITO[region as usize].to_string(),
+            SwqosType::NextBlock => SWQOS_ENDPOINTS_NEXTBLOCK[region as usize].to_string(),
+            SwqosType::ZeroSlot => SWQOS_ENDPOINTS_ZERO_SLOT[region as usize].to_string(),
+            SwqosType::Temporal => SWQOS_ENDPOINTS_TEMPORAL[region as usize].to_string(),
+            SwqosType::Rpc => "".to_string(),
+        });
+
+        let auth_token = auth_token.unwrap();
+
+        Self { endpoint, auth_token, swqos_type }
+    }
 }

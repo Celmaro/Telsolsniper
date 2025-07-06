@@ -3,71 +3,32 @@ use std::sync::Arc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 use serde::Deserialize;
-use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::SwqosClient};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SwqosType {
-    Jito,
-    NextBlock,
-    ZeroSlot,
-    Nozomi,
-    Rpc,
-}
+use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::{SwqosClient, SwqosConfig, SwqosRegion}};
 
 #[derive(Debug, Clone)]
-pub struct Cluster {
+pub struct TradeConfig {
     pub rpc_url: String,
-    pub block_engine_url: String,
-    pub nextblock_url: String,
-    pub nextblock_auth_token: String,
-    pub zeroslot_url: String,
-    pub zeroslot_auth_token: String,
-    pub nozomi_url: String,
-    pub nozomi_auth_token: String,
-    pub use_jito: bool,
-    pub use_nextblock: bool,
-    pub use_zeroslot: bool,
-    pub use_nozomi: bool,
+    pub swqos_configs: Vec<SwqosConfig>,
     pub priority_fee: PriorityFee,
     pub commitment: CommitmentConfig,
     pub lookup_table_key: Option<Pubkey>,
     pub use_rpc: bool,
 }
 
-impl Cluster {
+impl TradeConfig {
     pub fn new(
         rpc_url: String, 
-        block_engine_url: 
-        String, nextblock_url: 
-        String, nextblock_auth_token: 
-        String, zeroslot_url: String, 
-        zeroslot_auth_token: String, 
-        nozomi_url: String, 
-        nozomi_auth_token: String, 
+        swqos_configs: Vec<SwqosConfig>,
         priority_fee: PriorityFee, 
         commitment: CommitmentConfig, 
-        use_jito: bool, 
-        use_nextblock: bool, 
-        use_zeroslot: bool, 
-        use_nozomi: bool,
         lookup_table_key: Option<Pubkey>,
         use_rpc: bool,
     ) -> Self {
         Self { 
             rpc_url, 
-            block_engine_url, 
-            nextblock_url, 
-            nextblock_auth_token, 
-            zeroslot_url, 
-            zeroslot_auth_token, 
-            nozomi_url, 
-            nozomi_auth_token, 
+            swqos_configs,
             priority_fee, 
             commitment, 
-            use_jito, 
-            use_nextblock, 
-            use_zeroslot, 
-            use_nozomi,
             lookup_table_key,
             use_rpc,
         }
@@ -117,4 +78,3 @@ impl MethodArgs {
 }
 
 pub type AnyResult<T> = anyhow::Result<T>;
-

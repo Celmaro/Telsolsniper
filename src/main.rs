@@ -1,23 +1,8 @@
 use std::{str::FromStr, sync::Arc};
 
-use sol_trade_sdk::{
-    accounts::BondingCurveAccount, common::{
-        pumpfun::{
-            self,
-            logs_events::PumpfunEvent,
-            logs_subscribe::{stop_subscription, tokens_subscription}, TradeInfo,
-        },
-        pumpswap::{self, PumpSwapEvent},
-        raydium::{self, RaydiumEvent},
-        AnyResult, Cluster, PriorityFee,
-    }, constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, grpc::{ShredStreamGrpc, YellowstoneGrpc}, pumpfun::common::get_bonding_curve_pda, SolanaTrade
-};
+use sol_trade_sdk::{accounts::BondingCurveAccount, common::{pumpfun::PumpfunEvent, pumpswap::PumpSwapEvent, raydium::RaydiumEvent, AnyResult, PriorityFee, TradeConfig}, constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, grpc::{ShredStreamGrpc, YellowstoneGrpc}, pumpfun::common::get_bonding_curve_pda, swqos::{SwqosConfig, SwqosRegion, SwqosType}, SolanaTrade};
 use solana_client::rpc_client::RpcClient;
-use solana_hash::Hash;
-use solana_sdk::{
-    commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair,
-    transaction::VersionedTransaction,
-};
+use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -259,31 +244,28 @@ async fn test_raydium_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn test_pumpfun_sniper() -> AnyResult<()> {
     let payer = Keypair::new();
+    let swqos_configs = vec![
+        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+    ];
+
+    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+
     // Define cluster configuration
-    let cluster = Cluster {
-        rpc_url: "https://mainnet.helius-rpc.com/?api-key=f2f194bb-6bd6-4f20-9a94-7fe0799ade0b"
-            .to_string(),
+    let trade_config = TradeConfig {
+        rpc_url: rpc_url.clone(),
         commitment: CommitmentConfig::confirmed(),
         priority_fee: PriorityFee::default(),
-        use_jito: false,
-        use_zeroslot: false,
-        use_nozomi: false,
-        use_nextblock: false,
-        block_engine_url: "".to_string(),
-        zeroslot_url: "".to_string(),
-        zeroslot_auth_token: "".to_string(),
-        nozomi_url: "".to_string(),
-        nozomi_auth_token: "".to_string(),
-        nextblock_url: "".to_string(),
-        nextblock_auth_token: "".to_string(),
+        swqos_configs,
         lookup_table_key: None,
         use_rpc: true,
     };
-    let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("xxx")?; // dev account
     let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(cluster.rpc_url);
+    let rpc = RpcClient::new(rpc_url);
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let mint_pubkey = Pubkey::from_str("xxx")?; // token mint
     println!("Sniping buy tokens from PumpFun...");
@@ -306,31 +288,30 @@ async fn test_pumpfun_sniper() -> AnyResult<()> {
 
 async fn test_pumpfun() -> AnyResult<()> {
     let payer = Keypair::new();
+
+    let swqos_configs = vec![
+        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+    ];
+
+    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+
     // Define cluster configuration
-    let cluster = Cluster {
-        rpc_url: "https://mainnet.helius-rpc.com/?api-key=f2f194bb-6bd6-4f20-9a94-7fe0799ade0b"
-            .to_string(),
+    let trade_config = TradeConfig {
+        rpc_url: rpc_url.clone(),
         commitment: CommitmentConfig::confirmed(),
         priority_fee: PriorityFee::default(),
-        use_jito: false,
-        use_zeroslot: false,
-        use_nozomi: false,
-        use_nextblock: false,
-        block_engine_url: "".to_string(),
-        zeroslot_url: "".to_string(),
-        zeroslot_auth_token: "".to_string(),
-        nozomi_url: "".to_string(),
-        nozomi_auth_token: "".to_string(),
-        nextblock_url: "".to_string(),
-        nextblock_auth_token: "".to_string(),
+        swqos_configs,
         lookup_table_key: None,
         use_rpc: true,
     };
-    let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+
+    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("xxx")?; // dev account
     let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(cluster.rpc_url);
+    let rpc = RpcClient::new(rpc_url);
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let trade_platform = "pumpfun".to_string();
     let mint_pubkey = Pubkey::from_str("xxx")?; // token mint
@@ -379,31 +360,29 @@ async fn test_pumpfun() -> AnyResult<()> {
 
 async fn test_pumpswap() -> AnyResult<()> {
     let payer = Keypair::new();
+
+    let swqos_configs = vec![
+        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+    ];
+
+    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+
     // Define cluster configuration
-    let cluster = Cluster {
-        rpc_url: "https://mainnet.helius-rpc.com/?api-key=f2f194bb-6bd6-4f20-9a94-7fe0799ade0b"
-            .to_string(),
+    let trade_config = TradeConfig {
+        rpc_url: rpc_url.clone(),
         commitment: CommitmentConfig::confirmed(),
         priority_fee: PriorityFee::default(),
-        use_jito: false,
-        use_zeroslot: false,
-        use_nozomi: false,
-        use_nextblock: false,
-        block_engine_url: "".to_string(),
-        zeroslot_url: "".to_string(),
-        zeroslot_auth_token: "".to_string(),
-        nozomi_url: "".to_string(),
-        nozomi_auth_token: "".to_string(),
-        nextblock_url: "".to_string(),
-        nextblock_auth_token: "".to_string(),
+        swqos_configs,
         lookup_table_key: None,
         use_rpc: true,
     };
-    let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
     let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(cluster.rpc_url);
+    let rpc = RpcClient::new(rpc_url);
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
     let trade_platform = "pumpswap".to_string();
     let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?; // token mint

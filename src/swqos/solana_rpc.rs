@@ -8,7 +8,7 @@ use solana_sdk::{
 };
 use solana_transaction_status::UiTransactionEncoding;
 
-use crate::{common::SolanaRpcClient, swqos::{common::poll_transaction_confirmation, ClientType, TradeType}};
+use crate::{common::SolanaRpcClient, swqos::{common::poll_transaction_confirmation, SwqosType, TradeType}};
 use crate::swqos::SwqosClientTrait;
 use anyhow::Result;
 
@@ -52,8 +52,8 @@ impl SwqosClientTrait for SolRpcClient {
         Ok("".to_string())
     }
 
-    fn get_client_type(&self) -> ClientType {
-        ClientType::Rpc
+    fn get_swqos_type(&self) -> SwqosType {
+        SwqosType::Rpc
     }
 }
 

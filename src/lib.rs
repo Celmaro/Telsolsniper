@@ -22,17 +22,18 @@ use solana_sdk::{
     signature::{Keypair, Signer},
 };
 
-use common::{pumpfun::logs_data::TradeInfo, pumpfun::logs_events::PumpfunEvent, pumpfun::logs_subscribe, Cluster, PriorityFee, SolanaRpcClient};
+use common::{pumpfun::logs_data::TradeInfo, pumpfun::logs_events::PumpfunEvent, pumpfun::logs_subscribe, TradeConfig, PriorityFee, SolanaRpcClient};
 use common::pumpfun::logs_subscribe::SubscriptionHandle;
 
 use constants::trade_type::{COPY_BUY, SNIPER_BUY};
-use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
+use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP};
 use accounts::BondingCurveAccount;
 
+use crate::swqos::SwqosType;
 use crate::swqos::jito::JitoClient;
 use crate::swqos::nextblock::NextBlockClient;
-use crate::swqos::nozomi::NozomiClient;
 use crate::swqos::solana_rpc::SolRpcClient;
+use crate::swqos::temporal::TemporalClient;
 use crate::swqos::zeroslot::ZeroSlotClient;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpFunSellParams;
@@ -46,7 +47,7 @@ pub struct SolanaTrade {
     pub rpc: Arc<SolanaRpcClient>,
     pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub priority_fee: PriorityFee,
-    pub cluster: Cluster,
+    pub trade_config: TradeConfig,
 }
 
 static INSTANCE: Mutex<Option<Arc<SolanaTrade>>> = Mutex::new(None);
@@ -58,7 +59,7 @@ impl Clone for SolanaTrade {
             rpc: self.rpc.clone(),
             swqos_clients: self.swqos_clients.clone(),
             priority_fee: self.priority_fee.clone(),
-            cluster: self.cluster.clone(),
+            trade_config: self.trade_config.clone(),
         }
     }
 }
@@ -67,7 +68,7 @@ impl SolanaTrade {
     #[inline]
     pub async fn new(
         payer: Arc<Keypair>,
-        cluster: &Cluster,
+        trade_config: TradeConfig,
     ) -> Self {
         if CryptoProvider::get_default().is_none() {
             let _ = default_provider()
@@ -75,62 +76,68 @@ impl SolanaTrade {
                 .map_err(|e| anyhow::anyhow!("Failed to install crypto provider: {:?}", e));
         }
 
+        let rpc_url = trade_config.rpc_url.clone();
+        let swqos_configs = trade_config.swqos_configs.clone();
+        let priority_fee = trade_config.priority_fee.clone();
+        let commitment = trade_config.commitment.clone();
+
         let rpc = SolanaRpcClient::new_with_commitment(
-            cluster.clone().rpc_url,
-            cluster.clone().commitment
+            rpc_url.clone(),
+            commitment
         );   
         let rpc = Arc::new(rpc);
+
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
-        if cluster.clone().use_jito {
-            let jito_client = JitoClient::new(
-                cluster.clone().rpc_url, 
-                cluster.clone().block_engine_url
-            ).await.expect("Failed to create Jito client");
 
-            swqos_clients.push(Arc::new(jito_client));
-        }
-
-        if cluster.clone().use_zeroslot {
-            let zeroslot_client = ZeroSlotClient::new(
-                cluster.clone().rpc_url, 
-                cluster.clone().zeroslot_url,
-                cluster.clone().zeroslot_auth_token
-            );
-
-            swqos_clients.push(Arc::new(zeroslot_client));
-        }
-
-        if cluster.clone().use_nozomi {
-            let nozomi_client = NozomiClient::new(
-                cluster.clone().rpc_url,
-                cluster.clone().nozomi_url,
-                cluster.clone().nozomi_auth_token
-            );
-
-            swqos_clients.push(Arc::new(nozomi_client));
-        }
-
-        if cluster.clone().use_nextblock {
-            let nextblock_client = NextBlockClient::new(
-                cluster.clone().rpc_url,
-                cluster.clone().nextblock_url,
-                cluster.clone().nextblock_auth_token
-            );
-
-            swqos_clients.push(Arc::new(nextblock_client));
-        }
-
-        if cluster.clone().use_rpc {
-            let rpc_client = SolRpcClient::new(rpc.clone());
-            swqos_clients.push(Arc::new(rpc_client));
+        for swqos in swqos_configs {
+            match swqos.swqos_type {
+                SwqosType::Jito => {
+                    let jito_client = JitoClient::new(
+                        rpc_url.clone(),
+                        swqos.endpoint,
+                    ).await.expect("Failed to create Jito client");
+                    swqos_clients.push(Arc::new(jito_client));
+                }
+                SwqosType::NextBlock => {
+                    let nextblock_client = NextBlockClient::new(
+                        rpc_url.clone(),
+                        swqos.endpoint,
+                        swqos.auth_token
+                    );
+                    swqos_clients.push(Arc::new(nextblock_client));
+                }
+                SwqosType::ZeroSlot => {
+                    let zeroslot_client = ZeroSlotClient::new(
+                        rpc_url.clone(),
+                        swqos.endpoint,
+                        swqos.auth_token
+                    );
+                    swqos_clients.push(Arc::new(zeroslot_client));
+                }
+                SwqosType::Temporal => {  
+                    let temporal_client = TemporalClient::new(
+                        rpc_url.clone(),
+                        swqos.endpoint,
+                        swqos.auth_token
+                    );
+                    swqos_clients.push(Arc::new(temporal_client));
+                }
+                SwqosType::Rpc => { 
+                    let rpc_client = SolRpcClient::new(rpc.clone());
+                    swqos_clients.push(Arc::new(rpc_client));
+                }
+                _ => {
+                    println!("Unsupported swqos type: {:?}", swqos.swqos_type);
+                }
+            }
         }
 
         let instance = Self {
             payer,
             rpc,
             swqos_clients,
-            priority_fee: cluster.clone().priority_fee,
-            cluster: cluster.clone(),
+            priority_fee,
+            trade_config: trade_config.clone(),
         };
 
         let mut current = INSTANCE.lock().unwrap();
@@ -168,7 +175,7 @@ impl SolanaTrade {
             buy_sol_cost,
             slippage_basis_points,
             self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
+            self.trade_config.lookup_table_key,
             recent_blockhash,
             bonding_curve,
             SNIPER_BUY.to_string(),
@@ -194,7 +201,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 bonding_curve,
                 COPY_BUY.to_string(),
@@ -208,7 +215,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -249,7 +256,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.bonding_curve.clone(),
                 COPY_BUY.to_string(),
@@ -266,7 +273,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -304,7 +311,7 @@ impl SolanaTrade {
             buy_sol_cost,
             slippage_basis_points,
             priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
+            self.trade_config.lookup_table_key,
             recent_blockhash,
             bonding_curve,
             SNIPER_BUY.to_string(),
@@ -338,7 +345,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.bonding_curve.clone(),
                 COPY_BUY.to_string(),
@@ -356,7 +363,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -395,7 +402,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 bonding_curve,
                 COPY_BUY.to_string(),
@@ -410,7 +417,7 @@ impl SolanaTrade {
                 buy_sol_cost,
                 slippage_basis_points,
                 priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -439,7 +446,7 @@ impl SolanaTrade {
             creator,
             amount_token,
             self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
+            self.trade_config.lookup_table_key,
             recent_blockhash,
         ).await
     }
@@ -463,7 +470,7 @@ impl SolanaTrade {
                 percent,
                 amount_token,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
@@ -475,7 +482,7 @@ impl SolanaTrade {
                 percent,
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -505,7 +512,7 @@ impl SolanaTrade {
                 creator,
                 amount,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
@@ -517,7 +524,7 @@ impl SolanaTrade {
                 amount,
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -549,7 +556,7 @@ impl SolanaTrade {
                 percent,
                 amount_token,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
@@ -562,7 +569,7 @@ impl SolanaTrade {
                 percent,
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -592,7 +599,7 @@ impl SolanaTrade {
                 creator,
                 amount,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if trade_platform == PUMPFUN_SWAP {
@@ -605,7 +612,7 @@ impl SolanaTrade {
                 amount,
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 None,
                 None,
@@ -634,7 +641,7 @@ impl SolanaTrade {
             creator,
             amount_token,
             self.priority_fee.clone(),
-            self.cluster.clone().lookup_table_key,
+            self.trade_config.lookup_table_key,
             recent_blockhash,
         ).await
     }
@@ -664,7 +671,7 @@ impl SolanaTrade {
                 percent,
                 amount_token.unwrap_or(0),
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if let Some(protocol_params) = sell_params
@@ -679,7 +686,7 @@ impl SolanaTrade {
                 percent,
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -712,7 +719,7 @@ impl SolanaTrade {
                 creator,
                 amount.unwrap_or(0),
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if let Some(protocol_params) = sell_params
@@ -727,7 +734,7 @@ impl SolanaTrade {
                 amount.unwrap_or(0),
                 None,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -762,7 +769,7 @@ impl SolanaTrade {
                 percent,
                 amount_token.unwrap_or(0),
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if let Some(protocol_params) = sell_params
@@ -778,7 +785,7 @@ impl SolanaTrade {
                 percent,
                 sell_params.slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -811,7 +818,7 @@ impl SolanaTrade {
                 creator,
                 amount.unwrap_or(0),
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
             ).await
         } else if let Some(protocol_params) = sell_params
@@ -827,7 +834,7 @@ impl SolanaTrade {
                 amount.unwrap_or(0),
                 sell_params.slippage_basis_points,
                 self.priority_fee.clone(),
-                self.cluster.clone().lookup_table_key,
+                self.trade_config.lookup_table_key,
                 recent_blockhash,
                 protocol_params.pool.clone(),
                 protocol_params.pool_base_token_account.clone(),
@@ -871,7 +878,7 @@ impl SolanaTrade {
 
     #[inline]
     pub async fn get_token_balance(&self, payer: &Pubkey, mint: &Pubkey) -> Result<u64, anyhow::Error> {
-        println!("get_token_balance payer: {}, mint: {}, cluster: {}", payer, mint, self.cluster.rpc_url);
+        println!("get_token_balance payer: {}, mint: {}, rpc_url: {}", payer, mint, self.trade_config.rpc_url);
         pumpfun::common::get_token_balance(&self.rpc, payer, mint).await
     }
 
