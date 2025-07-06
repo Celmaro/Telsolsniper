@@ -95,7 +95,8 @@ impl SolanaTrade {
                     let jito_client = JitoClient::new(
                         rpc_url.clone(),
                         swqos.endpoint,
-                    ).await.expect("Failed to create Jito client");
+                        swqos.auth_token
+                    );
                     swqos_clients.push(Arc::new(jito_client));
                 }
                 SwqosType::NextBlock => {

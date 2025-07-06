@@ -3,7 +3,6 @@ use std::{sync::Arc, time::Instant};
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_sdk::{
     commitment_config::CommitmentLevel,
-    signature::Signature,
     transaction::VersionedTransaction,
 };
 use solana_transaction_status::UiTransactionEncoding;
@@ -19,7 +18,7 @@ pub struct SolRpcClient {
 
 #[async_trait::async_trait]
 impl SwqosClientTrait for SolRpcClient {
-    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
+    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let signature = self.rpc_client.send_transaction_with_config(transaction, RpcSendTransactionConfig{
             skip_preflight: true,
             preflight_commitment: Some(CommitmentLevel::Processed),
@@ -36,16 +35,14 @@ impl SwqosClientTrait for SolRpcClient {
         println!(" signature: {:?}", signature);
         println!(" rpc{}确认: {:?}", trade_type, start_time.elapsed());
 
-        Ok(signature)
+        Ok(())
     }
 
-    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
-        let mut signatures = Vec::new();
+    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         for transaction in transactions {
-            let signature = self.send_transaction(trade_type, transaction).await?;
-            signatures.push(signature);
+            self.send_transaction(trade_type, transaction).await?;
         }
-        Ok(signatures)
+        Ok(())
     }
 
     fn get_tip_account(&self) -> Result<String> {

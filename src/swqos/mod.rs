@@ -7,7 +7,6 @@ pub mod zeroslot;
 pub mod temporal;
 pub mod define;
 
-use solana_sdk::signature::Signature;
 use solana_sdk::transaction::VersionedTransaction;
 use tokio::sync::RwLock;
 
@@ -52,8 +51,8 @@ pub type SwqosClient = dyn SwqosClientTrait + Send + Sync + 'static;
 
 #[async_trait::async_trait]
 pub trait SwqosClientTrait {
-    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature>;
-    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>>;
+    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()>;
+    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()>;
     fn get_tip_account(&self) -> Result<String>;
     fn get_swqos_type(&self) -> SwqosType;
 }

@@ -1,20 +1,11 @@
-use crate::protos::nextblock_grpc;
-use crate::protos::nextblock_grpc::api_client::ApiClient;
-use crate::swqos::common::{poll_transaction_confirmation, serialize_smart_transaction_and_encode};
+use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
 use rand::seq::IndexedRandom;
-use rustls::crypto::ring::default_provider;
-use rustls::crypto::CryptoProvider;
-use tonic::transport::Channel;
-use yellowstone_grpc_client::Interceptor;
-use std::str::FromStr;
+use reqwest::Client;
+use serde_json::json;
 use std::{sync::Arc, time::Instant};
 
-use solana_sdk::{signature::Signature};
-
-use tonic::{service::interceptor::InterceptedService, transport::Uri, Status};         
 use std::time::Duration;
 use solana_transaction_status::UiTransactionEncoding;
-use tonic::transport::ClientTlsConfig;
 
 use anyhow::Result;
 use solana_sdk::transaction::VersionedTransaction;
@@ -23,42 +14,21 @@ use crate::swqos::SwqosClientTrait;
 
 use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::NEXTBLOCK_TIP_ACCOUNTS};
 
-
-#[derive(Clone)]
-pub struct MyInterceptor {
-    auth_token: String,
-}
-
-impl MyInterceptor {
-    pub fn new(auth_token: String) -> Self {
-        Self { auth_token }
-    }
-}
-
-impl Interceptor for MyInterceptor {
-    fn call(&mut self, mut request: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
-        request.metadata_mut().insert(
-            "authorization", 
-            tonic::metadata::MetadataValue::from_str(&self.auth_token)
-                .map_err(|_| Status::invalid_argument("Invalid auth token"))?
-        );
-        Ok(request)
-    }
-}
-
 #[derive(Clone)]
 pub struct NextBlockClient {
+    pub endpoint: String,
+    pub auth_token: String,
     pub rpc_client: Arc<SolanaRpcClient>,
-    pub client: ApiClient<InterceptedService<Channel, MyInterceptor>>,
+    pub http_client: Client,
 }
 
 #[async_trait::async_trait]
 impl SwqosClientTrait for NextBlockClient {
-    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
+    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         self.send_transaction(trade_type, transaction).await
     }
 
-    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
+    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         self.send_transactions(trade_type, transactions).await
     }
 
@@ -74,93 +44,63 @@ impl SwqosClientTrait for NextBlockClient {
 
 impl NextBlockClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
-        if CryptoProvider::get_default().is_none() {
-            let _ = default_provider()
-                .install_default()
-                .map_err(|e| anyhow::anyhow!("Failed to install crypto provider: {:?}", e));
-        }
-
-        let endpoint = endpoint.parse::<Uri>().unwrap();
-        let tls = ClientTlsConfig::new().with_native_roots();
-        let channel = Channel::builder(endpoint)
-            .tls_config(tls).expect("Failed to create TLS config")
-            .tcp_keepalive(Some(Duration::from_secs(60)))
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .keep_alive_while_idle(true)
-            .timeout(Duration::from_secs(30))
-            .connect_timeout(Duration::from_secs(10))
-            .connect_lazy();
-
-        let client = ApiClient::with_interceptor(channel, MyInterceptor::new(auth_token));
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        Self { rpc_client: Arc::new(rpc_client), client }
+        let http_client = Client::builder()
+            .pool_idle_timeout(Duration::from_secs(60))
+            .pool_max_idle_per_host(64)
+            .tcp_keepalive(Some(Duration::from_secs(1200)))
+            .http2_keep_alive_interval(Duration::from_secs(15))
+            .timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
     }
 
-    pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
+    pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
-        let (content, signature) = serialize_smart_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        
-        self.client.clone().post_submit_v2(nextblock_grpc::PostSubmitRequest {
-            transaction: Some(nextblock_grpc::TransactionMessage {
-                content,
-                is_cleanup: false,
-            }),
-            skip_pre_flight: true,
-            front_running_protection: Some(true),
-            experimental_front_running_protection: Some(true),
-            snipe_transaction: Some(true),
-        }).await?;
+        let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
+        println!(" 交易编码base64: {:?}", start_time.elapsed());
 
-        println!(" nextblock{}提交: {:?}", trade_type, start_time.elapsed());
+        let request_body = serde_json::to_string(&json!({
+            "transaction": {
+                "content": content
+            },
+            "frontRunningProtection": false
+        }))?;
+
+        let response_text = self.http_client.post(&self.endpoint)
+            .body(request_body)
+            .header("Authorization", &self.auth_token)
+            .header("Content-Type", "application/json")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if response_json.get("result").is_some() {
+                println!(" nextblock{}提交: {:?}", trade_type, start_time.elapsed());
+            } else if let Some(_error) = response_json.get("error") {
+                eprintln!(" nextblock{}提交失败: {:?}", trade_type, _error);
+            }
+        }
 
         let start_time: Instant = Instant::now();
-        let timeout: Duration = Duration::from_secs(10);
-        while Instant::now().duration_since(start_time) < timeout {
-            match poll_transaction_confirmation(&self.rpc_client, signature).await {
-                Ok(_) => break,
-                Err(_) => continue,
-            }
+        match poll_transaction_confirmation(&self.rpc_client, signature).await {
+            Ok(_) => (),
+            Err(_) => (),
         }
 
         println!(" nextblock{}确认: {:?}", trade_type, start_time.elapsed());
 
-        Ok(signature)
+        Ok(())
     }
 
-    pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
-        let mut entries = Vec::new();
-        let encoding = UiTransactionEncoding::Base64;
-        
-        let mut signatures = Vec::new();
+    pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         for transaction in transactions {
-            let (content, signature) = serialize_smart_transaction_and_encode(transaction, encoding).await?;
-            entries.push(nextblock_grpc::PostSubmitRequestEntry {
-                transaction: Some(nextblock_grpc::TransactionMessage {
-                    content,
-                    is_cleanup: false,
-                }),
-                skip_pre_flight: true,
-            });
-            signatures.push(signature);
+            self.send_transaction(trade_type, transaction).await?;
         }
-
-        self.client.clone().post_submit_batch_v2(nextblock_grpc::PostSubmitBatchRequest {
-            entries,
-            submit_strategy: nextblock_grpc::SubmitStrategy::PSubmitAll as i32,
-            use_bundle: Some(true),
-            front_running_protection: Some(true),
-        }).await?;
-
-        let start_time: Instant = Instant::now();
-        for signature in signatures.clone() {
-            match poll_transaction_confirmation(&self.rpc_client, signature).await {
-                Ok(_) => continue,
-                Err(_) => continue,
-            }
-        }
-
-        println!(" nextblock{}确认: {:?}", trade_type, start_time.elapsed());
-        
-        Ok(signatures)
+        Ok(())
     }
 }

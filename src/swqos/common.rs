@@ -10,8 +10,20 @@ use tokio::time::sleep;
 use crate::common::types::SolanaRpcClient;
 use anyhow::Result;
 use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::{self, STANDARD};
 use reqwest::Client;
+use solana_sdk::transaction::VersionedTransaction;
+
+pub trait FormatBase64VersionedTransaction {
+    fn to_base64_string(&self) -> String;
+}
+
+impl FormatBase64VersionedTransaction for VersionedTransaction {
+    fn to_base64_string(&self) -> String {
+        let tx_bytes = bincode::serialize(self).unwrap();
+        general_purpose::STANDARD.encode(tx_bytes)
+    }
+}
 
 pub async fn poll_transaction_confirmation(rpc: &SolanaRpcClient, txt_sig: Signature) -> Result<Signature> {
     let timeout: Duration = Duration::from_secs(5);

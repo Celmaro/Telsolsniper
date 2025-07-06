@@ -26,11 +26,11 @@ pub struct ZeroSlotClient {
 
 #[async_trait::async_trait]
 impl SwqosClientTrait for ZeroSlotClient {
-    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
+    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         self.send_transaction(trade_type, transaction).await
     }
 
-    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
+    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         self.send_transactions(trade_type, transactions).await
     }
 
@@ -59,7 +59,7 @@ impl ZeroSlotClient {
         Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
     }
 
-    pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
+    pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
         println!(" 交易编码base64: {:?}", start_time.elapsed());
@@ -105,15 +105,13 @@ impl ZeroSlotClient {
 
         println!(" 0slot{}确认: {:?}", trade_type, start_time.elapsed());
 
-        Ok(signature)
+        Ok(())
     }
 
-    pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
-        let mut signatures = Vec::new();
+    pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         for transaction in transactions {
-            let signature = self.send_transaction(trade_type, transaction).await?;
-            signatures.push(signature);
+            self.send_transaction(trade_type, transaction).await?;
         }
-        Ok(signatures)
+        Ok(())
     }
 }

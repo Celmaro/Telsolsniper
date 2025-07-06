@@ -1,13 +1,15 @@
 
-use tonic::transport::Channel;
-use tokio::sync::Mutex;
+use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode, FormatBase64VersionedTransaction};
+use rand::seq::IndexedRandom;
+use reqwest::Client;
+use serde_json::json;
+use std::{sync::Arc, time::Instant};
 
-use rand::{rng, seq::IteratorRandom};
-use anyhow::{anyhow, Result};
-use std::sync::Arc;
-use solana_sdk::{transaction::VersionedTransaction, signature::Signature};
-use crate::protos::searcher::searcher_service_client::SearcherServiceClient;
-use crate::protos::searcher_client::{self, get_searcher_client_no_auth, send_bundle_with_confirmation};
+use std::time::Duration;
+use solana_transaction_status::UiTransactionEncoding;
+
+use anyhow::Result;
+use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
@@ -15,25 +17,27 @@ use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::JITO_TIP_ACCO
 
 
 pub struct JitoClient {
+    pub endpoint: String,
+    pub auth_token: String,
     pub rpc_client: Arc<SolanaRpcClient>,
-    pub searcher_client: Arc<Mutex<SearcherServiceClient<Channel>>>,
+    pub http_client: Client,
 }
 
 #[async_trait::async_trait]
 impl SwqosClientTrait for JitoClient {
-    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<Signature> {
-        self.send_bundle_with_confirmation(trade_type, &vec![transaction.clone()]).await?.first().cloned().ok_or(anyhow!("Failed to send transaction"))
+    async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
+        self.send_transaction(trade_type, transaction).await
     }
 
-    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<Vec<Signature>> {
-        self.send_bundle_with_confirmation(trade_type, transactions).await
+    async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
+        self.send_transactions(trade_type, transactions).await
     }
 
     fn get_tip_account(&self) -> Result<String> {
-        if let Some(acc) = JITO_TIP_ACCOUNTS.iter().choose(&mut rng()) {
+        if let Some(acc) = JITO_TIP_ACCOUNTS.choose(&mut rand::rng()) {
             Ok(acc.to_string())
         } else {
-            Err(anyhow!("no valid tip accounts found"))
+            Err(anyhow::anyhow!("no valid tip accounts found"))
         }
     }
 
@@ -43,24 +47,95 @@ impl SwqosClientTrait for JitoClient {
 }
 
 impl JitoClient {
-    pub async fn new(rpc_url: String, block_engine_url: String) -> Result<Self> {
+    pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let searcher_client = get_searcher_client_no_auth(block_engine_url.as_str()).await?;
-        Ok(Self { rpc_client: Arc::new(rpc_client), searcher_client: Arc::new(Mutex::new(searcher_client)) })
-    }
-    
-    pub async fn send_bundle_with_confirmation(
-        &self,
-        trade_type: TradeType,
-        transactions: &Vec<VersionedTransaction>,
-    ) -> Result<Vec<Signature>> {
-        send_bundle_with_confirmation(self.rpc_client.clone(), trade_type, &transactions, self.searcher_client.clone()).await
+        let http_client = Client::builder()
+            .pool_idle_timeout(Duration::from_secs(60))
+            .pool_max_idle_per_host(64)
+            .tcp_keepalive(Some(Duration::from_secs(1200)))
+            .http2_keep_alive_interval(Duration::from_secs(15))
+            .timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
     }
 
-    pub async fn send_bundle_no_wait(
-        &self,
-        transactions: &Vec<VersionedTransaction>,
-    ) -> Result<Vec<Signature>> {
-        searcher_client::send_bundle_no_wait(&transactions, self.searcher_client.clone()).await
+    pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
+        let start_time = Instant::now();
+        let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
+        println!(" 交易编码base64: {:?}", start_time.elapsed());
+
+        let request_body = serde_json::to_string(&json!({
+            "id": 1,
+            "jsonrpc": "2.0", 
+            "method": "sendTransaction",
+            "params": [
+                content,
+                {
+                    "encoding": "base64"
+                }
+            ]
+        }))?;
+
+        let endpoint = format!("{}/api/v1/transactions", self.endpoint);
+        let response_text = self.http_client.post(&endpoint)
+            .body(request_body)
+            .header("Content-Type", "application/json")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if response_json.get("result").is_some() {
+                println!(" jito{}提交: {:?}", trade_type, start_time.elapsed());
+            } else if let Some(_error) = response_json.get("error") {
+                eprintln!(" jito{}提交失败: {:?}", trade_type, _error);
+            }
+        }
+
+        let start_time: Instant = Instant::now();
+        match poll_transaction_confirmation(&self.rpc_client, signature).await {
+            Ok(_) => (),
+            Err(_) => (),
+        }
+
+        println!(" jito{}确认: {:?}", trade_type, start_time.elapsed());
+
+        Ok(())
+    }
+
+    pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
+        let start_time = Instant::now();
+        let txs_base64 = transactions.iter().map(|tx| tx.to_base64_string()).collect::<Vec<String>>();
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "sendBundle",
+            "params": [
+                txs_base64,
+                { "encoding": "base64" }
+            ],
+            "id": 1,
+        });
+
+        let endpoint = format!("{}/api/v1/bundles", self.endpoint);
+        let response_text = self.http_client.post(&endpoint)
+            .body(body.to_string())
+            .header("Content-Type", "application/json")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if response_json.get("result").is_some() {
+                println!(" jito{}提交: {:?}", trade_type, start_time.elapsed());
+            } else if let Some(_error) = response_json.get("error") {
+                eprintln!(" jito{}提交失败: {:?}", trade_type, _error);
+            }
+        }
+
+        Ok(())
     }
 }
