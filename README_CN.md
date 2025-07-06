@@ -301,28 +301,28 @@ use solana_sdk::{pubkey::Pubkey, hash::Hash, signature::Keypair};
 use solana_client::rpc_client::RpcClient;
 use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 
-let payer = Keypair::new();
-// 配置集群
-let cluster = Cluster {
-    rpc_url: "https://mainnet.helius-rpc.com/?api-key=您的API密钥".to_string(),
+// 单区域配置多个swqos，可同时发送交易
+let swqos_configs = vec![
+    SwqosConfig::new(None, None, SwqosType::Jito, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+];
+
+let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+
+// 定义sdk配置参数
+let trade_config = TradeConfig {
+    rpc_url: rpc_url.clone(),
     commitment: CommitmentConfig::confirmed(),
-    priority_fee: PriorityFee::default(),
-    use_jito: false,
-    use_zeroslot: false,
-    use_nozomi: false,
-    use_nextblock: false,
-    block_engine_url: "".to_string(),
-    zeroslot_url: "".to_string(),
-    zeroslot_auth_token: "".to_string(),
-    nozomi_url: "".to_string(),
-    nozomi_auth_token: "".to_string(),
-    nextblock_url: "".to_string(),
-    nextblock_auth_token: "".to_string(),
+    priority_fee,
+    swqos_configs,
     lookup_table_key: None,
-    use_rpc: true,
 };
 
-let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+// 创建SolanaTrade实例
+let payer = Keypair::from_base58_string("your_private_key");
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
+
 let creator = Pubkey::from_str("11111111111111111111111111111111")?; // 开发者账户
 let buy_sol_cost = 500_000; // 0.0005 SOL
 let slippage_basis_points = Some(100);
