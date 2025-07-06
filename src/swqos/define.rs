@@ -45,8 +45,8 @@ pub const SWQOS_ENDPOINTS_TEMPORAL: [&str; 8] = [
     "http://fra2.nozomi.temporal.xyz",
     "http://ams1.nozomi.temporal.xyz",
     "http://ams1.nozomi.temporal.xyz",
-    "http://ams1.nozomi.temporal.xyz",
-    "http://ams1.nozomi.temporal.xyz",
-    "http://ams1.nozomi.temporal.xyz",
+    "http://tyo1.nozomi.temporal.xyz",
+    "http://sgp1.nozomi.temporal.xyz",
+    "http://pit1.nozomi.temporal.xyz",
     "http://fra2.nozomi.temporal.xyz",
 ];
