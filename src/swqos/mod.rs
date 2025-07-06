@@ -1,18 +1,16 @@
-
 pub mod common;
 pub mod solana_rpc;
 pub mod jito;
 pub mod nextblock;
 pub mod zeroslot;
 pub mod temporal;
-pub mod define;
 
 use solana_sdk::transaction::VersionedTransaction;
 use tokio::sync::RwLock;
 
 use anyhow::Result;
 
-use crate::swqos::define::{SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT};
+use crate::swqos::common::{SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT};
 
 lazy_static::lazy_static! {
     static ref TIP_ACCOUNT_CACHE: RwLock<Vec<String>> = RwLock::new(Vec::new());
