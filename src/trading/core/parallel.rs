@@ -6,7 +6,7 @@ use tokio::task::JoinHandle;
 
 use crate::{
     common::PriorityFee,
-    swqos::{ClientType, FeeClient, TradeType},
+    swqos::{ClientType, SwqosClient, TradeType},
     trading::common::{
         build_rpc_transaction, build_sell_tip_transaction_with_priority_fee,
         build_sell_transaction, build_tip_transaction_with_priority_fee,
@@ -15,7 +15,7 @@ use crate::{
 
 /// 并行执行交易的通用函数
 pub async fn parallel_execute_with_tips(
-    fee_clients: Vec<Arc<FeeClient>>,
+    swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     instructions: Vec<Instruction>,
     priority_fee: PriorityFee,
@@ -27,8 +27,8 @@ pub async fn parallel_execute_with_tips(
     let cores = core_affinity::get_core_ids().unwrap();
     let mut handles: Vec<JoinHandle<Result<()>>> = vec![];
 
-    for i in 0..fee_clients.len() {
-        let fee_client = fee_clients[i].clone();
+    for i in 0..swqos_clients.len() {
+        let swqos_client = swqos_clients[i].clone();
         let payer = payer.clone();
         let instructions = instructions.clone();
         let mut priority_fee = priority_fee.clone();
@@ -37,7 +37,7 @@ pub async fn parallel_execute_with_tips(
         let handle = tokio::spawn(async move {
             core_affinity::set_for_current(core_id);
             let transaction = if matches!(trade_type, TradeType::Sell)
-                && fee_client.get_client_type() == ClientType::Rpc
+                && swqos_client.get_client_type() == ClientType::Rpc
             {
                 build_sell_transaction(
                     payer,
@@ -48,9 +48,9 @@ pub async fn parallel_execute_with_tips(
                 )
                 .await?
             } else if matches!(trade_type, TradeType::Sell)
-                && fee_client.get_client_type() != ClientType::Rpc
+                && swqos_client.get_client_type() != ClientType::Rpc
             {
-                let tip_account = fee_client.get_tip_account()?;
+                let tip_account = swqos_client.get_tip_account()?;
                 let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
                 build_sell_tip_transaction_with_priority_fee(
                     payer,
@@ -61,7 +61,7 @@ pub async fn parallel_execute_with_tips(
                     recent_blockhash,
                 )
                 .await?
-            } else if fee_client.get_client_type() == ClientType::Rpc {
+            } else if swqos_client.get_client_type() == ClientType::Rpc {
                 build_rpc_transaction(
                     payer,
                     &priority_fee,
@@ -72,7 +72,7 @@ pub async fn parallel_execute_with_tips(
                 )
                 .await?
             } else {
-                let tip_account = fee_client.get_tip_account()?;
+                let tip_account = swqos_client.get_tip_account()?;
                 let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
                 priority_fee.buy_tip_fee = priority_fee.buy_tip_fees[i];
 
@@ -88,7 +88,7 @@ pub async fn parallel_execute_with_tips(
                 .await?
             };
 
-            fee_client
+            swqos_client
                 .send_transaction(trade_type, &transaction)
                 .await?;
             Ok::<(), anyhow::Error>(())

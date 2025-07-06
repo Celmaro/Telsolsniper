@@ -25,6 +25,7 @@ solana-security-txt = "1.1.1"
 solana-entry = "2.1.16"
 solana-rpc-client-nonce-utils = "2.1.16"
 solana-perf = "2.1.16"
+solana-metrics = "2.1.16"
 
 spl-token = "8.0.0"
 spl-token-2022 = { version = "8.0.0", features = ["no-entrypoint"] }

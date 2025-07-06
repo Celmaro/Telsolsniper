@@ -9,11 +9,12 @@ pub mod swqos;
 pub mod pumpfun;
 pub mod pumpswap;
 pub mod trading;
+pub mod protos;
 
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use swqos::{FeeClient, JitoClient, NextBlockClient, NozomiClient, SolRpcClient, ZeroSlotClient};
+use swqos::SwqosClient;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use solana_hash::Hash;
 use solana_sdk::{
@@ -30,6 +31,11 @@ use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
 use accounts::BondingCurveAccount;
 
+use crate::swqos::jito::JitoClient;
+use crate::swqos::nextblock::NextBlockClient;
+use crate::swqos::nozomi::NozomiClient;
+use crate::swqos::solana_rpc::SolRpcClient;
+use crate::swqos::zeroslot::ZeroSlotClient;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpFunSellParams;
 use crate::trading::core::params::PumpSwapParams;
@@ -40,7 +46,7 @@ use crate::trading::SellWithTipParams;
 pub struct SolanaTrade {
     pub payer: Arc<Keypair>,
     pub rpc: Arc<SolanaRpcClient>,
-    pub fee_clients: Vec<Arc<FeeClient>>,
+    pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub priority_fee: PriorityFee,
     pub cluster: Cluster,
 }
@@ -52,7 +58,7 @@ impl Clone for SolanaTrade {
         Self {
             payer: self.payer.clone(),
             rpc: self.rpc.clone(),
-            fee_clients: self.fee_clients.clone(),
+            swqos_clients: self.swqos_clients.clone(),
             priority_fee: self.priority_fee.clone(),
             cluster: self.cluster.clone(),
         }
@@ -76,14 +82,14 @@ impl SolanaTrade {
             cluster.clone().commitment
         );   
         let rpc = Arc::new(rpc);
-        let mut fee_clients: Vec<Arc<FeeClient>> = vec![];
+        let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
         if cluster.clone().use_jito {
             let jito_client = JitoClient::new(
                 cluster.clone().rpc_url, 
                 cluster.clone().block_engine_url
             ).await.expect("Failed to create Jito client");
 
-            fee_clients.push(Arc::new(jito_client));
+            swqos_clients.push(Arc::new(jito_client));
         }
 
         if cluster.clone().use_zeroslot {
@@ -93,7 +99,7 @@ impl SolanaTrade {
                 cluster.clone().zeroslot_auth_token
             );
 
-            fee_clients.push(Arc::new(zeroslot_client));
+            swqos_clients.push(Arc::new(zeroslot_client));
         }
 
         if cluster.clone().use_nozomi {
@@ -103,7 +109,7 @@ impl SolanaTrade {
                 cluster.clone().nozomi_auth_token
             );
 
-            fee_clients.push(Arc::new(nozomi_client));
+            swqos_clients.push(Arc::new(nozomi_client));
         }
 
         if cluster.clone().use_nextblock {
@@ -113,18 +119,18 @@ impl SolanaTrade {
                 cluster.clone().nextblock_auth_token
             );
 
-            fee_clients.push(Arc::new(nextblock_client));
+            swqos_clients.push(Arc::new(nextblock_client));
         }
 
         if cluster.clone().use_rpc {
             let rpc_client = SolRpcClient::new(rpc.clone());
-            fee_clients.push(Arc::new(rpc_client));
+            swqos_clients.push(Arc::new(rpc_client));
         }
 
         let instance = Self {
             payer,
             rpc,
-            fee_clients,
+            swqos_clients,
             priority_fee: cluster.clone().priority_fee,
             cluster: cluster.clone(),
         };
@@ -192,7 +198,7 @@ impl SolanaTrade {
     ) -> Result<(), anyhow::Error> { 
         pumpfun::create::create_and_buy_with_tip(
             self.rpc.clone(),
-            self.fee_clients.clone(),
+            self.swqos_clients.clone(),
             payer,
             mint,
             ipfs,
@@ -350,7 +356,7 @@ impl SolanaTrade {
             priority_fee.buy_tip_fees = vec![custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap(),custom_buy_tip_fee.unwrap()];
         }
         pumpfun::buy::buy_with_tip(
-            self.fee_clients.clone(),
+            self.swqos_clients.clone(),
             self.payer.clone(),
             mint,
             creator,
@@ -384,7 +390,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunParams>() {
             pumpfun::buy::buy_with_tip(
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -402,7 +408,7 @@ impl SolanaTrade {
             .downcast_ref::<PumpSwapParams>() {
             pumpswap::buy::buy_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -441,7 +447,7 @@ impl SolanaTrade {
         }
         if trade_platform == PUMPFUN {
             pumpfun::buy::buy_with_tip(
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -456,7 +462,7 @@ impl SolanaTrade {
         } else if trade_platform == PUMPFUN_SWAP {
             pumpswap::buy::buy_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -595,7 +601,7 @@ impl SolanaTrade {
         if trade_platform == PUMPFUN {
             pumpfun::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -608,7 +614,7 @@ impl SolanaTrade {
         } else if trade_platform == PUMPFUN_SWAP {
             pumpswap::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -639,7 +645,7 @@ impl SolanaTrade {
         if trade_platform == PUMPFUN {
             pumpfun::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -651,7 +657,7 @@ impl SolanaTrade {
         } else if trade_platform == PUMPFUN_SWAP {
             pumpswap::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -681,7 +687,7 @@ impl SolanaTrade {
     ) -> Result<(), anyhow::Error> {
         pumpfun::sell::sell_with_tip(
             self.rpc.clone(),
-            self.fee_clients.clone(),
+            self.swqos_clients.clone(),
             self.payer.clone(),
             mint,
             creator,
@@ -808,7 +814,7 @@ impl SolanaTrade {
             .downcast_ref::<PumpFunSellParams>() {
             pumpfun::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -824,7 +830,7 @@ impl SolanaTrade {
             .downcast_ref::<PumpSwapParams>() {
             pumpswap::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -858,7 +864,7 @@ impl SolanaTrade {
             .downcast_ref::<PumpFunSellParams>() {
             pumpfun::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,
@@ -873,7 +879,7 @@ impl SolanaTrade {
             .downcast_ref::<PumpSwapParams>() {
             pumpswap::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
-                self.fee_clients.clone(),
+                self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
                 creator,

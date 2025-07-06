@@ -107,7 +107,7 @@ impl TradeExecutor for GenericTradeExecutor {
 
         // 并行执行交易
         parallel_execute_with_tips(
-            params.fee_clients,
+            params.swqos_clients,
             params.payer,
             instructions,
             params.priority_fee,
@@ -180,7 +180,7 @@ impl TradeExecutor for GenericTradeExecutor {
 
         // 并行执行交易
         parallel_execute_with_tips(
-            params.fee_clients,
+            params.swqos_clients,
             params.payer,
             instructions,
             params.priority_fee,

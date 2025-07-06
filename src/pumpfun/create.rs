@@ -16,7 +16,7 @@ use spl_associated_token_account::instruction::create_associated_token_account;
 
 use crate::{
     common::{PriorityFee, SolanaRpcClient}, constants, instruction, 
-    ipfs::TokenMetadataIPFS,  swqos::{FeeClient, TradeType},
+    ipfs::TokenMetadataIPFS,  swqos::{SwqosClient, TradeType},
 };
 
 use crate::pumpfun::common::{
@@ -86,7 +86,7 @@ pub async fn create_and_buy(
 
 pub async fn create_and_buy_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    fee_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Keypair,
     ipfs: TokenMetadataIPFS,

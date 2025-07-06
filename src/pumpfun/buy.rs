@@ -1,7 +1,7 @@
 use crate::accounts::BondingCurveAccount;
 use crate::{
     common::{PriorityFee, SolanaRpcClient},
-    swqos::FeeClient,
+    swqos::SwqosClient,
     trading::{core::params::PumpFunParams, factory::Protocol, BuyParams, TradeFactory},
 };
 use solana_hash::Hash;
@@ -49,7 +49,7 @@ pub async fn buy(
 }
 
 pub async fn buy_with_tip(
-    fee_clients: Vec<Arc<FeeClient>>,
+    swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -82,7 +82,7 @@ pub async fn buy_with_tip(
         data_size_limit: MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
         protocol_params,
     };
-    let buy_with_tip_params = buy_params.with_tip(fee_clients);
+    let buy_with_tip_params = buy_params.with_tip(swqos_clients);
     // 执行买入
     executor.buy_with_tip(buy_with_tip_params).await?;
     Ok(())

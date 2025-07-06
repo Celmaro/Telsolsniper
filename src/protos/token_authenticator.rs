@@ -3,7 +3,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use jito_protos::auth::{
+use crate::protos::auth::{
     auth_service_client::AuthServiceClient, GenerateAuthChallengeRequest,
     GenerateAuthTokensRequest, RefreshAccessTokenRequest, Role, Token,
 };

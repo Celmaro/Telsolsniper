@@ -11,7 +11,7 @@ use solana_sdk::{
     transaction::VersionedTransaction,
 };
 
-use crate::swqos::jito_grpc::{
+use crate::protos::{
     packet::{
         Meta as ProtoMeta, Packet as ProtoPacket, PacketBatch as ProtoPacketBatch,
         PacketFlags as ProtoPacketFlags,

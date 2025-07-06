@@ -18,8 +18,8 @@ use crate::common::pumpswap::logs_events::PumpSwapEvent;
 use crate::common::pumpfun::logs_filters::LogFilter;
 use crate::common::pumpswap::logs_filters::LogFilter as PumpswapLogFilter;
 use crate::common::raydium::logs_filters::LogFilter as RaydiumLogFilter;
-use crate::swqos::jito_grpc::shredstream::shredstream_proxy_client::ShredstreamProxyClient;
-use crate::swqos::jito_grpc::shredstream::SubscribeEntriesRequest;
+use crate::protos::shredstream::shredstream_proxy_client::ShredstreamProxyClient;
+use crate::protos::shredstream::SubscribeEntriesRequest;
 
 const CHANNEL_SIZE: usize = 1000;
 

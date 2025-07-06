@@ -9,3 +9,6 @@ pub mod shared;
 pub mod shredstream;
 pub mod trace_shred;
 pub mod convert;
+pub mod nextblock_grpc;
+pub mod searcher_client;
+pub mod token_authenticator;

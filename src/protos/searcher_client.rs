@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::swqos::jito_grpc::{
+use crate::protos::{
     bundle::{
         Bundle, BundleResult,
     },
@@ -25,8 +25,7 @@ use yellowstone_grpc_client::ClientTlsConfig;
 
 use crate::swqos::common::poll_transaction_confirmation;
 use crate::common::SolanaRpcClient;
-
-use super::TradeType;
+use crate::swqos::TradeType;
 
 #[derive(Debug, Error)]
 pub enum BlockEngineConnectionError {

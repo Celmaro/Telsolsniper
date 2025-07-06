@@ -3,12 +3,15 @@ use std::sync::Arc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 use serde::Deserialize;
-use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::FeeClient};
+use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::SwqosClient};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FeeType {
+pub enum SwqosType {
     Jito,
     NextBlock,
+    ZeroSlot,
+    Nozomi,
+    Rpc,
 }
 
 #[derive(Debug, Clone)]
@@ -104,11 +107,11 @@ pub struct MethodArgs {
     pub payer: Arc<Keypair>,
     pub rpc: Arc<RpcClient>,
     pub nonblocking_rpc: Arc<SolanaRpcClient>,
-    pub jito_client: Arc<FeeClient>,
+    pub jito_client: Arc<SwqosClient>,
 }
 
 impl MethodArgs {
-    pub fn new(payer: Arc<Keypair>, rpc: Arc<RpcClient>, nonblocking_rpc: Arc<SolanaRpcClient>, jito_client: Arc<FeeClient>) -> Self {
+    pub fn new(payer: Arc<Keypair>, rpc: Arc<RpcClient>, nonblocking_rpc: Arc<SolanaRpcClient>, jito_client: Arc<SwqosClient>) -> Self {
         Self { payer, rpc, nonblocking_rpc, jito_client }
     }
 }

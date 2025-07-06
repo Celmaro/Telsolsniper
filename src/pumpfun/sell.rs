@@ -3,7 +3,7 @@ use crate::trading::{
 };
 use crate::{
     common::{PriorityFee, SolanaRpcClient},
-    swqos::FeeClient,
+    swqos::SwqosClient,
 };
 use anyhow::anyhow;
 use solana_hash::Hash;
@@ -99,7 +99,7 @@ pub async fn sell_by_amount(
 
 pub async fn sell_by_percent_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    fee_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -129,7 +129,7 @@ pub async fn sell_by_percent_with_tip(
 
 pub async fn sell_by_amount_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    fee_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -158,7 +158,7 @@ pub async fn sell_by_amount_with_tip(
 /// Sell tokens using Jito
 pub async fn sell_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    fee_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,

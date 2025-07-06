@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::traits::ProtocolParams;
 use crate::common::{PriorityFee, SolanaRpcClient};
-use crate::swqos::FeeClient;
+use crate::swqos::SwqosClient;
 use crate::accounts::BondingCurveAccount;
 
 /// 通用买入参数
@@ -27,7 +27,7 @@ pub struct BuyParams {
 #[derive(Clone)]
 pub struct BuyWithTipParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
-    pub fee_clients: Vec<Arc<FeeClient>>,
+    pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
     pub creator: Pubkey,
@@ -59,7 +59,7 @@ pub struct SellParams {
 #[derive(Clone)]
 pub struct SellWithTipParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
-    pub fee_clients: Vec<Arc<FeeClient>>,
+    pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
     pub creator: Pubkey,
@@ -124,10 +124,10 @@ impl ProtocolParams for PumpSwapParams {
 
 impl BuyParams {
     /// 转换为BuyWithTipParams
-    pub fn with_tip(self, fee_clients: Vec<Arc<FeeClient>>) -> BuyWithTipParams {
+    pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> BuyWithTipParams {
         BuyWithTipParams {
             rpc: self.rpc,
-            fee_clients,
+            swqos_clients,
             payer: self.payer,
             mint: self.mint,
             creator: self.creator,
@@ -144,10 +144,10 @@ impl BuyParams {
 
 impl SellParams {
     /// 转换为SellWithTipParams
-    pub fn with_tip(self, fee_clients: Vec<Arc<FeeClient>>) -> SellWithTipParams {
+    pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> SellWithTipParams {
         SellWithTipParams {
             rpc: self.rpc,
-            fee_clients,
+            swqos_clients,
             payer: self.payer,
             mint: self.mint,
             creator: self.creator,

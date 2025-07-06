@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::pumpswap::common::get_token_balance;
-use crate::swqos::FeeClient;
+use crate::swqos::SwqosClient;
 use crate::trading::{core::params::PumpSwapParams, factory::Protocol, SellParams, TradeFactory};
 
 // Sell tokens to a Pumpswap pool
@@ -140,7 +140,7 @@ pub async fn sell_by_amount(
 // Sell tokens using a MEV service
 pub async fn sell_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -179,7 +179,7 @@ pub async fn sell_with_tip(
         recent_blockhash,
         protocol_params,
     };
-    let sell_with_tip_params = sell_params.with_tip(fee_clients);
+    let sell_with_tip_params = sell_params.with_tip(swqos_clients);
     // 执行卖出交易
     executor.sell_with_tip(sell_with_tip_params).await?;
     Ok(())
@@ -188,7 +188,7 @@ pub async fn sell_with_tip(
 // Sell tokens by percentage using a MEV service
 pub async fn sell_by_percent_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -212,7 +212,7 @@ pub async fn sell_by_percent_with_tip(
     let amount = balance_u64 * percent / 100;
     sell_with_tip(
         rpc,
-        fee_clients,
+        swqos_clients,
         payer,
         mint,
         creator,
@@ -233,7 +233,7 @@ pub async fn sell_by_percent_with_tip(
 // Sell tokens by amount using a MEV service
 pub async fn sell_by_amount_with_tip(
     rpc: Arc<SolanaRpcClient>,
-    fee_clients: Vec<Arc<FeeClient>>,
+    swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     mint: Pubkey,
     creator: Pubkey,
@@ -255,7 +255,7 @@ pub async fn sell_by_amount_with_tip(
 
     sell_with_tip(
         rpc,
-        fee_clients,
+        swqos_clients,
         payer,
         mint,
         creator,
