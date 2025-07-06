@@ -60,8 +60,13 @@ pub trait SwqosClientTrait {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SwqosRegion {
     NewYork,
-    Amsterdam,
     Frankfurt,
+    Amsterdam,
+    SLC,
+    Tokyo,
+    London,
+    LosAngeles,
+    Default,
 }
 
 #[derive(Debug, Clone)]
