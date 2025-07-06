@@ -85,9 +85,9 @@ let priority_fee = PriorityFee {
 
 // Configure multiple swqos in single region, can send transactions concurrently
 let swqos_configs = vec![
-    SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, None, SwqosType::Jito, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
 ];
 
 let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
