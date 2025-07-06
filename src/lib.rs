@@ -4,7 +4,6 @@ pub mod error;
 pub mod instruction;
 pub mod grpc;
 pub mod common;
-pub mod ipfs;
 pub mod swqos;
 pub mod pumpfun;
 pub mod pumpswap;
@@ -25,7 +24,6 @@ use solana_sdk::{
 
 use common::{pumpfun::logs_data::TradeInfo, pumpfun::logs_events::PumpfunEvent, pumpfun::logs_subscribe, Cluster, PriorityFee, SolanaRpcClient};
 use common::pumpfun::logs_subscribe::SubscriptionHandle;
-use ipfs::TokenMetadataIPFS;
 
 use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM};
@@ -150,63 +148,6 @@ impl SolanaTrade {
     pub fn get_instance() -> Arc<Self> {
         let instance = INSTANCE.lock().unwrap();
         instance.as_ref().expect("PumpFun instance not initialized. Please call new() first.").clone()
-    }
-
-    /// Create a new token
-    pub async fn create(
-        &self,
-        mint: Keypair,
-        ipfs: TokenMetadataIPFS,
-    ) -> Result<(), anyhow::Error> {
-        pumpfun::create::create(
-            self.rpc.clone(),
-            self.payer.clone(),
-            mint,
-            ipfs,
-            self.priority_fee.clone(),
-        ).await 
-    }
-
-    pub async fn create_and_buy(
-        &self,
-        mint: Keypair,
-        ipfs: TokenMetadataIPFS,
-        amount_sol: u64,
-        slippage_basis_points: Option<u64>,
-        recent_blockhash: Hash,
-    ) -> Result<(), anyhow::Error> {
-        pumpfun::create::create_and_buy(
-            self.rpc.clone(),
-            self.payer.clone(),
-            mint,
-            ipfs,
-            amount_sol,
-            slippage_basis_points,
-            self.priority_fee.clone(),
-            recent_blockhash,
-        ).await
-    }
-
-    pub async fn create_and_buy_with_tip(
-        &self,
-        payer: Arc<Keypair>, 
-        mint: Keypair,
-        ipfs: TokenMetadataIPFS,
-        buy_sol_cost: u64,
-        slippage_basis_points: Option<u64>,
-        recent_blockhash: Hash,
-    ) -> Result<(), anyhow::Error> { 
-        pumpfun::create::create_and_buy_with_tip(
-            self.rpc.clone(),
-            self.swqos_clients.clone(),
-            payer,
-            mint,
-            ipfs,
-            buy_sol_cost,
-            slippage_basis_points,
-            self.priority_fee.clone(),
-            recent_blockhash,
-        ).await
     }
     
     /// Buy tokens

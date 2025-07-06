@@ -4,7 +4,7 @@
 
 ## 项目特性
 
-1. **PumpFun交易**: 支持`创建代币`、`购买`、`卖出`功能
+1. **PumpFun交易**: 支持`购买`、`卖出`功能
 2. **PumpSwap交易**: 支持PumpSwap池的交易操作
 3. **Raydium交易**: 支持Raydium DEX的交易操作
 4. **日志订阅**: 订阅PumpFun、PumpSwap和Raydium程序的交易日志
@@ -12,8 +12,7 @@
 6. **ShredStream支持**: 使用ShredStream订阅程序日志
 7. **多种MEV保护**: 支持Jito、Nextblock、0slot、Nozomi等服务
 8. **并发交易**: 同时使用多个MEV服务发送交易，最快的成功，其他失败
-9. **IPFS集成**: 支持代币元数据的IPFS上传
-10. **实时价格**: 获取代币实时价格和流动性信息
+9. **实时价格**: 获取代币实时价格和流动性信息
 
 ## 安装
 
@@ -33,7 +32,7 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.1.0" }
 
 ## 使用示例
 
-### 1. 日志订阅 - 监听代币创建和交易
+### 1. 日志订阅 - 监听代币交易
 
 ```rust
 use sol_trade_sdk::{common::pumpfun::logs_events::PumpfunEvent, grpc::YellowstoneGrpc};
@@ -109,52 +108,9 @@ let payer = Keypair::from_base58_string("your_private_key");
 let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
 ```
 
-### 3. 创建代币
+### 3. 购买代币
 
-```rust
-use sol_trade_sdk::{ipfs::CreateTokenMetadata, ipfs::create_token_metadata};
-use solana_sdk::signature::Keypair;
-
-// 创建代币密钥对
-let mint_keypair = Keypair::new();
-
-// 准备代币元数据
-let metadata = CreateTokenMetadata {
-    name: "我的代币".to_string(),
-    symbol: "MTK".to_string(),
-    description: "这是一个测试代币".to_string(),
-    file: "path/to/image.png".to_string(), // 本地文件路径
-    twitter: Some("https://twitter.com/example".to_string()),
-    telegram: Some("https://t.me/example".to_string()),
-    website: Some("https://example.com".to_string()),
-    metadata_uri: None, // 将自动生成
-};
-
-// 上传元数据到IPFS
-let api_token = "your_pinata_api_token";
-let ipfs_response = create_token_metadata(metadata, api_token).await?;
-
-// 创建代币
-solana_trade_client.create(mint_keypair, ipfs_response).await?;
-```
-
-### 3.1. 创建并购买代币（带小费）
-
-```rust
-// 创建代币的同时购买，并使用MEV保护
-solana_trade_client.create_and_buy_with_tip(
-    payer.clone(),  // payer keypair
-    mint_keypair,   // mint keypair
-    ipfs_response,  // IPFS响应
-    50000000,       // buy_sol_cost (购买金额，lamports，0.05 SOL)
-    Some(100),      // slippage (1%)
-    recent_blockhash,
-).await?;
-```
-
-### 4. 购买代币
-
-### 4.1 购买代币 --- 狙击
+### 3.1 购买代币 --- 狙击
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -192,7 +148,7 @@ solana_trade_client.sniper_buy_with_tip(
 ).await?;
 ```
 
-### 4.2 购买代币 --- 跟单
+### 3.2 购买代币 --- 跟单
 ```rust
 use solana_sdk::{pubkey::Pubkey, hash::Hash};
 use std::sync::Arc;
@@ -244,7 +200,7 @@ solana_trade_client.buy_with_tip(
 ).await?;
 ```
 
-### 5. 卖出代币
+### 4. 卖出代币
 
 ```rust
 // 按数量卖出
@@ -267,7 +223,7 @@ solana_trade_client.sell_by_percent_with_tip(
 ).await?;
 ```
 
-### 6. 获取价格和余额信息
+### 5. 获取价格和余额信息
 
 ```rust
 // 获取代币当前价格
@@ -287,7 +243,7 @@ let sol_reserves = solana_trade_client.get_real_sol_reserves(&mint_pubkey).await
 println!("SOL储备: {} lamports", sol_reserves);
 ```
 
-### 7. PumpSwap订阅 - 监听AMM事件
+### 6. PumpSwap订阅 - 监听AMM事件
 
 ```rust
 use sol_trade_sdk::{common::pumpswap::logs_events::PumpSwapEvent, grpc::YellowstoneGrpc};
@@ -333,7 +289,7 @@ println!("开始监听PumpSwap事件，按Ctrl+C停止...");
 client.subscribe_pumpswap(callback).await?;
 ```
 
-### 8. PumpSwap交易操作
+### 7. PumpSwap交易操作
 
 ```rust
 use std::sync::Arc;
@@ -397,7 +353,7 @@ solana_trade_client
     .await?;
 ```
 
-### 9. PumpSwap池信息
+### 8. PumpSwap池信息
 
 ```rust
 use solana_sdk::pubkey::Pubkey;
@@ -440,7 +396,6 @@ src/
 ├── error/        # 错误处理
 ├── grpc/         # gRPC客户端
 ├── instruction/  # 指令构建
-├── ipfs/         # IPFS集成
 ├── pumpfun/      # PumpFun交易功能
 ├── pumpswap/     # PumpSwap交易功能
 ├── swqos/        # MEV服务客户端
