@@ -50,7 +50,7 @@ impl SwqosClientTrait for SolRpcClient {
     }
 
     fn get_swqos_type(&self) -> SwqosType {
-        SwqosType::Rpc
+        SwqosType::Default
     }
 }
 

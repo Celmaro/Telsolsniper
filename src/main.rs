@@ -245,13 +245,16 @@ async fn test_raydium_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
 async fn test_pumpfun_sniper() -> AnyResult<()> {
     // 创建一个随机账户作为交易者
     let payer = Keypair::new();
-    let swqos_configs = vec![
-        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
-    ];
-
+    
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+    let swqos_configs = vec![
+        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Default(rpc_url.clone()),
+    ];
 
     // Define cluster configuration
     let trade_config = TradeConfig {
@@ -291,13 +294,15 @@ async fn test_pumpfun_sniper() -> AnyResult<()> {
 async fn test_pumpfun() -> AnyResult<()> {
     let payer = Keypair::new();
 
-    let swqos_configs = vec![
-        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
-    ];
-
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+    let swqos_configs = vec![
+        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Default(rpc_url.clone()),
+    ];
 
     // Define cluster configuration
     let trade_config = TradeConfig {
@@ -362,13 +367,15 @@ async fn test_pumpfun() -> AnyResult<()> {
 async fn test_pumpswap() -> AnyResult<()> {
     let payer = Keypair::new();
 
-    let swqos_configs = vec![
-        SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-        SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
-    ];
-
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+    let swqos_configs = vec![
+        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Default(rpc_url.clone()),
+    ];
 
     // Define cluster configuration
     let trade_config = TradeConfig {

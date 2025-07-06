@@ -29,6 +29,8 @@ use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP};
 use accounts::BondingCurveAccount;
 
+use crate::swqos::bloxroute::BloxrouteClient;
+use crate::swqos::SwqosConfig;
 use crate::swqos::SwqosType;
 use crate::swqos::jito::JitoClient;
 use crate::swqos::nextblock::NextBlockClient;
@@ -81,57 +83,17 @@ impl SolanaTrade {
         let priority_fee = trade_config.priority_fee.clone();
         let commitment = trade_config.commitment.clone();
 
-        let rpc = SolanaRpcClient::new_with_commitment(
-            rpc_url.clone(),
-            commitment
-        );   
-        let rpc = Arc::new(rpc);
-
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
 
         for swqos in swqos_configs {
-            match swqos.swqos_type {
-                SwqosType::Jito => {
-                    let jito_client = JitoClient::new(
-                        rpc_url.clone(),
-                        swqos.endpoint,
-                        swqos.auth_token
-                    );
-                    swqos_clients.push(Arc::new(jito_client));
-                }
-                SwqosType::NextBlock => {
-                    let nextblock_client = NextBlockClient::new(
-                        rpc_url.clone(),
-                        swqos.endpoint,
-                        swqos.auth_token
-                    );
-                    swqos_clients.push(Arc::new(nextblock_client));
-                }
-                SwqosType::ZeroSlot => {
-                    let zeroslot_client = ZeroSlotClient::new(
-                        rpc_url.clone(),
-                        swqos.endpoint,
-                        swqos.auth_token
-                    );
-                    swqos_clients.push(Arc::new(zeroslot_client));
-                }
-                SwqosType::Temporal => {  
-                    let temporal_client = TemporalClient::new(
-                        rpc_url.clone(),
-                        swqos.endpoint,
-                        swqos.auth_token
-                    );
-                    swqos_clients.push(Arc::new(temporal_client));
-                }
-                SwqosType::Rpc => { 
-                    let rpc_client = SolRpcClient::new(rpc.clone());
-                    swqos_clients.push(Arc::new(rpc_client));
-                }
-                _ => {
-                    println!("Unsupported swqos type: {:?}", swqos.swqos_type);
-                }
-            }
+            let swqos_client = SwqosConfig::get_swqos_client(rpc_url.clone(), commitment.clone(), swqos.clone());
+            swqos_clients.push(swqos_client);
         }
+
+        let rpc = Arc::new(SolanaRpcClient::new_with_commitment(
+            rpc_url.clone(),
+            commitment
+        ));
 
         let instance = Self {
             payer,

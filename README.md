@@ -90,13 +90,15 @@ let priority_fee = PriorityFee {
 };
 
 // Configure multiple swqos in single region, can send transactions concurrently
-let swqos_configs = vec![
-    SwqosConfig::new(None, None, SwqosType::Jito, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
-];
-
 let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+let swqos_configs = vec![
+    SwqosConfig::Jito(SwqosRegion::Frankfurt),
+    SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Default(rpc_url.clone()),
+];
 
 // Define sdk configuration
 let trade_config = TradeConfig {
@@ -302,13 +304,15 @@ use solana_client::rpc_client::RpcClient;
 use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
 
 // Configure multiple swqos in single region, can send transactions concurrently
-let swqos_configs = vec![
-    SwqosConfig::new(None, None, SwqosType::Jito, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
-    SwqosConfig::new(None, Some("your auth_token".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
-];
-
 let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+let swqos_configs = vec![
+    SwqosConfig::Jito(SwqosRegion::Frankfurt),
+    SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+    SwqosConfig::Default(rpc_url.clone()),
+];
 
 // Define sdk configuration
 let trade_config = TradeConfig {

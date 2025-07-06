@@ -37,7 +37,7 @@ pub async fn parallel_execute_with_tips(
         let handle = tokio::spawn(async move {
             core_affinity::set_for_current(core_id);
             let transaction = if matches!(trade_type, TradeType::Sell)
-                && swqos_client.get_swqos_type() == SwqosType::Rpc
+                && swqos_client.get_swqos_type() == SwqosType::Default
             {
                 build_sell_transaction(
                     payer,
@@ -48,7 +48,7 @@ pub async fn parallel_execute_with_tips(
                 )
                 .await?
             } else if matches!(trade_type, TradeType::Sell)
-                && swqos_client.get_swqos_type() != SwqosType::Rpc
+                && swqos_client.get_swqos_type() != SwqosType::Default
             {
                 let tip_account = swqos_client.get_tip_account()?;
                 let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
@@ -61,7 +61,7 @@ pub async fn parallel_execute_with_tips(
                     recent_blockhash,
                 )
                 .await?
-            } else if swqos_client.get_swqos_type() == SwqosType::Rpc {
+            } else if swqos_client.get_swqos_type() == SwqosType::Default {
                 build_rpc_transaction(
                     payer,
                     &priority_fee,
