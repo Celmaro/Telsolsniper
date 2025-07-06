@@ -243,6 +243,7 @@ async fn test_raydium_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn test_pumpfun_sniper() -> AnyResult<()> {
+    // 创建一个随机账户作为交易者
     let payer = Keypair::new();
     let swqos_configs = vec![
         SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
@@ -261,6 +262,8 @@ async fn test_pumpfun_sniper() -> AnyResult<()> {
         lookup_table_key: None,
     };
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
+
+
     let creator = Pubkey::from_str("xxx")?; // dev account
     let buy_sol_cost = 500_000; // 0.0005 SOL
     let slippage_basis_points = Some(100);
