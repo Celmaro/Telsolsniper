@@ -78,6 +78,7 @@ pub struct SwqosConfig {
 
 impl SwqosConfig {
     pub fn new(endpoint: Option<String>, auth_token: Option<String>, swqos_type: SwqosType, region: SwqosRegion) -> Self {
+        let auth_token = auth_token.unwrap_or_else(|| "".to_string());
         let endpoint = endpoint.unwrap_or_else(|| match swqos_type {
             SwqosType::Jito => SWQOS_ENDPOINTS_JITO[region as usize].to_string(),
             SwqosType::NextBlock => SWQOS_ENDPOINTS_NEXTBLOCK[region as usize].to_string(),
@@ -85,8 +86,6 @@ impl SwqosConfig {
             SwqosType::Temporal => SWQOS_ENDPOINTS_TEMPORAL[region as usize].to_string(),
             SwqosType::Rpc => "".to_string(),
         });
-
-        let auth_token = auth_token.unwrap();
 
         Self { endpoint, auth_token, swqos_type }
     }
