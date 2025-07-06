@@ -12,7 +12,6 @@ pub struct TradeConfig {
     pub priority_fee: PriorityFee,
     pub commitment: CommitmentConfig,
     pub lookup_table_key: Option<Pubkey>,
-    pub use_rpc: bool,
 }
 
 impl TradeConfig {
@@ -22,7 +21,6 @@ impl TradeConfig {
         priority_fee: PriorityFee, 
         commitment: CommitmentConfig, 
         lookup_table_key: Option<Pubkey>,
-        use_rpc: bool,
     ) -> Self {
         Self { 
             rpc_url, 
@@ -30,7 +28,6 @@ impl TradeConfig {
             priority_fee, 
             commitment, 
             lookup_table_key,
-            use_rpc,
         }
     }
 }

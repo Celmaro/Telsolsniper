@@ -259,7 +259,6 @@ async fn test_pumpfun_sniper() -> AnyResult<()> {
         priority_fee: PriorityFee::default(),
         swqos_configs,
         lookup_table_key: None,
-        use_rpc: true,
     };
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("xxx")?; // dev account
@@ -304,7 +303,6 @@ async fn test_pumpfun() -> AnyResult<()> {
         priority_fee: PriorityFee::default(),
         swqos_configs,
         lookup_table_key: None,
-        use_rpc: true,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -376,7 +374,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         priority_fee: PriorityFee::default(),
         swqos_configs,
         lookup_table_key: None,
-        use_rpc: true,
     };
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
