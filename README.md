@@ -68,9 +68,15 @@ client.subscribe_pumpfun(callback, None).await?;
 ### 2. Initialize SolanaTrade Instance
 
 ```rust
-use std::sync::Arc;
-use sol_trade_sdk::{common::{Cluster, PriorityFee}, SolanaTrade};
-use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
+use std::{str::FromStr, sync::Arc};
+
+use sol_trade_sdk::{
+    common::{AnyResult, PriorityFee, TradeConfig}, 
+    swqos::{SwqosConfig, SwqosRegion, SwqosType}, 
+    SolanaTrade
+};
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 
 // Configure priority fees
 let priority_fee = PriorityFee {
