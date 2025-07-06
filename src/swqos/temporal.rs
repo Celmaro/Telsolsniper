@@ -15,7 +15,7 @@ use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
-use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::NOZOMI_TIP_ACCOUNTS};
+use crate::{common::SolanaRpcClient, constants::swqos::NOZOMI_TIP_ACCOUNTS};
 
 
 #[derive(Clone)]

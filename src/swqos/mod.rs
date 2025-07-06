@@ -4,13 +4,14 @@ pub mod jito;
 pub mod nextblock;
 pub mod zeroslot;
 pub mod temporal;
+pub mod bloxroute;
 
 use solana_sdk::transaction::VersionedTransaction;
 use tokio::sync::RwLock;
 
 use anyhow::Result;
 
-use crate::swqos::common::{SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT};
+use crate::constants::swqos::{SWQOS_ENDPOINTS_BLOX, SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT};
 
 lazy_static::lazy_static! {
     static ref TIP_ACCOUNT_CACHE: RwLock<Vec<String>> = RwLock::new(Vec::new());
@@ -42,6 +43,7 @@ pub enum SwqosType {
     NextBlock,
     ZeroSlot,
     Temporal,
+    Bloxroute,
     Rpc,
 }
 
@@ -82,6 +84,7 @@ impl SwqosConfig {
             SwqosType::NextBlock => SWQOS_ENDPOINTS_NEXTBLOCK[region as usize].to_string(),
             SwqosType::ZeroSlot => SWQOS_ENDPOINTS_ZERO_SLOT[region as usize].to_string(),
             SwqosType::Temporal => SWQOS_ENDPOINTS_TEMPORAL[region as usize].to_string(),
+            SwqosType::Bloxroute => SWQOS_ENDPOINTS_BLOX[region as usize].to_string(),
             SwqosType::Rpc => "".to_string(),
         });
 

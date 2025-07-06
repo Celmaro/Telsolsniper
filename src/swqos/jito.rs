@@ -13,7 +13,7 @@ use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
-use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::JITO_TIP_ACCOUNTS};
+use crate::{common::SolanaRpcClient, constants::swqos::JITO_TIP_ACCOUNTS};
 
 
 pub struct JitoClient {

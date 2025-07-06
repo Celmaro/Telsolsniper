@@ -1,6 +1,7 @@
 pub mod pumpfun;
 pub mod pumpswap;
 pub mod raydium;
+pub mod swqos;
 
 pub mod trade_type {
   pub const COPY_BUY: &'static str = "copy_buy";

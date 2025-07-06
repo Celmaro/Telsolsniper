@@ -12,7 +12,7 @@ use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
-use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::NEXTBLOCK_TIP_ACCOUNTS};
+use crate::{common::SolanaRpcClient, constants::swqos::NEXTBLOCK_TIP_ACCOUNTS};
 
 #[derive(Clone)]
 pub struct NextBlockClient {

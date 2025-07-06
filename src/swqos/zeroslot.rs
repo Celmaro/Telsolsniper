@@ -8,12 +8,11 @@ use std::time::Duration;
 use solana_transaction_status::UiTransactionEncoding;
 
 use anyhow::Result;
-use solana_sdk::signature::Signature;
 use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
 
-use crate::{common::SolanaRpcClient, constants::pumpfun::accounts::ZEROSLOT_TIP_ACCOUNTS};
+use crate::{common::SolanaRpcClient, constants::swqos::ZEROSLOT_TIP_ACCOUNTS};
 
 
 #[derive(Clone)]
