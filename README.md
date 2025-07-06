@@ -83,29 +83,27 @@ let priority_fee = PriorityFee {
     sell_tip_fee: 0.0001,
 };
 
-// Configure cluster
-let cluster = Cluster {
-    rpc_url: "https://api.mainnet-beta.solana.com".to_string(),
-    block_engine_url: "https://block-engine.example.com".to_string(),
-    nextblock_url: "https://nextblock.example.com".to_string(),
-    nextblock_auth_token: "nextblock_api_token".to_string(),
-    zeroslot_url: "https://zeroslot.example.com".to_string(),
-    zeroslot_auth_token: "zeroslot_api_token".to_string(),
-    nozomi_url: "https://nozomi.example.com".to_string(),
-    nozomi_auth_token: "nozomi_api_token".to_string(),
-    use_jito: true,
-    use_nextblock: false,
-    use_zeroslot: false,
-    use_nozomi: false,
-    use_rpc: true,
+// Configure multiple swqos in single region, can send transactions concurrently
+let swqos_configs = vec![
+    SwqosConfig::new(None, Some("your auth_token for jito".to_string()), SwqosType::Jito, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token for zeroslot".to_string()), SwqosType::ZeroSlot, SwqosRegion::Frankfurt),
+    SwqosConfig::new(None, Some("your auth_token for temporal".to_string()), SwqosType::Temporal, SwqosRegion::Frankfurt),
+];
+
+let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+
+// Define sdk configuration
+let trade_config = TradeConfig {
+    rpc_url: rpc_url.clone(),
+    commitment: CommitmentConfig::confirmed(),
     priority_fee,
-    commitment: CommitmentConfig::processed(),
-    lookup_table_key: None, // Optional lookup table
+    swqos_configs,
+    lookup_table_key: None,
 };
 
 // Create SolanaTrade instance
 let payer = Keypair::from_base58_string("your_private_key");
-let solana_trade_client = SolanaTrade::new(Arc::new(payer), &cluster).await;
+let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
 ```
 
 ### 3. Buy Tokens
