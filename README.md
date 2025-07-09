@@ -1,13 +1,13 @@
 # Sol Trade SDK
 
-A comprehensive Rust SDK for seamless interaction with Solana DEX trading programs. This SDK provides a robust set of tools and interfaces to integrate PumpFun, PumpSwap, and Raydium Launchpad (Bonk.fun) functionality into your applications.
+A comprehensive Rust SDK for seamless interaction with Solana DEX trading programs. This SDK provides a robust set of tools and interfaces to integrate PumpFun, PumpSwap, and Bonk functionality into your applications.
 
 ## Project Features
 
 1. **PumpFun Trading**: Support for `buy` and `sell` operations
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
-3. **Raydium Trading**: Support for Raydium Launchpad (Bonk.fun) trading operations
-4. **Event Subscription**: Subscribe to PumpFun, PumpSwap, and Raydium Launchpad (Bonk.fun) program trading events
+3. **Bonk Trading**: Support for Bonk trading operations
+4. **Event Subscription**: Subscribe to PumpFun, PumpSwap, and Bonk program trading events
 5. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
 6. **ShredStream Support**: Subscribe to program events using ShredStream
 7. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
@@ -45,7 +45,7 @@ use sol_trade_sdk::{
                 PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
                 PumpSwapSellEvent, PumpSwapWithdrawEvent,
             },
-            raydium_launchpad::{RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent},
+            bonk::{BonkPoolCreateEvent, BonkTradeEvent},
         },
         Protocol, UnifiedEvent,
     },
@@ -65,11 +65,11 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // Define callback function to handle events
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -100,7 +100,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
@@ -123,11 +123,11 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // Define callback function to handle events (same as above)
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -158,7 +158,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)
@@ -376,19 +376,19 @@ async fn test_pumpswap() -> AnyResult<()> {
 }
 ```
 
-### 5. Raydium Launchpad Trading Operations
+### 5. Bonk Trading Operations
 
 ```rust
-use sol_trade_sdk::trading::core::params::RaydiumLaunchpadParams;
+use sol_trade_sdk::trading::core::params::BonkParams;
 
-async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     // Basic parameter setup
     let amount = 100_000; // 0.0001 SOL
     let mint = Pubkey::from_str("xxxxxxx")?;
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
 
-    // Raydium Launchpad parameter configuration
-    let raydium_launchpad_params = RaydiumLaunchpadParams {
+    // Bonk parameter configuration
+    let bonk_params = BonkParams {
         virtual_base: None,
         virtual_quote: None,
         real_base_before: None,
@@ -396,7 +396,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         auto_handle_wsol: true,
     };
 
-    println!("Buying tokens from Raydium Launchpad...");
+    println!("Buying tokens from letsbonk.fun...");
 
     // Buy operation
     let buy_params = BuyParams {
@@ -410,7 +410,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
         data_size_limit: 0,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
 
     let buy_with_tip_params = buy_params
@@ -422,7 +422,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Sell operation
-    println!("Selling tokens from Raydium Launchpad...");
+    println!("Selling tokens from letsbonk.fun...");
 
     let sell_params = SellParams {
         rpc: Some(solana_trade_client.rpc.clone()),
@@ -434,7 +434,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         priority_fee: solana_trade_client.trade_config.clone().priority_fee,
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
 
     solana_trade_client
@@ -475,7 +475,7 @@ let trade_config = TradeConfig {
 
 - **PumpFun**: Primary meme coin trading platform
 - **PumpSwap**: PumpFun's swap protocol
-- **Raydium Launchpad**: Raydium's token launch platform (Bonk.fun)
+- **Bonk**: token launch platform (letsbonk.fun)
 
 ## MEV Protection Services
 
@@ -491,7 +491,7 @@ let trade_config = TradeConfig {
 
 - **BuyParams**: Unified buy parameter structure
 - **SellParams**: Unified sell parameter structure
-- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, PumpSwapParams, RaydiumLaunchpadParams)
+- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, PumpSwapParams, BonkParams)
 
 ### Event Parsing System
 
@@ -519,14 +519,14 @@ src/
 │   ├── protocols/    # Protocol-specific parsers
 │   │   ├── pumpfun/  # PumpFun event parsing
 │   │   ├── pumpswap/ # PumpSwap event parsing
-│   │   └── raydium_launchpad/ # Raydium Launchpad event parsing
+│   │   └── bonk/     # Bonk event parsing
 │   └── factory.rs    # Parser factory
 ├── grpc/             # gRPC clients
 ├── instruction/      # Instruction building
 ├── protos/           # Protocol buffer definitions
 ├── pumpfun/          # PumpFun trading functionality
 ├── pumpswap/         # PumpSwap trading functionality
-├── raydium_launchpad/ # Raydium Launchpad trading functionality
+├── bonk/             # Bonk trading functionality
 ├── swqos/            # MEV service clients
 ├── trading/          # Unified trading engine
 │   ├── common/       # Common trading tools

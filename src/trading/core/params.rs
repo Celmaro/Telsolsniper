@@ -122,9 +122,9 @@ impl ProtocolParams for PumpSwapParams {
     }
 }
 
-/// RaydiumLaunchpad协议特定参数
+/// Bonk协议特定参数
 #[derive(Clone)]
-pub struct RaydiumLaunchpadParams {
+pub struct BonkParams {
     pub virtual_base: Option<u128>,
     pub virtual_quote: Option<u128>,
     pub real_base_before: Option<u128>,
@@ -132,7 +132,7 @@ pub struct RaydiumLaunchpadParams {
     pub auto_handle_wsol: bool,
 }
 
-impl ProtocolParams for RaydiumLaunchpadParams {
+impl ProtocolParams for BonkParams {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

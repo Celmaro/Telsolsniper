@@ -11,8 +11,7 @@ pub enum ProtocolType {
     #[default]
     PumpSwap,
     PumpFun,
-    RaydiumLaunchpad,
-    Raydium,
+    Bonk,
 }
 
 /// 事件类型枚举
@@ -33,12 +32,12 @@ pub enum EventType {
     PumpFunBuy,
     PumpFunSell,
 
-    // RaydiumLaunchpad 事件
-    RaydiumLaunchpadBuyExactIn,
-    RaydiumLaunchpadBuyExactOut,
-    RaydiumLaunchpadSellExactIn,
-    RaydiumLaunchpadSellExactOut,
-    RaydiumLaunchpadInitialize,
+    // Bonk 事件
+    BonkBuyExactIn,
+    BonkBuyExactOut,
+    BonkSellExactIn,
+    BonkSellExactOut,
+    BonkInitialize,
 
     // 通用事件
     Unknown,

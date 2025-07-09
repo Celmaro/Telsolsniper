@@ -4,65 +4,65 @@ use solana_transaction_status::UiCompiledInstruction;
 use crate::event_parser::{
     common::{utils::*, EventMetadata, EventType, ProtocolType},
     core::traits::{EventParser, GenericEventParseConfig, GenericEventParser, UnifiedEvent},
-    protocols::raydium_launchpad::{
+    protocols::bonk::{
         discriminators, ConstantCurve, CurveParams, FixedCurve, LinearCurve, MintParams,
-        RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent, TradeDirection, VestingParams,
+        BonkPoolCreateEvent, BonkTradeEvent, TradeDirection, VestingParams,
     },
 };
 
-/// RaydiumLaunchpad程序ID
-pub const RAYDIUM_LAUNCHPAD_PROGRAM_ID: Pubkey =
+/// Bonk程序ID
+pub const BONK_PROGRAM_ID: Pubkey =
     solana_sdk::pubkey!("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj");
 
-/// RaydiumLaunchpad事件解析器
-pub struct RaydiumLaunchpadEventParser {
+/// Bonk事件解析器
+pub struct BonkEventParser {
     inner: GenericEventParser,
 }
 
-impl RaydiumLaunchpadEventParser {
+impl BonkEventParser {
     pub fn new() -> Self {
         // 配置所有事件类型
         let configs = vec![
             GenericEventParseConfig {
                 inner_instruction_discriminator: discriminators::TRADE_EVENT,
                 instruction_discriminator: discriminators::BUY_EXACT_IN,
-                event_type: EventType::RaydiumLaunchpadBuyExactIn,
+                event_type: EventType::BonkBuyExactIn,
                 inner_instruction_parser: Self::parse_trade_inner_instruction,
                 instruction_parser: Self::parse_buy_exact_in_instruction,
             },
             GenericEventParseConfig {
                 inner_instruction_discriminator: discriminators::TRADE_EVENT,
                 instruction_discriminator: discriminators::BUY_EXACT_OUT,
-                event_type: EventType::RaydiumLaunchpadBuyExactOut,
+                event_type: EventType::BonkBuyExactOut,
                 inner_instruction_parser: Self::parse_trade_inner_instruction,
                 instruction_parser: Self::parse_buy_exact_out_instruction,
             },
             GenericEventParseConfig {
                 inner_instruction_discriminator: discriminators::TRADE_EVENT,
                 instruction_discriminator: discriminators::SELL_EXACT_IN,
-                event_type: EventType::RaydiumLaunchpadSellExactIn,
+                event_type: EventType::BonkSellExactIn,
                 inner_instruction_parser: Self::parse_trade_inner_instruction,
                 instruction_parser: Self::parse_sell_exact_in_instruction,
             },
             GenericEventParseConfig {
                 inner_instruction_discriminator: discriminators::TRADE_EVENT,
                 instruction_discriminator: discriminators::SELL_EXACT_OUT,
-                event_type: EventType::RaydiumLaunchpadSellExactOut,
+                event_type: EventType::BonkSellExactOut,
                 inner_instruction_parser: Self::parse_trade_inner_instruction,
                 instruction_parser: Self::parse_sell_exact_out_instruction,
             },
             GenericEventParseConfig {
                 inner_instruction_discriminator: discriminators::POOL_CREATE_EVENT,
                 instruction_discriminator: discriminators::INITIALIZE,
-                event_type: EventType::RaydiumLaunchpadInitialize,
+                event_type: EventType::BonkInitialize,
                 inner_instruction_parser: Self::parse_pool_create_inner_instruction,
                 instruction_parser: Self::parse_initialize_instruction,
             },
         ];
 
         let inner = GenericEventParser::new(
-            RAYDIUM_LAUNCHPAD_PROGRAM_ID,
-            ProtocolType::RaydiumLaunchpad,
+            BONK_PROGRAM_ID,
+            ProtocolType::Bonk,
             configs,
         );
 
@@ -74,10 +74,10 @@ impl RaydiumLaunchpadEventParser {
         data: &[u8],
         metadata: EventMetadata,
     ) -> Option<Box<dyn UnifiedEvent>> {
-        if let Ok(event) = borsh::from_slice::<RaydiumLaunchpadPoolCreateEvent>(data) {
+        if let Ok(event) = borsh::from_slice::<BonkPoolCreateEvent>(data) {
             let mut metadata = metadata;
             metadata.set_id(format!("{}", metadata.signature,));
-            Some(Box::new(RaydiumLaunchpadPoolCreateEvent {
+            Some(Box::new(BonkPoolCreateEvent {
                 metadata: metadata,
                 ..event
             }))
@@ -91,14 +91,14 @@ impl RaydiumLaunchpadEventParser {
         data: &[u8],
         metadata: EventMetadata,
     ) -> Option<Box<dyn UnifiedEvent>> {
-        if let Ok(event) = borsh::from_slice::<RaydiumLaunchpadTradeEvent>(data) {
+        if let Ok(event) = borsh::from_slice::<BonkTradeEvent>(data) {
             let mut metadata = metadata;
             metadata.set_id(format!(
                 "{}-{}",
                 metadata.signature,
                 event.pool_state.to_string()
             ));
-            Some(Box::new(RaydiumLaunchpadTradeEvent {
+            Some(Box::new(BonkTradeEvent {
                 metadata: metadata,
                 ..event
             }))
@@ -124,7 +124,7 @@ impl RaydiumLaunchpadEventParser {
         let mut metadata = metadata;
         metadata.set_id(format!("{}-{}", metadata.signature, accounts[4]));
 
-        Some(Box::new(RaydiumLaunchpadTradeEvent {
+        Some(Box::new(BonkTradeEvent {
             metadata,
             amount_in,
             minimum_amount_out,
@@ -158,7 +158,7 @@ impl RaydiumLaunchpadEventParser {
         let mut metadata = metadata;
         metadata.set_id(format!("{}-{}", metadata.signature, accounts[4]));
 
-        Some(Box::new(RaydiumLaunchpadTradeEvent {
+        Some(Box::new(BonkTradeEvent {
             metadata,
             amount_out,
             maximum_amount_in,
@@ -192,7 +192,7 @@ impl RaydiumLaunchpadEventParser {
         let mut metadata = metadata;
         metadata.set_id(format!("{}-{}", metadata.signature, accounts[4]));
 
-        Some(Box::new(RaydiumLaunchpadTradeEvent {
+        Some(Box::new(BonkTradeEvent {
             metadata,
             amount_in,
             minimum_amount_out,
@@ -226,7 +226,7 @@ impl RaydiumLaunchpadEventParser {
         let mut metadata = metadata;
         metadata.set_id(format!("{}-{}", metadata.signature, accounts[4]));
 
-        Some(Box::new(RaydiumLaunchpadTradeEvent {
+        Some(Box::new(BonkTradeEvent {
             metadata,
             amount_out,
             maximum_amount_in,
@@ -262,7 +262,7 @@ impl RaydiumLaunchpadEventParser {
         let mut metadata = metadata;
         metadata.set_id(format!("{}", metadata.signature));
 
-        Some(Box::new(RaydiumLaunchpadPoolCreateEvent {
+        Some(Box::new(BonkPoolCreateEvent {
             metadata,
             payer: accounts[0],
             creator: accounts[1],
@@ -404,7 +404,7 @@ impl RaydiumLaunchpadEventParser {
 }
 
 #[async_trait::async_trait]
-impl EventParser for RaydiumLaunchpadEventParser {
+impl EventParser for BonkEventParser {
     fn parse_events_from_inner_instruction(
         &self,
         inner_instruction: &UiCompiledInstruction,

@@ -1,6 +1,6 @@
 pub mod pumpfun;
 pub mod pumpswap;
-pub mod raydium_launchpad;
+pub mod bonk;
 pub mod swqos;
 
 pub mod trade_type {
@@ -13,5 +13,5 @@ pub mod trade_type {
 pub mod trade_platform {
   pub const PUMPFUN: &'static str = "pumpfun";
   pub const PUMPFUN_SWAP: &'static str = "pumpswap";
-  pub const RAYDIUM_LAUNCHPAD: &'static str = "raydium_launchpad";
+  pub const BONK: &'static str = "bonk";
 }

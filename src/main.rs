@@ -11,7 +11,7 @@ use sol_trade_sdk::{
                 PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent, PumpSwapSellEvent,
                 PumpSwapWithdrawEvent,
             },
-            raydium_launchpad::{RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent},
+            bonk::{BonkPoolCreateEvent, BonkTradeEvent},
         },
         Protocol, UnifiedEvent,
     },
@@ -20,7 +20,7 @@ use sol_trade_sdk::{
     pumpfun::common::get_bonding_curve_account_v2,
     swqos::{SwqosConfig, SwqosRegion},
     trading::{
-        core::params::{PumpFunParams, PumpFunSellParams, PumpSwapParams, RaydiumLaunchpadParams},
+        core::params::{PumpFunParams, PumpFunSellParams, PumpSwapParams, BonkParams},
         BuyParams, SellParams,
     },
     SolanaTrade,
@@ -32,7 +32,7 @@ use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature:
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_pumpfun().await?;
     // test_pumpswap().await?;
-    // test_raydium_launchpad().await?;
+    // test_bonk().await?;
     // test_grpc().await?;
     // test_shreds().await?;
     Ok(())
@@ -208,7 +208,7 @@ async fn test_pumpswap() -> AnyResult<()> {
     Ok(())
 }
 
-async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     // 创建一个随机账户作为交易者
     let payer = Keypair::new();
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
@@ -232,14 +232,14 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
     let amount = 100_000; // 0.0001 SOL
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
     let mint = Pubkey::from_str("xxxxxxx")?;
-    let raydium_launchpad_params = RaydiumLaunchpadParams {
+    let bonk_params = BonkParams {
         virtual_base: None,
         virtual_quote: None,
         real_base_before: None,
         real_quote_before: None,
         auto_handle_wsol: true,
     };
-    println!("Buying tokens from Raydium Launchpad...");
+    println!("Buying tokens from letsbonk.fun...");
     // buy
     let buy_params = BuyParams {
         rpc: Some(solana_trade_client.rpc.clone()),
@@ -252,7 +252,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
         data_size_limit: 0,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
     let buy_with_tip_params = buy_params
         .clone()
@@ -261,7 +261,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         .buy_use_buy_params(buy_with_tip_params, None)
         .await?;
     // sell
-    println!("Selling tokens from Raydium Launchpad...");
+    println!("Selling tokens from letsbonk.fun...");
     let sell_params = SellParams {
         rpc: Some(solana_trade_client.rpc.clone()),
         payer: solana_trade_client.payer.clone(),
@@ -272,7 +272,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         priority_fee: solana_trade_client.trade_config.clone().priority_fee,
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
     solana_trade_client
         .sell_by_amount_use_sell_params(sell_params)
@@ -292,11 +292,11 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // 定义回调函数处理 PumpSwap 事件
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -327,7 +327,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
@@ -344,11 +344,11 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // 定义回调函数处理 PumpSwap 事件
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -379,7 +379,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)

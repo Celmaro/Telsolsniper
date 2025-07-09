@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
-use crate::trading::protocols::raydium_launchpad::RaydiumLaunchpadInstructionBuilder;
+use crate::trading::protocols::bonk::BonkInstructionBuilder;
 
 use super::{
     core::{executor::GenericTradeExecutor, traits::TradeExecutor},
@@ -13,7 +13,7 @@ use super::{
 pub enum Protocol {
     PumpFun,
     PumpSwap,
-    RaydiumLaunchpad,
+    Bonk,
 }
 
 impl std::fmt::Display for Protocol {
@@ -21,7 +21,7 @@ impl std::fmt::Display for Protocol {
         match self {
             Protocol::PumpFun => write!(f, "PumpFun"),
             Protocol::PumpSwap => write!(f, "PumpSwap"),
-            Protocol::RaydiumLaunchpad => write!(f, "RaydiumLaunchpad"),
+            Protocol::Bonk => write!(f, "Bonk"),
         }
     }
 }
@@ -33,7 +33,7 @@ impl std::str::FromStr for Protocol {
         match s.to_lowercase().as_str() {
             "pumpfun" => Ok(Protocol::PumpFun),
             "pumpswap" => Ok(Protocol::PumpSwap),
-            "raydiumlaunchpad" => Ok(Protocol::RaydiumLaunchpad),
+            "bonk" => Ok(Protocol::Bonk),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -54,11 +54,11 @@ impl TradeFactory {
                 let instruction_builder = Arc::new(PumpSwapInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "PumpSwap"))
             }
-            Protocol::RaydiumLaunchpad => {
-                let instruction_builder = Arc::new(RaydiumLaunchpadInstructionBuilder);
+            Protocol::Bonk => {
+                let instruction_builder = Arc::new(BonkInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(
                     instruction_builder,
-                    "RaydiumLaunchpad",
+                    "Bonk",
                 ))
             }
         }
@@ -69,7 +69,7 @@ impl TradeFactory {
         vec![
             Protocol::PumpFun,
             Protocol::PumpSwap,
-            Protocol::RaydiumLaunchpad,
+            Protocol::Bonk,
         ]
     }
 

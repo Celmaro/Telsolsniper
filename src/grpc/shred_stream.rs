@@ -9,8 +9,8 @@ use solana_sdk::transaction::VersionedTransaction;
 
 use crate::common::AnyResult;
 use crate::event_parser::protocols::pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent};
-use crate::event_parser::protocols::raydium_launchpad::{
-    RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent,
+use crate::event_parser::protocols::bonk::{
+    BonkPoolCreateEvent, BonkTradeEvent,
 };
 use crate::event_parser::{EventParserFactory, Protocol, UnifiedEvent};
 

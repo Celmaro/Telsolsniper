@@ -3,24 +3,24 @@ use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 
 use crate::{
-    constants::raydium_launchpad::{
+    constants::bonk::{
         accounts, trade::DEFAULT_SLIPPAGE, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR,
     },
-    raydium_launchpad::{
+    bonk::{
         common::{get_amount_out, get_pool_pda, get_token_balance, get_vault_pda},
         pool::Pool,
     },
     trading::core::{
-        params::{BuyParams, RaydiumLaunchpadParams, SellParams},
+        params::{BuyParams, BonkParams, SellParams},
         traits::InstructionBuilder,
     },
 };
 
-/// RaydiumLaunchpad协议的指令构建器
-pub struct RaydiumLaunchpadInstructionBuilder;
+/// Bonk协议的指令构建器
+pub struct BonkInstructionBuilder;
 
 #[async_trait::async_trait]
-impl InstructionBuilder for RaydiumLaunchpadInstructionBuilder {
+impl InstructionBuilder for BonkInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
         if params.amount_sol == 0 {
             return Err(anyhow!("Amount cannot be zero"));
@@ -33,7 +33,7 @@ impl InstructionBuilder for RaydiumLaunchpadInstructionBuilder {
     }
 }
 
-impl RaydiumLaunchpadInstructionBuilder {
+impl BonkInstructionBuilder {
     /// 使用提供的账户信息构建买入指令
     async fn build_buy_instructions_with_accounts(
         &self,
@@ -42,8 +42,8 @@ impl RaydiumLaunchpadInstructionBuilder {
         let protocol_params = params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
-            .ok_or_else(|| anyhow!("Invalid protocol params for RaydiumLaunchpad"))?;
+            .downcast_ref::<BonkParams>()
+            .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
 
         let pool_state = get_pool_pda(&params.mint, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
 
@@ -149,7 +149,7 @@ impl RaydiumLaunchpadInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Base Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::LAUNCHPAD_PROGRAM, false), // Program (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
         ];
         // 创建指令数据
         let mut data = vec![];
@@ -159,7 +159,7 @@ impl RaydiumLaunchpadInstructionBuilder {
         data.extend_from_slice(&share_fee_rate.to_le_bytes());
 
         instructions.push(Instruction {
-            program_id: accounts::LAUNCHPAD_PROGRAM,
+            program_id: accounts::BONK,
             accounts,
             data,
         });
@@ -263,7 +263,7 @@ impl RaydiumLaunchpadInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Base Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::LAUNCHPAD_PROGRAM, false), // Program (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
         ];
 
         // 创建指令数据
@@ -274,7 +274,7 @@ impl RaydiumLaunchpadInstructionBuilder {
         data.extend_from_slice(&share_fee_rate.to_le_bytes());
 
         instructions.push(Instruction {
-            program_id: accounts::LAUNCHPAD_PROGRAM,
+            program_id: accounts::BONK,
             accounts,
             data,
         });

@@ -1,13 +1,13 @@
 # Sol Trade SDK
 
-一个全面的 Rust SDK，用于与 Solana DEX 交易程序进行无缝交互。此 SDK 提供强大的工具和接口集，将 PumpFun、PumpSwap 和 Raydium Launchpad（Bonk.fun）功能集成到您的应用程序中。
+一个全面的 Rust SDK，用于与 Solana DEX 交易程序进行无缝交互。此 SDK 提供强大的工具和接口集，将 PumpFun、PumpSwap 和 Bonk 功能集成到您的应用程序中。
 
 ## 项目特性
 
 1. **PumpFun 交易**: 支持`购买`、`卖出`功能
 2. **PumpSwap 交易**: 支持 PumpSwap 池的交易操作
-3. **Raydium 交易**: 支持 Raydium Launchpad（Bonk.fun）的交易操作
-4. **事件订阅**: 订阅 PumpFun、PumpSwap 和 Raydium Launchpad（Bonk.fun）程序的交易事件
+3. **Bonk 交易**: 支持 Bonk 的交易操作
+4. **事件订阅**: 订阅 PumpFun、PumpSwap 和 Bonk 程序的交易事件
 5. **Yellowstone gRPC**: 使用 Yellowstone gRPC 订阅程序事件
 6. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
 7. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute 等服务
@@ -45,7 +45,7 @@ use sol_trade_sdk::{
                 PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
                 PumpSwapSellEvent, PumpSwapWithdrawEvent,
             },
-            raydium_launchpad::{RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent},
+            bonk::{BonkPoolCreateEvent, BonkTradeEvent},
         },
         Protocol, UnifiedEvent,
     },
@@ -65,11 +65,11 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // 定义回调函数处理事件
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -100,7 +100,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
@@ -123,11 +123,11 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // 定义回调函数处理事件（与上面相同）
     let callback = |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
-            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
-                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
+                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
             },
-            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
-                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            BonkTradeEvent => |e: BonkTradeEvent| {
+                println!("BonkTradeEvent: {:?}", e);
             },
             PumpFunTradeEvent => |e: PumpFunTradeEvent| {
                 println!("PumpFunTradeEvent: {:?}", e);
@@ -158,7 +158,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![
         Protocol::PumpFun,
         Protocol::PumpSwap,
-        Protocol::RaydiumLaunchpad,
+        Protocol::Bonk,
     ];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)
@@ -376,19 +376,19 @@ async fn test_pumpswap() -> AnyResult<()> {
 }
 ```
 
-### 5. Raydium Launchpad 交易操作
+### 5. Bonk 交易操作
 
 ```rust
-use sol_trade_sdk::trading::core::params::RaydiumLaunchpadParams;
+use sol_trade_sdk::trading::core::params::BonkParams;
 
-async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     // 基本参数设置
     let amount = 100_000; // 0.0001 SOL
     let mint = Pubkey::from_str("xxxxxxx")?;
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
 
-    // Raydium Launchpad参数配置
-    let raydium_launchpad_params = RaydiumLaunchpadParams {
+    // Bonk参数配置
+    let bonk_params = BonkParams {
         virtual_base: None,
         virtual_quote: None,
         real_base_before: None,
@@ -396,7 +396,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         auto_handle_wsol: true,
     };
 
-    println!("Buying tokens from Raydium Launchpad...");
+    println!("Buying tokens from letsbonk.fun...");
 
     // 购买操作
     let buy_params = BuyParams {
@@ -410,7 +410,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
         data_size_limit: 0,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
 
     let buy_with_tip_params = buy_params
@@ -422,7 +422,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // 卖出操作
-    println!("Selling tokens from Raydium Launchpad...");
+    println!("Selling tokens from letsbonk.fun...");
 
     let sell_params = SellParams {
         rpc: Some(solana_trade_client.rpc.clone()),
@@ -434,7 +434,7 @@ async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
         priority_fee: solana_trade_client.trade_config.clone().priority_fee,
         lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
         recent_blockhash,
-        protocol_params: Box::new(raydium_launchpad_params.clone()),
+        protocol_params: Box::new(bonk_params.clone()),
     };
 
     solana_trade_client
@@ -475,7 +475,7 @@ let trade_config = TradeConfig {
 
 - **PumpFun**: 主要的 meme 币交易平台
 - **PumpSwap**: PumpFun 的交换协议
-- **Raydium Launchpad**: Raydium 的代币发行平台（Bonk.fun）
+- **Bonk**: 代币发行平台（letsbonk.fun）
 
 ## MEV 保护服务
 
@@ -491,7 +491,7 @@ let trade_config = TradeConfig {
 
 - **BuyParams**: 统一的购买参数结构
 - **SellParams**: 统一的卖出参数结构
-- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams、PumpSwapParams、RaydiumLaunchpadParams）
+- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams、PumpSwapParams、BonkParams）
 
 ### 事件解析系统
 
@@ -519,14 +519,14 @@ src/
 │   ├── protocols/    # 协议特定解析器
 │   │   ├── pumpfun/  # PumpFun事件解析
 │   │   ├── pumpswap/ # PumpSwap事件解析
-│   │   └── raydium_launchpad/ # Raydium Launchpad事件解析
+│   │   └── bonk/     # Bonk事件解析
 │   └── factory.rs    # 解析器工厂
 ├── grpc/             # gRPC客户端
 ├── instruction/      # 指令构建
 ├── protos/           # 协议缓冲区定义
 ├── pumpfun/          # PumpFun交易功能
 ├── pumpswap/         # PumpSwap交易功能
-├── raydium_launchpad/ # Raydium Launchpad交易功能
+├── bonk/             # Bonk交易功能
 ├── swqos/            # MEV服务客户端
 ├── trading/          # 统一交易引擎
 │   ├── common/       # 通用交易工具

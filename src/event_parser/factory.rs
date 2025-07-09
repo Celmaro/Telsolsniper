@@ -3,7 +3,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 
 use crate::event_parser::protocols::{
-    pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_launchpad::parser::RAYDIUM_LAUNCHPAD_PROGRAM_ID, RaydiumLaunchpadEventParser,
+    pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, bonk::parser::BONK_PROGRAM_ID, BonkEventParser,
 };
 
 use super::{
@@ -16,7 +16,7 @@ use super::{
 pub enum Protocol {
     PumpSwap,
     PumpFun,
-    RaydiumLaunchpad,
+    Bonk,
 }
 
 impl Protocol {
@@ -24,7 +24,7 @@ impl Protocol {
         match self {
             Protocol::PumpSwap => vec![PUMPSWAP_PROGRAM_ID],
             Protocol::PumpFun => vec![PUMPFUN_PROGRAM_ID],
-            Protocol::RaydiumLaunchpad => vec![RAYDIUM_LAUNCHPAD_PROGRAM_ID],
+            Protocol::Bonk => vec![BONK_PROGRAM_ID],
         }
     }
 }
@@ -34,7 +34,7 @@ impl std::fmt::Display for Protocol {
         match self {
             Protocol::PumpSwap => write!(f, "PumpSwap"),
             Protocol::PumpFun => write!(f, "PumpFun"),
-            Protocol::RaydiumLaunchpad => write!(f, "RaydiumLaunchpad"),
+            Protocol::Bonk => write!(f, "Bonk"),
         }
     }
 }
@@ -46,7 +46,7 @@ impl std::str::FromStr for Protocol {
         match s.to_lowercase().as_str() {
             "pumpswap" => Ok(Protocol::PumpSwap),
             "pumpfun" => Ok(Protocol::PumpFun),
-            "raydiumlaunchpad" => Ok(Protocol::RaydiumLaunchpad),
+            "bonk" => Ok(Protocol::Bonk),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -61,7 +61,7 @@ impl EventParserFactory {
         match protocol {
             Protocol::PumpSwap => Arc::new(PumpSwapEventParser::new()),
             Protocol::PumpFun => Arc::new(PumpFunEventParser::new()),
-            Protocol::RaydiumLaunchpad => Arc::new(RaydiumLaunchpadEventParser::new()),
+            Protocol::Bonk => Arc::new(BonkEventParser::new()),
         }
     }
 

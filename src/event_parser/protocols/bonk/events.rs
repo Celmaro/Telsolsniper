@@ -1,4 +1,4 @@
-use crate::event_parser::protocols::raydium_launchpad::types::{
+use crate::event_parser::protocols::bonk::types::{
     CurveParams, MintParams, PoolStatus, TradeDirection, VestingParams,
 };
 use crate::event_parser::{common::EventMetadata, core::traits::UnifiedEvent};
@@ -9,7 +9,7 @@ use solana_sdk::pubkey::Pubkey;
 
 /// 买入事件
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, BorshDeserialize)]
-pub struct RaydiumLaunchpadTradeEvent {
+pub struct BonkTradeEvent {
     #[borsh(skip)]
     pub metadata: EventMetadata,
     pub pool_state: Pubkey,
@@ -55,7 +55,7 @@ pub struct RaydiumLaunchpadTradeEvent {
 
 // 使用宏生成UnifiedEvent实现，指定需要合并的字段
 impl_unified_event!(
-    RaydiumLaunchpadTradeEvent,
+    BonkTradeEvent,
     pool_state,
     total_base_sell,
     virtual_base,
@@ -75,7 +75,7 @@ impl_unified_event!(
 
 /// 创建池事件
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, BorshDeserialize)]
-pub struct RaydiumLaunchpadPoolCreateEvent {
+pub struct BonkPoolCreateEvent {
     #[borsh(skip)]
     pub metadata: EventMetadata,
     pub pool_state: Pubkey,
@@ -102,7 +102,7 @@ pub struct RaydiumLaunchpadPoolCreateEvent {
 
 // 使用宏生成UnifiedEvent实现，指定需要合并的字段
 impl_unified_event!(
-    RaydiumLaunchpadPoolCreateEvent,
+    BonkPoolCreateEvent,
     pool_state,
     creator,
     config,

@@ -7,7 +7,7 @@ use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::pumpswap::common::get_token_balance;
 use crate::swqos::SwqosClient;
 use crate::trading::{
-    core::params::RaydiumLaunchpadParams, factory::Protocol, SellParams, TradeFactory,
+    core::params::BonkParams, factory::Protocol, SellParams, TradeFactory,
 };
 
 // Sell tokens to a Pumpswap pool
@@ -25,9 +25,9 @@ pub async fn sell(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
 ) -> Result<(), anyhow::Error> {
-    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
+    let executor = TradeFactory::create_executor(Protocol::Bonk);
     // 创建PumpFun协议参数
-    let protocol_params = Box::new(RaydiumLaunchpadParams {
+    let protocol_params = Box::new(BonkParams {
         virtual_base: Some(virtual_base),
         virtual_quote: Some(virtual_quote),
         real_base_before: Some(real_base_before),
@@ -137,9 +137,9 @@ pub async fn sell_with_tip(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
 ) -> Result<(), anyhow::Error> {
-    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
+    let executor = TradeFactory::create_executor(Protocol::Bonk);
     // 创建PumpFun协议参数
-    let protocol_params = Box::new(RaydiumLaunchpadParams {
+    let protocol_params = Box::new(BonkParams {
         virtual_base: Some(virtual_base),
         virtual_quote: Some(virtual_quote),
         real_base_before: Some(real_base_before),

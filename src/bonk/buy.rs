@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::swqos::SwqosClient;
 use crate::trading::{
-    core::params::{PumpSwapParams, RaydiumLaunchpadParams},
+    core::params::{PumpSwapParams, BonkParams},
     factory::Protocol,
     BuyParams, TradeFactory,
 };
@@ -31,9 +31,9 @@ pub async fn buy(
     auto_handle_wsol: bool,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
-    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
+    let executor = TradeFactory::create_executor(Protocol::Bonk);
     // 创建协议特定参数
-    let protocol_params = Box::new(RaydiumLaunchpadParams {
+    let protocol_params = Box::new(BonkParams {
         auto_handle_wsol: auto_handle_wsol,
         virtual_base: Some(virtual_base),
         virtual_quote: Some(virtual_quote),
@@ -77,9 +77,9 @@ pub async fn buy_with_tip(
     auto_handle_wsol: bool,
 ) -> Result<(), anyhow::Error> {
     // 创建执行器
-    let executor = TradeFactory::create_executor(Protocol::RaydiumLaunchpad);
+    let executor = TradeFactory::create_executor(Protocol::Bonk);
     // 创建协议特定参数
-    let protocol_params = Box::new(RaydiumLaunchpadParams {
+    let protocol_params = Box::new(BonkParams {
         auto_handle_wsol: auto_handle_wsol,
         virtual_base: Some(virtual_base),
         virtual_quote: Some(virtual_quote),

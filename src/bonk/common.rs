@@ -38,22 +38,22 @@ pub fn get_amount_out(
 
 pub fn get_pool_pda(base_mint: &Pubkey, quote_mint: &Pubkey) -> Option<Pubkey> {
     let seeds: &[&[u8]; 3] = &[
-        constants::raydium_launchpad::seeds::POOL_SEED,
+        constants::bonk::seeds::POOL_SEED,
         base_mint.as_ref(),
         quote_mint.as_ref(),
     ];
-    let program_id: &Pubkey = &constants::raydium_launchpad::accounts::LAUNCHPAD_PROGRAM;
+    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
     let seeds: &[&[u8]; 3] = &[
-        constants::raydium_launchpad::seeds::POOL_VAULT_SEED,
+        constants::bonk::seeds::POOL_VAULT_SEED,
         pool_state.as_ref(),
         mint.as_ref(),
     ];
-    let program_id: &Pubkey = &constants::raydium_launchpad::accounts::LAUNCHPAD_PROGRAM;
+    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }

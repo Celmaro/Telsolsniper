@@ -22,8 +22,8 @@ use yellowstone_grpc_proto::geyser::{
 use crate::common::AnyResult;
 use crate::constants::pumpfun::trade;
 use crate::event_parser::protocols::pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent};
-use crate::event_parser::protocols::raydium_launchpad::{
-    RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent,
+use crate::event_parser::protocols::bonk::{
+    BonkPoolCreateEvent, BonkTradeEvent,
 };
 use crate::event_parser::{EventParserFactory, Protocol, UnifiedEvent};
 

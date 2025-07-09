@@ -1,4 +1,4 @@
-use crate::{common::SolanaRpcClient, constants::raydium_launchpad::accounts};
+use crate::{common::SolanaRpcClient, constants::bonk::accounts};
 use anyhow::anyhow;
 use borsh::BorshDeserialize;
 use solana_sdk::pubkey::Pubkey;
@@ -53,8 +53,8 @@ impl Pool {
     ) -> Result<Self, anyhow::Error> {
         let account = rpc.get_account(pool_address).await?;
 
-        if account.owner != accounts::LAUNCHPAD_PROGRAM {
-            return Err(anyhow!("Account is not owned by RaydiumLaunchpad program"));
+        if account.owner != accounts::BONK {
+            return Err(anyhow!("Account is not owned by Bonk program"));
         }
 
         Self::from_bytes(&account.data)

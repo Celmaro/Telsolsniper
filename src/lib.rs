@@ -8,7 +8,7 @@ pub mod instruction;
 pub mod protos;
 pub mod pumpfun;
 pub mod pumpswap;
-pub mod raydium_launchpad;
+pub mod bonk;
 pub mod swqos;
 pub mod trading;
 
@@ -26,7 +26,7 @@ use swqos::SwqosClient;
 use common::{PriorityFee, SolanaRpcClient, TradeConfig};
 
 use accounts::BondingCurveAccount;
-use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, RAYDIUM_LAUNCHPAD};
+use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, BONK};
 use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 
 use crate::event_parser::protocols::pumpfun::PumpFunTradeEvent;
@@ -34,7 +34,7 @@ use crate::swqos::SwqosConfig;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpFunSellParams;
 use crate::trading::core::params::PumpSwapParams;
-use crate::trading::core::params::RaydiumLaunchpadParams;
+use crate::trading::core::params::BonkParams;
 use crate::trading::BuyWithTipParams;
 use crate::trading::SellParams;
 use crate::trading::SellWithTipParams;
@@ -181,9 +181,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = buy_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::buy::buy(
+            bonk::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -270,9 +270,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = buy_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::buy::buy(
+            bonk::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -345,9 +345,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = sell_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::sell::sell_by_percent(
+            bonk::sell::sell_by_percent(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -417,9 +417,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = sell_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::sell::sell_by_amount(
+            bonk::sell::sell_by_amount(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -492,9 +492,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = sell_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::sell::sell_by_percent_with_tip(
+            bonk::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -566,9 +566,9 @@ impl SolanaTrade {
         } else if let Some(protocol_params) = sell_params
             .protocol_params
             .as_any()
-            .downcast_ref::<RaydiumLaunchpadParams>()
+            .downcast_ref::<BonkParams>()
         {
-            raydium_launchpad::sell::sell_by_amount_with_tip(
+            bonk::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),

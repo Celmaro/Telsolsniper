@@ -10,7 +10,7 @@ use std::fmt::Debug;
 
 use crate::{
     error,
-    event_parser::{common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, raydium_launchpad::{RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent}}},
+    event_parser::{common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, bonk::{BonkPoolCreateEvent, BonkTradeEvent}}},
 };
 
 /// 统一事件接口 - 所有协议的事件都需要实现此trait
@@ -178,7 +178,7 @@ pub trait EventParser: Send + Sync {
 
     fn process_events(&self, mut events: Vec<Box<dyn UnifiedEvent>>, bot_wallet: Option<Pubkey>) -> Vec<Box<dyn UnifiedEvent>> {
         let mut dev_address = None;
-        let mut raydium_dev_address = None;
+        let mut bonk_dev_address = None;
         for event in &mut events {
             if let Some(token_info) = event.as_any().downcast_ref::<PumpFunCreateTokenEvent>() {
                 dev_address = Some(token_info.user);
@@ -195,14 +195,14 @@ pub trait EventParser: Send + Sync {
             }
             if let Some(pool_info) = event
                 .as_any()
-                .downcast_ref::<RaydiumLaunchpadPoolCreateEvent>()
+                .downcast_ref::<BonkPoolCreateEvent>()
             {
-                raydium_dev_address = Some(pool_info.creator);
+                bonk_dev_address = Some(pool_info.creator);
             } else if let Some(trade_info) = event
                 .as_any_mut()
-                .downcast_mut::<RaydiumLaunchpadTradeEvent>()
+                .downcast_mut::<BonkTradeEvent>()
             {
-                if Some(trade_info.payer) == raydium_dev_address {
+                if Some(trade_info.payer) == bonk_dev_address {
                     trade_info.is_dev_create_token_trade = true;
                 } else if Some(trade_info.payer) == bot_wallet {
                     trade_info.is_bot = true;
