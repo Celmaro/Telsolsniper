@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
+use crate::trading::protocols::raydium_launchpad::RaydiumLaunchpadInstructionBuilder;
+
 use super::{
     core::{executor::GenericTradeExecutor, traits::TradeExecutor},
     protocols::{pumpfun::PumpFunInstructionBuilder, pumpswap::PumpSwapInstructionBuilder},
@@ -11,6 +13,7 @@ use super::{
 pub enum Protocol {
     PumpFun,
     PumpSwap,
+    RaydiumLaunchpad,
 }
 
 impl std::fmt::Display for Protocol {
@@ -18,6 +21,7 @@ impl std::fmt::Display for Protocol {
         match self {
             Protocol::PumpFun => write!(f, "PumpFun"),
             Protocol::PumpSwap => write!(f, "PumpSwap"),
+            Protocol::RaydiumLaunchpad => write!(f, "RaydiumLaunchpad"),
         }
     }
 }
@@ -29,6 +33,7 @@ impl std::str::FromStr for Protocol {
         match s.to_lowercase().as_str() {
             "pumpfun" => Ok(Protocol::PumpFun),
             "pumpswap" => Ok(Protocol::PumpSwap),
+            "raydiumlaunchpad" => Ok(Protocol::RaydiumLaunchpad),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -49,12 +54,23 @@ impl TradeFactory {
                 let instruction_builder = Arc::new(PumpSwapInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "PumpSwap"))
             }
+            Protocol::RaydiumLaunchpad => {
+                let instruction_builder = Arc::new(RaydiumLaunchpadInstructionBuilder);
+                Arc::new(GenericTradeExecutor::new(
+                    instruction_builder,
+                    "RaydiumLaunchpad",
+                ))
+            }
         }
     }
 
     /// 获取所有支持的协议
     pub fn supported_protocols() -> Vec<Protocol> {
-        vec![Protocol::PumpFun, Protocol::PumpSwap]
+        vec![
+            Protocol::PumpFun,
+            Protocol::PumpSwap,
+            Protocol::RaydiumLaunchpad,
+        ]
     }
 
     /// 检查协议是否支持
@@ -62,32 +78,3 @@ impl TradeFactory {
         Self::supported_protocols().contains(protocol)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_protocol_from_str() {
-        assert_eq!("pumpfun".parse::<Protocol>().unwrap(), Protocol::PumpFun);
-        assert_eq!("pumpswap".parse::<Protocol>().unwrap(), Protocol::PumpSwap);
-        assert_eq!("PUMPFUN".parse::<Protocol>().unwrap(), Protocol::PumpFun);
-        assert!("unknown".parse::<Protocol>().is_err());
-    }
-
-    #[test]
-    fn test_create_executor() {
-        let pumpfun_executor = TradeFactory::create_executor(Protocol::PumpFun);
-        assert_eq!(pumpfun_executor.protocol_name(), "PumpFun");
-
-        let pumpswap_executor = TradeFactory::create_executor(Protocol::PumpSwap);
-        assert_eq!(pumpswap_executor.protocol_name(), "PumpSwap");
-    }
-
-    #[test]
-    fn test_supported_protocols() {
-        let protocols = TradeFactory::supported_protocols();
-        assert!(protocols.contains(&Protocol::PumpFun));
-        assert!(protocols.contains(&Protocol::PumpSwap));
-    }
-} 

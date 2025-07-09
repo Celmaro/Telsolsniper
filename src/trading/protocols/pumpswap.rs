@@ -13,7 +13,6 @@ use crate::{
         get_token_balance,
     },
     trading::core::{
-        constants::DEFAULT_SLIPPAGE_BASIS_POINTS,
         params::{BuyParams, PumpSwapParams, SellParams},
         traits::InstructionBuilder,
     },
@@ -366,6 +365,17 @@ impl PumpSwapInstructionBuilder {
         let coin_creator_vault_authority = coin_creator_vault_authority(params.creator);
 
         let mut instructions = vec![];
+
+        // 插入wsol
+        instructions.push(
+            // 创建wSOL ATA账户，如果不存在
+            create_associated_token_account_idempotent(
+                &params.payer.pubkey(),
+                &params.payer.pubkey(),
+                &accounts::WSOL_TOKEN_ACCOUNT,
+                &accounts::TOKEN_PROGRAM,
+            ),
+        );
 
         // 创建用户的代币账户
         instructions.push(create_associated_token_account_idempotent(

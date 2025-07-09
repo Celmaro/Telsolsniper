@@ -8,7 +8,7 @@ use solana_sdk::{
 };
 use spl_associated_token_account::get_associated_token_address;
 use pumpfun_program::accounts::BondingCurveAccount as PumpfunBondingCurveAccount;
-use crate::{accounts::{self, BondingCurveAccount}, common::{pumpfun::logs_data::TradeInfo, PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}};
+use crate::{accounts::{self, BondingCurveAccount}, common::{PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}, event_parser::protocols::pumpfun::PumpFunTradeEvent};
 
 lazy_static::lazy_static! {
     static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<accounts::GlobalAccount>>> = RwLock::new(HashMap::new());
@@ -327,7 +327,7 @@ pub fn get_token_price(virtual_sol_reserves: u64, virtual_token_reserves: u64) -
 }
 
 #[inline]
-pub fn get_buy_price(amount: u64, trade_info: &TradeInfo) -> u64 {
+pub fn get_buy_price(amount: u64, trade_info: &PumpFunTradeEvent) -> u64 {
     if amount == 0 {
         return 0;
     }

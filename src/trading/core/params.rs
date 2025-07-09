@@ -122,6 +122,26 @@ impl ProtocolParams for PumpSwapParams {
     }
 }
 
+/// RaydiumLaunchpad协议特定参数
+#[derive(Clone)]
+pub struct RaydiumLaunchpadParams {
+    pub virtual_base: Option<u128>,
+    pub virtual_quote: Option<u128>,
+    pub real_base_before: Option<u128>,
+    pub real_quote_before: Option<u128>,
+    pub auto_handle_wsol: bool,
+}
+
+impl ProtocolParams for RaydiumLaunchpadParams {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolParams> {
+        Box::new(self.clone())
+    }
+}
+
 impl BuyParams {
     /// 转换为BuyWithTipParams
     pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> BuyWithTipParams {

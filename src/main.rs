@@ -1,299 +1,45 @@
 use std::{str::FromStr, sync::Arc};
 
-use sol_trade_sdk::{accounts::BondingCurveAccount, common::{pumpfun::PumpfunEvent, pumpswap::PumpSwapEvent, raydium::RaydiumEvent, AnyResult, PriorityFee, TradeConfig}, constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, grpc::{ShredStreamGrpc, YellowstoneGrpc}, pumpfun::common::get_bonding_curve_pda, swqos::{SwqosConfig, SwqosRegion, SwqosType}, SolanaTrade};
+use sol_trade_sdk::{
+    accounts::BondingCurveAccount,
+    common::{AnyResult, PriorityFee, TradeConfig},
+    constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type},
+    event_parser::{
+        protocols::{
+            pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
+            pumpswap::{
+                PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent, PumpSwapSellEvent,
+                PumpSwapWithdrawEvent,
+            },
+            raydium_launchpad::{RaydiumLaunchpadPoolCreateEvent, RaydiumLaunchpadTradeEvent},
+        },
+        Protocol, UnifiedEvent,
+    },
+    grpc::{ShredStreamGrpc, YellowstoneGrpc},
+    match_event,
+    pumpfun::common::get_bonding_curve_account_v2,
+    swqos::{SwqosConfig, SwqosRegion},
+    trading::{
+        core::params::{PumpFunParams, PumpFunSellParams, PumpSwapParams, RaydiumLaunchpadParams},
+        BuyParams, SellParams,
+    },
+    SolanaTrade,
+};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // test_pumpfun_with_shreds().await?;
-    // test_pumpfun_with_grpc().await?;
-    // test_pumpswap_with_shreds().await?;
-    // test_pumpswap_with_grpc().await?;
-    // test_raydium_with_shreds().await?;
-    // test_raydium_with_grpc().await?;
-    // test_pumpfun_sniper().await?;
-    // test_pumpfun().await?;
-    test_pumpswap().await?;
-    Ok(())
-}
-
-async fn test_pumpfun_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
-    let grpc = ShredStreamGrpc::new("http://127.0.0.1:10000".to_string()).await?;
-
-    let callback = |event: PumpfunEvent| {
-        // TradeInfo 的 sol_amount 不是真实线上消费/获取的数量
-        // 当 is_buy 为 true 时，sol_amount = max_sol_cost，代表用户愿意支付的最大金额
-        // 当 is_buy 为 false 时，sol_amount = min_sol_output，代表用户愿意接受的最小金额
-        //
-        // timestamp 不是真实交易发生的时间，取的值为当前系统的时间
-        //
-        // 无法获取下面4个值
-        // virtual_sol_reserves: 0,
-        // virtual_token_reserves: 0,
-        // real_sol_reserves: 0,
-        // real_token_reserves: 0,
-        match event {
-            PumpfunEvent::NewDevTrade(trade_info) => {
-                println!("Received new dev trade event: {:?}", trade_info);
-            }
-            PumpfunEvent::NewToken(token_info) => {
-                println!("Received new token event: {:?}", token_info);
-            }
-            PumpfunEvent::NewUserTrade(trade_info) => {
-                println!("Received new trade event: {:?}", trade_info);
-            }
-            PumpfunEvent::NewBotTrade(trade_info) => {
-                println!("Received new bot trade event: {:?}", trade_info);
-            }
-            PumpfunEvent::Error(err) => {
-                println!("Received error: {}", err);
-            }
-        }
-    };
-
-    grpc.shredstream_subscribe(callback, None).await?;
-
-    Ok(())
-}
-
-async fn test_pumpfun_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
-    let grpc = YellowstoneGrpc::new(
-        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
-        None,
-    )?;
-
-    let callback = |event: PumpfunEvent| match event {
-        PumpfunEvent::NewDevTrade(trade_info) => {
-            println!("Received new dev trade event: {:?}", trade_info);
-        }
-        PumpfunEvent::NewToken(token_info) => {
-            println!("Received new token event: {:?}", token_info);
-        }
-        PumpfunEvent::NewUserTrade(trade_info) => {
-            println!("Received new trade event: {:?}", trade_info);
-        }
-        PumpfunEvent::NewBotTrade(trade_info) => {
-            println!("Received new bot trade event: {:?}", trade_info);
-        }
-        PumpfunEvent::Error(err) => {
-            println!("Received error: {}", err);
-        }
-    };
-
-    grpc.subscribe_pumpfun(callback, None).await?;
-
-    Ok(())
-}
-
-async fn test_pumpswap_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 ShredStream 客户端订阅 PumpSwap 事件
-    println!("正在订阅 PumpSwap ShredStream 事件...");
-
-    let grpc_client = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
-
-    // 定义回调函数处理 PumpSwap 事件
-    let callback = |event: PumpSwapEvent| {
-        match event {
-            PumpSwapEvent::Buy(buy_event) => {
-                // println!("buy_event: {:?}", buy_event);
-            }
-            PumpSwapEvent::Sell(sell_event) => {
-                println!("sell_event: {:?}", sell_event);
-            }
-            PumpSwapEvent::CreatePool(create_event) => {
-                // println!("create_event: {:?}", create_event);
-            }
-            PumpSwapEvent::Deposit(deposit_event) => {
-                // println!("deposit_event: {:?}", deposit_event);
-            }
-            PumpSwapEvent::Withdraw(withdraw_event) => {
-                // println!("withdraw_event: {:?}", withdraw_event);
-            }
-            PumpSwapEvent::Disable(disable_event) => {
-                // println!("disable_event: {:?}", disable_event);
-            }
-            PumpSwapEvent::UpdateAdmin(update_admin_event) => {
-                // println!("update_admin_event: {:?}", update_admin_event);
-            }
-            PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
-                // println!("update_fee_event: {:?}", update_fee_event);
-            }
-            PumpSwapEvent::Error(err) => {
-                println!("error: {}", err);
-            }
-        }
-    };
-    // 订阅 PumpSwap 事件
-    println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
-
-    grpc_client.shredstream_subscribe_pumpswap(callback).await?;
-
-    Ok(())
-}
-
-async fn test_pumpswap_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 GRPC 客户端订阅 PumpSwap 事件
-    println!("正在订阅 PumpSwap GRPC 事件...");
-
-    let grpc = YellowstoneGrpc::new(
-        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
-        None,
-    )?;
-
-    // 定义回调函数处理 PumpSwap 事件
-    let callback = |event: PumpSwapEvent| match event {
-        PumpSwapEvent::Buy(buy_event) => {
-            println!("buy_event: {:?}", buy_event);
-        }
-        PumpSwapEvent::Sell(sell_event) => {
-            println!("sell_event: {:?}", sell_event);
-        }
-        PumpSwapEvent::CreatePool(create_event) => {
-            println!("create_event: {:?}", create_event);
-        }
-        PumpSwapEvent::Deposit(deposit_event) => {
-            println!("deposit_event: {:?}", deposit_event);
-        }
-        PumpSwapEvent::Withdraw(withdraw_event) => {
-            println!("withdraw_event: {:?}", withdraw_event);
-        }
-        PumpSwapEvent::Disable(disable_event) => {
-            println!("disable_event: {:?}", disable_event);
-        }
-        PumpSwapEvent::UpdateAdmin(update_admin_event) => {
-            println!("update_admin_event: {:?}", update_admin_event);
-        }
-        PumpSwapEvent::UpdateFeeConfig(update_fee_event) => {
-            println!("update_fee_event: {:?}", update_fee_event);
-        }
-        PumpSwapEvent::Error(err) => {
-            println!("error: {}", err);
-        }
-    };
-    // 订阅 PumpSwap 事件
-    println!("开始监听 PumpSwap 事件，按 Ctrl+C 停止...");
-
-    grpc.subscribe_pumpswap(callback).await?;
-
-    Ok(())
-}
-
-async fn test_raydium_with_shreds() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 ShredStream 客户端订阅 Raydium 事件
-    println!("正在订阅 Raydium ShredStream 事件...");
-
-    let grpc_client = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
-
-    // 定义回调函数处理 Raydium 事件
-    let callback = |event: RaydiumEvent| {
-        match event {
-            RaydiumEvent::V4Swap(v4_swap_event) => {
-                println!("v4_swap_event: {:?}", v4_swap_event);
-            }
-            RaydiumEvent::SwapBaseInput(swap_base_input_event) => {
-                println!("swap_base_input_event: {:?}", swap_base_input_event);
-            }
-            RaydiumEvent::SwapBaseOutput(swap_base_output_event) => {
-                println!("swap_base_output_event: {:?}", swap_base_output_event);
-            }
-            RaydiumEvent::Error(err) => {
-                println!("error: {}", err);
-            }
-        }
-    };
-    // 订阅 Raydium 事件
-    println!("开始监听 Raydium 事件，按 Ctrl+C 停止...");
-
-    grpc_client.shredstream_subscribe_raydium(callback).await?;
-
-    Ok(())
-}
-
-async fn test_raydium_with_grpc() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 GRPC 客户端订阅 Raydium 事件
-    println!("正在订阅 Raydium GRPC 事件...");
-
-    let grpc = YellowstoneGrpc::new(
-        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
-        None,
-    )?;
-
-    // 定义回调函数处理 PumpSwap 事件
-    let callback = |event: RaydiumEvent| match event {
-        RaydiumEvent::V4Swap(v4_swap_event) => {
-            println!("v4_swap_event: {:?}", v4_swap_event);
-        }
-        RaydiumEvent::SwapBaseInput(swap_base_input_event) => {
-            println!("swap_base_input_event: {:?}", swap_base_input_event);
-        }
-        RaydiumEvent::SwapBaseOutput(swap_base_output_event) => {
-            println!("swap_base_output_event: {:?}", swap_base_output_event);
-        }
-        RaydiumEvent::Error(err) => {
-            println!("error: {}", err);
-        }
-    };
-    // 订阅 Raydium 事件
-    println!("开始监听 Raydium 事件，按 Ctrl+C 停止...");
-
-    grpc.subscribe_raydium(callback).await?;
-
-    Ok(())
-}
-
-async fn test_pumpfun_sniper() -> AnyResult<()> {
-    // 创建一个随机账户作为交易者
-    let payer = Keypair::new();
-    
-    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
-    let swqos_configs = vec![
-        SwqosConfig::Jito(SwqosRegion::Frankfurt),
-        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Default(rpc_url.clone()),
-    ];
-
-    // Define cluster configuration
-    let trade_config = TradeConfig {
-        rpc_url: rpc_url.clone(),
-        commitment: CommitmentConfig::confirmed(),
-        priority_fee: PriorityFee::default(),
-        swqos_configs,
-        lookup_table_key: None,
-    };
-    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
-
-
-    let creator = Pubkey::from_str("xxx")?; // dev account
-    let buy_sol_cost = 500_000; // 0.0005 SOL
-    let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(rpc_url);
-    let recent_blockhash = rpc.get_latest_blockhash().unwrap();
-    let mint_pubkey = Pubkey::from_str("xxx")?; // token mint
-    println!("Sniping buy tokens from PumpFun...");
-    // get bonding curve
-    let dev_buy_token = 100_000; // test value
-    let dev_cost_sol = 100_000; // test value
-    let bonding_curve = BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
-    solana_trade_client
-        .sniper_buy(
-            mint_pubkey,
-            creator,
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            Some(Arc::new(bonding_curve)),
-        )
-        .await?;
+    test_pumpfun().await?;
+    // test_pumpswap().await?;
+    // test_raydium_launchpad().await?;
+    // test_grpc().await?;
+    // test_shreds().await?;
     Ok(())
 }
 
 async fn test_pumpfun() -> AnyResult<()> {
     let payer = Keypair::new();
-
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
     let swqos_configs = vec![
         SwqosConfig::Jito(SwqosRegion::Frankfurt),
@@ -303,7 +49,6 @@ async fn test_pumpfun() -> AnyResult<()> {
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
     ];
-
     // Define cluster configuration
     let trade_config = TradeConfig {
         rpc_url: rpc_url.clone(),
@@ -312,25 +57,24 @@ async fn test_pumpfun() -> AnyResult<()> {
         swqos_configs,
         lookup_table_key: None,
     };
-
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
-    let creator = Pubkey::from_str("xxx")?; // dev account
-    let buy_sol_cost = 500_000; // 0.0005 SOL
+    let creator = Pubkey::from_str("xxxxxx")?; // dev account
+    let buy_sol_cost = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100);
     let rpc = RpcClient::new(rpc_url);
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
-    let trade_platform = "pumpfun".to_string();
-    let mint_pubkey = Pubkey::from_str("xxx")?; // token mint
+    let mint_pubkey = Pubkey::from_str("xxxxxx")?; // token mint
     println!("Buying tokens from PumpFun...");
     // get bonding curve
-    // Relevant on-chain information can be obtained from rpc/grpc
-    let virtual_token_reserves = 0;
-    let virtual_sol_reserves = 0;
-    let real_token_reserves = 0;
-    let real_sol_reserves = 0;
+    let (bonding_curve, bonding_curve_pda) =
+        get_bonding_curve_account_v2(&solana_trade_client.rpc, &mint_pubkey).await?;
+    let virtual_token_reserves = bonding_curve.virtual_token_reserves;
+    let virtual_sol_reserves = bonding_curve.virtual_sol_reserves;
+    let real_token_reserves = bonding_curve.real_token_reserves;
+    let real_sol_reserves = bonding_curve.real_sol_reserves;
     let bonding_curve = BondingCurveAccount {
-        discriminator: 0,
-        account: get_bonding_curve_pda(&mint_pubkey).unwrap(),
+        discriminator: bonding_curve.discriminator,
+        account: bonding_curve_pda,
         virtual_token_reserves: virtual_token_reserves,
         virtual_sol_reserves: virtual_sol_reserves,
         real_token_reserves: real_token_reserves,
@@ -339,34 +83,57 @@ async fn test_pumpfun() -> AnyResult<()> {
         complete: false,
         creator: creator,
     };
+    // 如果是狙击开发者
+    // let bonding_curve =
+    //     BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
+    // buy
+    let buy_protocol_params = PumpFunParams {
+        trade_type: trade_type::COPY_BUY.to_string(),
+        bonding_curve: Some(Arc::new(bonding_curve)),
+    };
+    let buy_params = BuyParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint_pubkey,
+        creator: creator,
+        amount_sol: buy_sol_cost,
+        slippage_basis_points: slippage_basis_points,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        data_size_limit: 0,
+        protocol_params: Box::new(buy_protocol_params.clone()),
+    };
+    let buy_with_tip_params = buy_params
+        .clone()
+        .with_tip(solana_trade_client.swqos_clients.clone());
     solana_trade_client
-        .buy(
-            mint_pubkey,
-            creator,
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            Some(Arc::new(bonding_curve)),
-            trade_platform.clone(),
-        )
+        .buy_use_buy_params(buy_with_tip_params, None)
         .await?;
-    // Sell 30% * amount_token quantity
-    // solana_trade_client
-    //     .sell_by_percent(
-    //         mint_pubkey,
-    //         creator,
-    //         30,
-    //         100,
-    //         recent_blockhash,
-    //         trade_platform.clone(),
-    //     )
-    //     .await?;
+    // sell
+    println!("Selling tokens from PumpFun...");
+    let sell_protocol_params = PumpFunSellParams {};
+    let amount_token = 0; // 写上真实的amount_token
+    let sell_params = SellParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint_pubkey,
+        creator: creator,
+        amount_token: Some(amount_token),
+        slippage_basis_points: None,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        protocol_params: Box::new(sell_protocol_params.clone()),
+    };
+    solana_trade_client
+        .sell_by_amount_use_sell_params(sell_params)
+        .await?;
     Ok(())
 }
 
 async fn test_pumpswap() -> AnyResult<()> {
     let payer = Keypair::new();
-
     let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
     let swqos_configs = vec![
         SwqosConfig::Jito(SwqosRegion::Frankfurt),
@@ -376,7 +143,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
     ];
-
     // Define cluster configuration
     let trade_config = TradeConfig {
         rpc_url: rpc_url.clone(),
@@ -387,34 +153,237 @@ async fn test_pumpswap() -> AnyResult<()> {
     };
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
     let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
-    let buy_sol_cost = 500_000; // 0.0005 SOL
+    let buy_sol_cost = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100);
     let rpc = RpcClient::new(rpc_url);
     let recent_blockhash = rpc.get_latest_blockhash().unwrap();
-    let trade_platform = "pumpswap".to_string();
     let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?; // token mint
     println!("Buying tokens from PumpSwap...");
+    // buy
+    let protocol_params = PumpSwapParams {
+        pool: None,
+        pool_base_token_account: None,
+        pool_quote_token_account: None,
+        user_base_token_account: None,
+        user_quote_token_account: None,
+        auto_handle_wsol: true,
+    };
+    let buy_params = BuyParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint_pubkey,
+        creator: creator,
+        amount_sol: buy_sol_cost,
+        slippage_basis_points: slippage_basis_points,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        data_size_limit: 0,
+        protocol_params: Box::new(protocol_params.clone()),
+    };
+    let buy_with_tip_params = buy_params
+        .clone()
+        .with_tip(solana_trade_client.swqos_clients.clone());
     solana_trade_client
-        .buy(
-            mint_pubkey,
-            creator,
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            trade_platform.clone(),
-        )
+        .buy_use_buy_params(buy_with_tip_params, None)
         .await?;
-    // Sell 30% * amount_token quantity
-    // solana_trade_client
-    //     .sell_by_percent(
-    //         mint_pubkey,
-    //         creator,
-    //         30,
-    //         100,
-    //         recent_blockhash,
-    //         trade_platform.clone(),
-    //     )
-    //     .await?;
+    // sell
+    println!("Selling tokens from PumpSwap...");
+    let amount_token = 0; // 写上真实的amount_token
+    let sell_params = SellParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint_pubkey,
+        creator: creator,
+        amount_token: Some(amount_token),
+        slippage_basis_points: None,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        protocol_params: Box::new(protocol_params.clone()),
+    };
+    solana_trade_client
+        .sell_by_amount_use_sell_params(sell_params)
+        .await?;
+    Ok(())
+}
+
+async fn test_raydium_launchpad() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建一个随机账户作为交易者
+    let payer = Keypair::new();
+    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+    let swqos_configs = vec![
+        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Default(rpc_url.clone()),
+    ];
+    // Define cluster configuration
+    let trade_config = TradeConfig {
+        rpc_url: rpc_url.clone(),
+        commitment: CommitmentConfig::confirmed(),
+        priority_fee: PriorityFee::default(),
+        swqos_configs,
+        lookup_table_key: None,
+    };
+    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
+    let amount = 100_000; // 0.0001 SOL
+    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let mint = Pubkey::from_str("xxxxxxx")?;
+    let raydium_launchpad_params = RaydiumLaunchpadParams {
+        virtual_base: None,
+        virtual_quote: None,
+        real_base_before: None,
+        real_quote_before: None,
+        auto_handle_wsol: true,
+    };
+    println!("Buying tokens from Raydium Launchpad...");
+    // buy
+    let buy_params = BuyParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint,
+        creator: Pubkey::default(),
+        amount_sol: amount,
+        slippage_basis_points: None,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        data_size_limit: 0,
+        protocol_params: Box::new(raydium_launchpad_params.clone()),
+    };
+    let buy_with_tip_params = buy_params
+        .clone()
+        .with_tip(solana_trade_client.swqos_clients.clone());
+    solana_trade_client
+        .buy_use_buy_params(buy_with_tip_params, None)
+        .await?;
+    // sell
+    println!("Selling tokens from Raydium Launchpad...");
+    let sell_params = SellParams {
+        rpc: Some(solana_trade_client.rpc.clone()),
+        payer: solana_trade_client.payer.clone(),
+        mint: mint,
+        creator: Pubkey::default(),
+        amount_token: None,
+        slippage_basis_points: None,
+        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
+        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
+        recent_blockhash,
+        protocol_params: Box::new(raydium_launchpad_params.clone()),
+    };
+    solana_trade_client
+        .sell_by_amount_use_sell_params(sell_params)
+        .await?;
+    Ok(())
+}
+
+async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 GRPC 客户端订阅事件
+    println!("正在订阅 GRPC 事件...");
+
+    let grpc = YellowstoneGrpc::new(
+        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
+        None,
+    )?;
+
+    // 定义回调函数处理 PumpSwap 事件
+    let callback = |event: Box<dyn UnifiedEvent>| {
+        match_event!(event, {
+            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
+                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            },
+            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
+                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            },
+            PumpFunTradeEvent => |e: PumpFunTradeEvent| {
+                println!("PumpFunTradeEvent: {:?}", e);
+            },
+            PumpFunCreateTokenEvent => |e: PumpFunCreateTokenEvent| {
+                println!("PumpFunCreateTokenEvent: {:?}", e);
+            },
+            PumpSwapBuyEvent => |e: PumpSwapBuyEvent| {
+                println!("Buy event: {:?}", e);
+            },
+            PumpSwapSellEvent => |e: PumpSwapSellEvent| {
+                println!("Sell event: {:?}", e);
+            },
+            PumpSwapCreatePoolEvent => |e: PumpSwapCreatePoolEvent| {
+                println!("CreatePool event: {:?}", e);
+            },
+            PumpSwapDepositEvent => |e: PumpSwapDepositEvent| {
+                println!("Deposit event: {:?}", e);
+            },
+            PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
+                println!("Withdraw event: {:?}", e);
+            },
+        });
+    };
+
+    // 订阅 PumpSwap 事件
+    println!("开始监听事件，按 Ctrl+C 停止...");
+    let protocols = vec![
+        Protocol::PumpFun,
+        Protocol::PumpSwap,
+        Protocol::RaydiumLaunchpad,
+    ];
+    grpc.subscribe_events(protocols, None, None, None, callback)
+        .await?;
+
+    Ok(())
+}
+
+async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
+    // 使用 ShredStream 客户端订阅事件
+    println!("正在订阅 ShredStream 事件...");
+
+    let shred_stream = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
+
+    // 定义回调函数处理 PumpSwap 事件
+    let callback = |event: Box<dyn UnifiedEvent>| {
+        match_event!(event, {
+            RaydiumLaunchpadPoolCreateEvent => |e: RaydiumLaunchpadPoolCreateEvent| {
+                println!("RaydiumLaunchpadPoolCreateEvent: {:?}", e.base_mint_param.symbol);
+            },
+            RaydiumLaunchpadTradeEvent => |e: RaydiumLaunchpadTradeEvent| {
+                println!("RaydiumLaunchpadTradeEvent: {:?}", e);
+            },
+            PumpFunTradeEvent => |e: PumpFunTradeEvent| {
+                println!("PumpFunTradeEvent: {:?}", e);
+            },
+            PumpFunCreateTokenEvent => |e: PumpFunCreateTokenEvent| {
+                println!("PumpFunCreateTokenEvent: {:?}", e);
+            },
+            PumpSwapBuyEvent => |e: PumpSwapBuyEvent| {
+                println!("Buy event: {:?}", e);
+            },
+            PumpSwapSellEvent => |e: PumpSwapSellEvent| {
+                println!("Sell event: {:?}", e);
+            },
+            PumpSwapCreatePoolEvent => |e: PumpSwapCreatePoolEvent| {
+                println!("CreatePool event: {:?}", e);
+            },
+            PumpSwapDepositEvent => |e: PumpSwapDepositEvent| {
+                println!("Deposit event: {:?}", e);
+            },
+            PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
+                println!("Withdraw event: {:?}", e);
+            },
+        });
+    };
+
+    // 订阅 PumpSwap 事件
+    println!("开始监听事件，按 Ctrl+C 停止...");
+    let protocols = vec![
+        Protocol::PumpFun,
+        Protocol::PumpSwap,
+        Protocol::RaydiumLaunchpad,
+    ];
+    shred_stream
+        .shredstream_subscribe(protocols, None, callback)
+        .await?;
+
     Ok(())
 }
