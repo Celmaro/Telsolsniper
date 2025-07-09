@@ -6,22 +6,18 @@ use sol_trade_sdk::{
     constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type},
     event_parser::{
         protocols::{
-            pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
-            pumpswap::{
+            bonk::{BonkPoolCreateEvent, BonkTradeEvent}, pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, pumpswap::{
                 PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent, PumpSwapSellEvent,
                 PumpSwapWithdrawEvent,
-            },
-            bonk::{BonkPoolCreateEvent, BonkTradeEvent},
+            }
         },
         Protocol, UnifiedEvent,
     },
     grpc::{ShredStreamGrpc, YellowstoneGrpc},
     match_event,
-    pumpfun::common::get_bonding_curve_account_v2,
     swqos::{SwqosConfig, SwqosRegion},
     trading::{
-        core::params::{PumpFunParams, PumpFunSellParams, PumpSwapParams, BonkParams},
-        BuyParams, SellParams,
+        core::params::{BonkParams, PumpFunParams, PumpFunSellParams, PumpSwapParams}, pumpfun::common::get_bonding_curve_account_v2, BuyParams, SellParams
     },
     SolanaTrade,
 };

@@ -1,10 +1,11 @@
 use anyhow::anyhow;
 use solana_hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
+use solana_sdk::signature::Signer;
 use std::sync::Arc;
 
 use crate::common::{PriorityFee, SolanaRpcClient};
-use crate::pumpswap::common::get_token_balance;
+use crate::trading::bonk::common::get_token_balance;
 use crate::swqos::SwqosClient;
 use crate::trading::{
     core::params::BonkParams, factory::Protocol, SellParams, TradeFactory,
@@ -70,7 +71,7 @@ pub async fn sell_by_percent(
     if percent == 0 || percent > 100 {
         return Err(anyhow!("Percentage must be between 1 and 100"));
     }
-    let (balance_u64, _) = get_token_balance(rpc.as_ref(), payer.as_ref(), &mint).await?;
+    let balance_u64 = get_token_balance(&rpc, &payer.pubkey(), &mint).await?;
     let amount = balance_u64 * percent / 100;
     sell(
         rpc,
@@ -185,7 +186,7 @@ pub async fn sell_by_percent_with_tip(
         return Err(anyhow!("Percentage must be between 1 and 100"));
     }
 
-    let (balance_u64, _) = get_token_balance(rpc.as_ref(), payer.as_ref(), &mint).await?;
+    let balance_u64 = get_token_balance(&rpc, &payer.pubkey(), &mint).await?;
     let amount = balance_u64 * percent / 100;
     sell_with_tip(
         rpc,
