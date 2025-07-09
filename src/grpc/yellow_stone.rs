@@ -146,7 +146,7 @@ impl YellowstoneGrpc {
         transactions
     }
 
-    async fn handle_stream_message(
+    pub async fn handle_stream_message(
         msg: SubscribeUpdate,
         tx: &mut mpsc::Sender<TransactionPretty>,
         subscribe_tx: &mut (impl Sink<SubscribeRequest, Error = mpsc::SendError> + Unpin),
