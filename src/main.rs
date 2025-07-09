@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use sol_trade_sdk::{
     common::{bonding_curve::BondingCurveAccount, AnyResult, PriorityFee, TradeConfig},
     constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type},
-    event_parser::{
+    streaming::event_parser::{
         protocols::{
             bonk::{BonkPoolCreateEvent, BonkTradeEvent}, pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, pumpswap::{
                 PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent, PumpSwapSellEvent,
@@ -12,7 +12,7 @@ use sol_trade_sdk::{
         },
         Protocol, UnifiedEvent,
     },
-    grpc::{ShredStreamGrpc, YellowstoneGrpc},
+    streaming::{ShredStreamGrpc, YellowstoneGrpc},
     match_event,
     swqos::{SwqosConfig, SwqosRegion},
     trading::{

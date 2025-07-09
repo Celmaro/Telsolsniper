@@ -1,8 +1,8 @@
 use solana_sdk::{instruction::CompiledInstruction, pubkey::Pubkey};
 use solana_transaction_status::UiCompiledInstruction;
 
-use crate::event_parser::{
-    common::{utils::*, EventMetadata, EventType, ProtocolType},
+use crate::streaming::event_parser::{
+    common::{EventMetadata, EventType, ProtocolType, read_u64_le},
     core::traits::{EventParser, GenericEventParseConfig, GenericEventParser, UnifiedEvent},
     protocols::pumpswap::{
         discriminators, PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,

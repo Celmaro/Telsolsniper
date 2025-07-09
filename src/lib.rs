@@ -1,17 +1,15 @@
 pub mod common;
 pub mod constants;
-pub mod event_parser;
-pub mod grpc;
 pub mod instruction;
 pub mod protos;
 pub mod swqos;
+pub mod streaming;
 pub mod trading;
 
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use rustls::crypto::{ring::default_provider, CryptoProvider};
-use solana_hash::Hash;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signer},
@@ -20,10 +18,9 @@ use swqos::SwqosClient;
 
 use common::{PriorityFee, SolanaRpcClient, TradeConfig};
 
-use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, BONK};
-use constants::trade_type::{COPY_BUY, SNIPER_BUY};
+use constants::trade_type::COPY_BUY;
 
-use crate::event_parser::protocols::pumpfun::PumpFunTradeEvent;
+use crate::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 use crate::swqos::SwqosConfig;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpFunSellParams;

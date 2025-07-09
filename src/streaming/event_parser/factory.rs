@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 
-use crate::event_parser::protocols::{
+use crate::streaming::event_parser::protocols::{
     pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, bonk::parser::BONK_PROGRAM_ID, BonkEventParser,
 };
 

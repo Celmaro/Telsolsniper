@@ -8,8 +8,8 @@ use solana_transaction_status::{
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use crate::{
-    event_parser::{common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, bonk::{BonkPoolCreateEvent, BonkTradeEvent}}},
+use crate::streaming::event_parser::{
+    common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, bonk::{BonkPoolCreateEvent, BonkTradeEvent}},
 };
 
 /// 统一事件接口 - 所有协议的事件都需要实现此trait

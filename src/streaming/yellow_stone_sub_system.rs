@@ -1,4 +1,4 @@
-use crate::{common::AnyResult, grpc::yellow_stone::{TransactionPretty, YellowstoneGrpc}};
+use crate::{common::AnyResult, streaming::yellow_stone::{TransactionPretty, YellowstoneGrpc}};
 use solana_program::pubkey;
 use solana_sdk::{pubkey::Pubkey, transaction::VersionedTransaction};
 use futures::{channel::mpsc, sink::Sink, Stream, StreamExt, SinkExt};

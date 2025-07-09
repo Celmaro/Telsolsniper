@@ -6,12 +6,12 @@ pub mod utils;
 macro_rules! impl_unified_event {
     // 带有自定义ID表达式的版本
     ($struct_name:ident, $($field:ident),*) => {
-        impl $crate::event_parser::core::traits::UnifiedEvent for $struct_name {
+        impl $crate::streaming::event_parser::core::traits::UnifiedEvent for $struct_name {
             fn id(&self) -> &str {
                 &self.metadata.id
             }
 
-            fn event_type(&self) -> $crate::event_parser::common::types::EventType {
+            fn event_type(&self) -> $crate::streaming::event_parser::common::types::EventType {
                 self.metadata.event_type.clone()
             }
 
@@ -35,11 +35,11 @@ macro_rules! impl_unified_event {
                 self
             }
 
-            fn clone_boxed(&self) -> Box<dyn $crate::event_parser::core::traits::UnifiedEvent> {
+            fn clone_boxed(&self) -> Box<dyn $crate::streaming::event_parser::core::traits::UnifiedEvent> {
                 Box::new(self.clone())
             }
 
-            fn merge(&mut self, other: Box<dyn $crate::event_parser::core::traits::UnifiedEvent>) {
+            fn merge(&mut self, other: Box<dyn $crate::streaming::event_parser::core::traits::UnifiedEvent>) {
                 if let Some(e) = other.as_any().downcast_ref::<$struct_name>() {
                     $(
                         self.$field = e.$field.clone();

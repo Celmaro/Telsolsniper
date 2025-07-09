@@ -2,7 +2,7 @@ use borsh::BorshDeserialize;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 
-use crate::event_parser::{common::EventMetadata, core::traits::UnifiedEvent};
+use crate::streaming::event_parser::{common::EventMetadata, core::traits::UnifiedEvent};
 use crate::impl_unified_event;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, BorshDeserialize)]
