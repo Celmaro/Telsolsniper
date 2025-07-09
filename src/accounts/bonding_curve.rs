@@ -28,7 +28,7 @@
 use serde::{Serialize, Deserialize};
 use solana_sdk::pubkey::Pubkey;
 
-use crate::{constants::pumpfun::global_constants::{INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, TOKEN_TOTAL_SUPPLY}, pumpfun::common::{get_bonding_curve_pda, get_creator_vault_pda}};
+use crate::{constants::pumpfun::global_constants::{INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, TOKEN_TOTAL_SUPPLY}, trading::pumpfun::common::{get_bonding_curve_pda, get_creator_vault_pda}};
 
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]

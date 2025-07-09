@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
-use std::sync::Arc;
 
 use crate::{
     constants::pumpswap::{
         accounts, trade::DEFAULT_SLIPPAGE, BUY_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
-    pumpswap::common::{
+    trading::pumpswap::common::{
         calculate_with_slippage_buy, calculate_with_slippage_sell, coin_creator_vault_ata,
         coin_creator_vault_authority, find_pool, get_buy_token_amount, get_sell_sol_amount,
         get_token_balance,

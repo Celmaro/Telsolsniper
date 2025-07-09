@@ -11,7 +11,7 @@
 //! - `sell`: Instruction to sell tokens back to the bonding curve in exchange for SOL.
 use crate::{
     constants, 
-    pumpfun::common::{
+    trading::pumpfun::common::{
         get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda
     },
 };
@@ -23,6 +23,10 @@ use solana_sdk::{
     signature::Keypair,
     signer::Signer,
 };
+
+pub mod pumpfun;
+pub mod pumpswap;
+pub mod bonk;
 
 pub struct Create {
     pub _name: String,

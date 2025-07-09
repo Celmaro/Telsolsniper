@@ -6,7 +6,7 @@ use crate::{
     constants::bonk::{
         accounts, trade::DEFAULT_SLIPPAGE, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR,
     },
-    bonk::{
+    trading::bonk::{
         common::{get_amount_out, get_pool_pda, get_token_balance, get_vault_pda},
         pool::Pool,
     },

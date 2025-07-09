@@ -4,6 +4,7 @@ use solana_sdk::{
     signature::{Keypair, Signer},
 };
 use crate::common::SolanaRpcClient;
+use crate::trading::pumpswap;
 
 // Calculate slippage for buy operations
 pub fn calculate_with_slippage_buy(amount: u64, basis_points: u64) -> u64 {
@@ -41,7 +42,7 @@ pub async fn find_pool(
     rpc: &SolanaRpcClient,
     mint: &Pubkey,
 ) -> Result<Pubkey, anyhow::Error> {
-    let (pool_address, _) = crate::pumpswap::pool::Pool::find_by_mint(rpc, mint).await?;
+    let (pool_address, _) = pumpswap::pool::Pool::find_by_mint(rpc, mint).await?;
     Ok(pool_address)
 }
 
@@ -51,7 +52,7 @@ pub async fn get_buy_token_amount(
     pool: &Pubkey,
     sol_amount: u64,
 ) -> Result<u64, anyhow::Error> {
-    let pool_data = crate::pumpswap::pool::Pool::fetch(rpc, pool).await?;
+    let pool_data = pumpswap::pool::Pool::fetch(rpc, pool).await?;
     pool_data.calculate_buy_amount(rpc, sol_amount).await
 }
 
@@ -61,7 +62,7 @@ pub async fn get_sell_sol_amount(
     pool: &Pubkey,
     token_amount: u64,
 ) -> Result<u64, anyhow::Error> {
-    let pool_data = crate::pumpswap::pool::Pool::fetch(rpc, pool).await?;
+    let pool_data = pumpswap::pool::Pool::fetch(rpc, pool).await?;
     pool_data.calculate_sell_amount(rpc, token_amount).await
 }
 

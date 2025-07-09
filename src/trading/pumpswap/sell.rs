@@ -4,8 +4,8 @@ use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use std::sync::Arc;
 
 use crate::common::{PriorityFee, SolanaRpcClient};
-use crate::pumpswap::common::get_token_balance;
 use crate::swqos::SwqosClient;
+use crate::trading::pumpswap::common::get_token_balance;
 use crate::trading::{core::params::PumpSwapParams, factory::Protocol, SellParams, TradeFactory};
 
 // Sell tokens to a Pumpswap pool

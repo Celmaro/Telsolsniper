@@ -6,9 +6,6 @@ pub mod event_parser;
 pub mod grpc;
 pub mod instruction;
 pub mod protos;
-pub mod pumpfun;
-pub mod pumpswap;
-pub mod bonk;
 pub mod swqos;
 pub mod trading;
 
@@ -141,7 +138,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunParams>()
         {
-            pumpfun::buy::buy(
+            trading::pumpfun::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -160,7 +157,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::buy::buy(
+            trading::pumpswap::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -183,7 +180,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::buy::buy(
+            trading::bonk::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -229,7 +226,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunParams>()
         {
-            pumpfun::buy::buy_with_tip(
+            trading::pumpfun::buy::buy_with_tip(
                 self.swqos_clients.clone(),
                 self.payer.clone(),
                 mint,
@@ -248,7 +245,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::buy::buy_with_tip(
+            trading::pumpswap::buy::buy_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -272,7 +269,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::buy::buy(
+            trading::bonk::buy::buy(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint,
@@ -308,7 +305,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunSellParams>()
         {
-            pumpfun::sell::sell_by_percent(
+            trading::pumpfun::sell::sell_by_percent(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -325,7 +322,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::sell::sell_by_percent(
+            trading::pumpswap::sell::sell_by_percent(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -347,7 +344,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::sell::sell_by_percent(
+            trading::bonk::sell::sell_by_percent(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -381,7 +378,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunSellParams>()
         {
-            pumpfun::sell::sell_by_amount(
+            trading::pumpfun::sell::sell_by_amount(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -397,7 +394,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::sell::sell_by_amount(
+            trading::pumpswap::sell::sell_by_amount(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -419,7 +416,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::sell::sell_by_amount(
+            trading::bonk::sell::sell_by_amount(
                 self.rpc.clone(),
                 self.payer.clone(),
                 mint.clone(),
@@ -453,7 +450,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunSellParams>()
         {
-            pumpfun::sell::sell_by_percent_with_tip(
+            trading::pumpfun::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -471,7 +468,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::sell::sell_by_percent_with_tip(
+            trading::pumpswap::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -494,7 +491,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::sell::sell_by_percent_with_tip(
+            trading::bonk::sell::sell_by_percent_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -528,7 +525,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpFunSellParams>()
         {
-            pumpfun::sell::sell_by_amount_with_tip(
+            trading::pumpfun::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -545,7 +542,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<PumpSwapParams>()
         {
-            pumpswap::sell::sell_by_amount_with_tip(
+            trading::pumpswap::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -568,7 +565,7 @@ impl SolanaTrade {
             .as_any()
             .downcast_ref::<BonkParams>()
         {
-            bonk::sell::sell_by_amount_with_tip(
+            trading::bonk::sell::sell_by_amount_with_tip(
                 self.rpc.clone(),
                 self.swqos_clients.clone(),
                 self.payer.clone(),
@@ -591,12 +588,12 @@ impl SolanaTrade {
 
     #[inline]
     pub async fn get_sol_balance(&self, payer: &Pubkey) -> Result<u64, anyhow::Error> {
-        pumpfun::common::get_sol_balance(&self.rpc, payer).await
+        trading::pumpfun::common::get_sol_balance(&self.rpc, payer).await
     }
 
     #[inline]
     pub async fn get_payer_sol_balance(&self) -> Result<u64, anyhow::Error> {
-        pumpfun::common::get_sol_balance(&self.rpc, &self.payer.pubkey()).await
+        trading::pumpfun::common::get_sol_balance(&self.rpc, &self.payer.pubkey()).await
     }
 
     #[inline]
@@ -609,12 +606,12 @@ impl SolanaTrade {
             "get_token_balance payer: {}, mint: {}, rpc_url: {}",
             payer, mint, self.trade_config.rpc_url
         );
-        pumpfun::common::get_token_balance(&self.rpc, payer, mint).await
+        trading::pumpfun::common::get_token_balance(&self.rpc, payer, mint).await
     }
 
     #[inline]
     pub async fn get_payer_token_balance(&self, mint: &Pubkey) -> Result<u64, anyhow::Error> {
-        pumpfun::common::get_token_balance(&self.rpc, &self.payer.pubkey(), mint).await
+        trading::pumpfun::common::get_token_balance(&self.rpc, &self.payer.pubkey(), mint).await
     }
 
     #[inline]
@@ -629,12 +626,12 @@ impl SolanaTrade {
 
     #[inline]
     pub fn get_token_price(&self, virtual_sol_reserves: u64, virtual_token_reserves: u64) -> f64 {
-        pumpfun::common::get_token_price(virtual_sol_reserves, virtual_token_reserves)
+        trading::pumpfun::common::get_token_price(virtual_sol_reserves, virtual_token_reserves)
     }
 
     #[inline]
     pub fn get_buy_price(&self, amount: u64, trade_info: &PumpFunTradeEvent) -> u64 {
-        pumpfun::common::get_buy_price(amount, trade_info)
+        trading::pumpfun::common::get_buy_price(amount, trade_info)
     }
 
     #[inline]
@@ -644,23 +641,23 @@ impl SolanaTrade {
         receive_wallet: &Pubkey,
         amount: u64,
     ) -> Result<(), anyhow::Error> {
-        pumpfun::common::transfer_sol(&self.rpc, payer, receive_wallet, amount).await
+        trading::pumpfun::common::transfer_sol(&self.rpc, payer, receive_wallet, amount).await
     }
 
     #[inline]
     pub async fn close_token_account(&self, mint: &Pubkey) -> Result<(), anyhow::Error> {
-        pumpfun::common::close_token_account(&self.rpc, self.payer.as_ref(), mint).await
+        trading::pumpfun::common::close_token_account(&self.rpc, self.payer.as_ref(), mint).await
     }
 
     #[inline]
     pub async fn get_current_price(&self, mint: &Pubkey) -> Result<f64, anyhow::Error> {
         let (bonding_curve, _) =
-            pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
+            trading::pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
 
         let virtual_sol_reserves = bonding_curve.virtual_sol_reserves;
         let virtual_token_reserves = bonding_curve.virtual_token_reserves;
 
-        Ok(pumpfun::common::get_token_price(
+        Ok(trading::pumpfun::common::get_token_price(
             virtual_sol_reserves,
             virtual_token_reserves,
         ))
@@ -669,7 +666,7 @@ impl SolanaTrade {
     #[inline]
     pub async fn get_real_sol_reserves(&self, mint: &Pubkey) -> Result<u64, anyhow::Error> {
         let (bonding_curve, _) =
-            pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
+            trading::pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
 
         let actual_sol_reserves = bonding_curve.real_sol_reserves;
 
@@ -679,7 +676,7 @@ impl SolanaTrade {
     #[inline]
     pub async fn get_creator(&self, mint: &Pubkey) -> Result<Pubkey, anyhow::Error> {
         let (bonding_curve, _) =
-            pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
+            trading::pumpfun::common::get_bonding_curve_account_v2(&self.rpc, mint).await?;
 
         let creator = bonding_curve.creator;
 
@@ -691,7 +688,7 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<f64, anyhow::Error> {
-        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        let pool = trading::pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
 
         let (base_amount, quote_amount) = pool.get_token_balances(&self.rpc).await?;
 
@@ -713,7 +710,7 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
-        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        let pool = trading::pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
 
         let (_, quote_amount) = pool.get_token_balances(&self.rpc).await?;
 
@@ -725,7 +722,7 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
-        let pool = pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
+        let pool = trading::pumpswap::pool::Pool::fetch(&self.rpc, pool_address).await?;
 
         let (base_amount, _) = pool.get_token_balances(&self.rpc).await?;
 

@@ -1,11 +1,10 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
-use crate::trading::protocols::bonk::BonkInstructionBuilder;
+use crate::instruction::{bonk::BonkInstructionBuilder, pumpfun::PumpFunInstructionBuilder, pumpswap::PumpSwapInstructionBuilder};
 
 use super::{
     core::{executor::GenericTradeExecutor, traits::TradeExecutor},
-    protocols::{pumpfun::PumpFunInstructionBuilder, pumpswap::PumpSwapInstructionBuilder},
 };
 
 /// 支持的交易协议
