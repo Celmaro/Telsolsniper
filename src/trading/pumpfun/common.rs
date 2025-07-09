@@ -8,10 +8,10 @@ use solana_sdk::{
 };
 use spl_associated_token_account::get_associated_token_address;
 use pumpfun_program::accounts::BondingCurveAccount as PumpfunBondingCurveAccount;
-use crate::{accounts::{self, BondingCurveAccount}, common::{PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}, event_parser::protocols::pumpfun::PumpFunTradeEvent};
+use crate::{common::{bonding_curve::BondingCurveAccount, global::GlobalAccount, PriorityFee, SolanaRpcClient}, constants::{self, pumpfun::{self, global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::DEFAULT_SLIPPAGE}}, event_parser::protocols::pumpfun::PumpFunTradeEvent};
 
 lazy_static::lazy_static! {
-    static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<accounts::GlobalAccount>>> = RwLock::new(HashMap::new());
+    static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<GlobalAccount>>> = RwLock::new(HashMap::new());
 }
 
 pub async fn transfer_sol(rpc: &SolanaRpcClient, payer: &Keypair, receive_wallet: &Pubkey, amount: u64) -> Result<(), anyhow::Error> {
@@ -185,13 +185,13 @@ pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
 }
 
 #[inline]
-pub async fn get_global_account(/*rpc: &SolanaRpcClient*/) -> Result<Arc<accounts::GlobalAccount>, anyhow::Error> {
+pub async fn get_global_account(/*rpc: &SolanaRpcClient*/) -> Result<Arc<GlobalAccount>, anyhow::Error> {
     // let global = constants::global_constants::GLOBAL_ACCOUNT;
     // if let Some(account) = ACCOUNT_CACHE.read().await.get(&global) {
     //     return Ok(account.clone());
     // }
 
-    let global_account = accounts::GlobalAccount::new();
+    let global_account = GlobalAccount::new();
 
     // let account = rpc.get_account(&global).await?;
     // let global_account = bincode::deserialize::<accounts::GlobalAccount>(&account.data)?;
@@ -202,7 +202,7 @@ pub async fn get_global_account(/*rpc: &SolanaRpcClient*/) -> Result<Arc<account
 }
 
 #[inline]
-pub async fn get_initial_buy_price(global_account: &Arc<accounts::GlobalAccount>, amount_sol: u64) -> Result<u64, anyhow::Error> {
+pub async fn get_initial_buy_price(global_account: &Arc<GlobalAccount>, amount_sol: u64) -> Result<u64, anyhow::Error> {
     let buy_amount = global_account.get_initial_buy_price(amount_sol);
     Ok(buy_amount)
 }
@@ -211,7 +211,7 @@ pub async fn get_initial_buy_price(global_account: &Arc<accounts::GlobalAccount>
 pub async fn get_bonding_curve_account(
     rpc: &SolanaRpcClient,
     mint: &Pubkey,
-) -> Result<(Arc<accounts::BondingCurveAccount>, Pubkey), anyhow::Error> {
+) -> Result<(Arc<BondingCurveAccount>, Pubkey), anyhow::Error> {
     let bonding_curve_pda = get_bonding_curve_pda(mint)
         .ok_or(anyhow!("Bonding curve not found"))?;
 
@@ -220,7 +220,7 @@ pub async fn get_bonding_curve_account(
         return Err(anyhow!("Bonding curve not found"));
     }
 
-    let bonding_curve = Arc::new(bincode::deserialize::<accounts::BondingCurveAccount>(&account.data)?);
+    let bonding_curve = Arc::new(bincode::deserialize::<BondingCurveAccount>(&account.data)?);
 
     Ok((bonding_curve, bonding_curve_pda))
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use super::traits::ProtocolParams;
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::swqos::SwqosClient;
-use crate::accounts::BondingCurveAccount;
+use crate::common::bonding_curve::BondingCurveAccount;
 
 /// 通用买入参数
 #[derive(Clone)]

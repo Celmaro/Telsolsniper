@@ -1,8 +1,7 @@
 use std::{str::FromStr, sync::Arc};
 
 use sol_trade_sdk::{
-    accounts::BondingCurveAccount,
-    common::{AnyResult, PriorityFee, TradeConfig},
+    common::{bonding_curve::BondingCurveAccount, AnyResult, PriorityFee, TradeConfig},
     constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type},
     event_parser::{
         protocols::{

@@ -1,7 +1,5 @@
-pub mod accounts;
 pub mod common;
 pub mod constants;
-pub mod error;
 pub mod event_parser;
 pub mod grpc;
 pub mod instruction;
@@ -22,7 +20,6 @@ use swqos::SwqosClient;
 
 use common::{PriorityFee, SolanaRpcClient, TradeConfig};
 
-use accounts::BondingCurveAccount;
 use constants::trade_platform::{PUMPFUN, PUMPFUN_SWAP, BONK};
 use constants::trade_type::{COPY_BUY, SNIPER_BUY};
 

@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::{
-    error,
     event_parser::{common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, bonk::{BonkPoolCreateEvent, BonkTradeEvent}}},
 };
 

@@ -1,6 +1,5 @@
-use crate::accounts::BondingCurveAccount;
 use crate::{
-    common::{PriorityFee, SolanaRpcClient},
+    common::{bonding_curve::BondingCurveAccount, PriorityFee, SolanaRpcClient},
     swqos::SwqosClient,
     trading::{core::params::PumpFunParams, factory::Protocol, BuyParams, TradeFactory},
 };
