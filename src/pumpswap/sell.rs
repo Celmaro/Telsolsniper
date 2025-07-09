@@ -114,10 +114,6 @@ pub async fn sell_by_amount(
     user_base_token_account: Option<Pubkey>,
     user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
-    if amount == 0 {
-        return Err(anyhow!("Amount must be greater than 0"));
-    }
-
     sell(
         rpc,
         payer,
@@ -249,10 +245,6 @@ pub async fn sell_by_amount_with_tip(
     user_base_token_account: Option<Pubkey>,
     user_quote_token_account: Option<Pubkey>,
 ) -> Result<(), anyhow::Error> {
-    if amount == 0 {
-        return Err(anyhow!("Amount must be greater than 0"));
-    }
-
     sell_with_tip(
         rpc,
         swqos_clients,

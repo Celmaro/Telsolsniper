@@ -10,14 +10,13 @@ use std::sync::Arc;
 
 use crate::{
     accounts::BondingCurveAccount,
-    constants::{self, pumpfun::global_constants::FEE_RECIPIENT, trade_type::SNIPER_BUY},
+    constants::{self, pumpfun::{global_constants::FEE_RECIPIENT, trade::DEFAULT_SLIPPAGE}, trade_type::SNIPER_BUY},
     instruction,
     pumpfun::common::{
         calculate_with_slippage_buy, get_bonding_curve_account_v2, get_bonding_curve_pda,
         get_buy_token_amount_from_sol_amount, get_creator_vault_pda, init_bonding_curve_account,
     },
     trading::core::{
-        constants::DEFAULT_SLIPPAGE_BASIS_POINTS,
         params::{BuyParams, PumpFunParams, SellParams},
         traits::InstructionBuilder,
     },
@@ -50,7 +49,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.amount_sol,
             params
                 .slippage_basis_points
-                .unwrap_or(DEFAULT_SLIPPAGE_BASIS_POINTS),
+                .unwrap_or(DEFAULT_SLIPPAGE),
         );
         let creator_vault_pda = bonding_curve.get_creator_vault_pda();
 

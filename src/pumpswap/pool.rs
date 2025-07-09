@@ -1,7 +1,7 @@
-use solana_sdk::pubkey::Pubkey;
+use crate::{common::SolanaRpcClient, constants::pumpswap::accounts};
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
-use crate::{common::SolanaRpcClient, constants::pumpswap::accounts};
+use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
@@ -29,16 +29,39 @@ impl Pool {
         let pool_bump = data[0];
         let index = u16::from_le_bytes([data[1], data[2]]);
 
-        let creator = Pubkey::new_from_array(data[3..35].try_into().map_err(|e| anyhow!("Failed to convert creator: {:?}", e))?);
-        let base_mint = Pubkey::new_from_array(data[35..67].try_into().map_err(|e| anyhow!("Failed to convert base_mint: {:?}", e))?);
-        let quote_mint = Pubkey::new_from_array(data[67..99].try_into().map_err(|e| anyhow!("Failed to convert quote_mint: {:?}", e))?);
-        let lp_mint = Pubkey::new_from_array(data[99..131].try_into().map_err(|e| anyhow!("Failed to convert lp_mint: {:?}", e))?);
-        let pool_base_token_account = Pubkey::new_from_array(data[131..163].try_into().map_err(|e| anyhow!("Failed to convert pool_base_token_account: {:?}", e))?);
-        let pool_quote_token_account = Pubkey::new_from_array(data[163..195].try_into().map_err(|e| anyhow!("Failed to convert pool_quote_token_account: {:?}", e))?);
+        let creator = Pubkey::new_from_array(
+            data[3..35]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert creator: {:?}", e))?,
+        );
+        let base_mint = Pubkey::new_from_array(
+            data[35..67]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert base_mint: {:?}", e))?,
+        );
+        let quote_mint = Pubkey::new_from_array(
+            data[67..99]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert quote_mint: {:?}", e))?,
+        );
+        let lp_mint = Pubkey::new_from_array(
+            data[99..131]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert lp_mint: {:?}", e))?,
+        );
+        let pool_base_token_account = Pubkey::new_from_array(
+            data[131..163]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert pool_base_token_account: {:?}", e))?,
+        );
+        let pool_quote_token_account = Pubkey::new_from_array(
+            data[163..195]
+                .try_into()
+                .map_err(|e| anyhow!("Failed to convert pool_quote_token_account: {:?}", e))?,
+        );
 
         let lp_supply = u64::from_le_bytes([
-            data[195], data[196], data[197], data[198],
-            data[199], data[200], data[201], data[202],
+            data[195], data[196], data[197], data[198], data[199], data[200], data[201], data[202],
         ]);
 
         Ok(Self {
@@ -92,25 +115,21 @@ impl Pool {
         };
 
         let program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
-        println!("program_id: {:?}", program_id);
-        let accounts = rpc.get_program_accounts_with_config(&program_id, config).await?;
+        let accounts = rpc
+            .get_program_accounts_with_config(&program_id, config)
+            .await?;
 
         if accounts.is_empty() {
             return Err(anyhow!("No pool found for mint {}", mint));
         }
 
-        let mut pools: Vec<_> = accounts.into_iter()
-            .filter_map(|(addr, acc)| {
-                Self::from_bytes(&acc.data)
-                    .map(|pool| (addr, pool))
-                    .ok()
-            })
+        let mut pools: Vec<_> = accounts
+            .into_iter()
+            .filter_map(|(addr, acc)| Self::from_bytes(&acc.data).map(|pool| (addr, pool)).ok())
             .collect();
         pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
 
         let (address, pool) = pools[0].clone();
-        println!("pool: {:?}", pool);
-        println!("address: {:?}", address);
         Ok((address, pool))
     }
 
@@ -118,11 +137,18 @@ impl Pool {
         &self,
         rpc: &SolanaRpcClient,
     ) -> Result<(u64, u64), anyhow::Error> {
-        let base_balance = rpc.get_token_account_balance(&self.pool_base_token_account).await?;
-        let quote_balance = rpc.get_token_account_balance(&self.pool_quote_token_account).await?;
+        let base_balance = rpc
+            .get_token_account_balance(&self.pool_base_token_account)
+            .await?;
+        let quote_balance = rpc
+            .get_token_account_balance(&self.pool_quote_token_account)
+            .await?;
 
         let base_amount = base_balance.amount.parse::<u64>().map_err(|e| anyhow!(e))?;
-        let quote_amount = quote_balance.amount.parse::<u64>().map_err(|e| anyhow!(e))?;
+        let quote_amount = quote_balance
+            .amount
+            .parse::<u64>()
+            .map_err(|e| anyhow!(e))?;
 
         Ok((base_amount, quote_amount))
     }
