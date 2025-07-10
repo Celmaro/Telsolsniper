@@ -218,6 +218,7 @@ use sol_trade_sdk::{
     },
 };
 
+// pumpfun sniper trade
 async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
 
     println!("Testing PumpFun trading...");
@@ -267,6 +268,7 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
     Ok(())
 }
 
+// pumpfun copy trade
 async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
 
     println!("Testing PumpFun trading...");
@@ -305,7 +307,8 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
     Ok(())
 }
 
-async fn test_pumpfun_sell(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+// pumpfun sell token
+async fn test_pumpfun_sell() -> AnyResult<()> {
     let amount_token = 100_000_000; 
     solana_trade_client
         .sell(
