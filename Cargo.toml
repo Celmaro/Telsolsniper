@@ -6,7 +6,7 @@ authors = ["William <byteblock6@gmail.com>", "sgxiang <sgxiang@gmail.com>", "wei
 repository = "https://github.com/0xfnzero/sol-trade-sdk"
 description = "Rust SDK to interact with the dex trade Solana program."
 license = "MIT"
-keywords = ["solana", "memecoins", "pumpfun", "pumpswap", "raydium", "bonk", "shreds", "yellowstone"]
+keywords = ["solana", "memecoins", "pumpfun", "pumpswap", "raydium"]
 readme = "README.md"
 
 [lib]
