@@ -1,8 +1,8 @@
-use crate::{common::AnyResult, streaming::yellow_stone::{TransactionPretty, YellowstoneGrpc}};
+use crate::{common::AnyResult, streaming::yellowstone_grpc::{TransactionPretty, YellowstoneGrpc}};
 use solana_program::pubkey;
 use solana_sdk::{pubkey::Pubkey, transaction::VersionedTransaction};
-use futures::{channel::mpsc, sink::Sink, Stream, StreamExt, SinkExt};
-use log::{error, info};
+use futures::{channel::mpsc, StreamExt};
+use log::error;
 use solana_transaction_status::EncodedTransactionWithStatusMeta;
 
 const SYSTEM_PROGRAM_ID: Pubkey = pubkey!("11111111111111111111111111111111");
