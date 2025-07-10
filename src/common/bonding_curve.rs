@@ -54,14 +54,14 @@ pub struct BondingCurveAccount {
 }
 
 impl BondingCurveAccount {
-    pub fn from_dev_trade(mint: &Pubkey, dev_buy_token: u64, dev_cost_sol: u64, creator: Pubkey) -> Self {
+    pub fn from_dev_trade(mint: &Pubkey, dev_token_amount: u64, dev_sol_amount: u64, creator: Pubkey) -> Self {
         Self {
             discriminator: 0,
             account: get_bonding_curve_pda(mint).unwrap(),
-            virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES - dev_buy_token,
-            virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES + dev_cost_sol,
-            real_token_reserves: INITIAL_REAL_TOKEN_RESERVES - dev_buy_token,
-            real_sol_reserves: dev_cost_sol,
+            virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES - dev_token_amount,
+            virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES + dev_sol_amount,
+            real_token_reserves: INITIAL_REAL_TOKEN_RESERVES - dev_token_amount,
+            real_sol_reserves: dev_sol_amount,
             token_total_supply: TOKEN_TOTAL_SUPPLY,
             complete: false,
             creator: creator,

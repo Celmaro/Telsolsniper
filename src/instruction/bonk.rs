@@ -24,7 +24,7 @@ pub struct BonkInstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for BonkInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
-        if params.amount_sol == 0 {
+        if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
         self.build_buy_instructions_with_accounts(params).await
@@ -81,7 +81,7 @@ impl BonkInstructionBuilder {
             real_quote_before = pool.real_quote as u128;
         }
 
-        let amount_in: u64 = params.amount_sol;
+        let amount_in: u64 = params.sol_amount;
         let share_fee_rate: u64 = 0;
         let minimum_amount_out: u64 = get_amount_out(
             amount_in,
@@ -194,8 +194,8 @@ impl BonkInstructionBuilder {
         let rpc = params.rpc.as_ref().unwrap().clone();
 
         // 获取代币余额
-        let mut amount = params.amount_token;
-        if params.amount_token.is_none() || params.amount_token.unwrap_or(0) == 0 {
+        let mut amount = params.token_amount;
+        if params.token_amount.is_none() || params.token_amount.unwrap_or(0) == 0 {
             let balance_u64 =
                 get_token_balance(rpc.as_ref(), &params.payer.pubkey(), &params.mint).await?;
             amount = Some(balance_u64);

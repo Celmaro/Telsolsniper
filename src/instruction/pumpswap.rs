@@ -31,7 +31,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             .downcast_ref::<PumpSwapParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
 
-        if params.amount_sol == 0 {
+        if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
@@ -114,11 +114,11 @@ impl PumpSwapInstructionBuilder {
         }
         let rpc = params.rpc.as_ref().unwrap().clone();
         // 计算预期的代币数量
-        let token_amount = get_buy_token_amount(rpc.as_ref(), &pool, params.amount_sol).await?;
+        let token_amount = get_buy_token_amount(rpc.as_ref(), &pool, params.sol_amount).await?;
 
         // 计算滑点后的最大SOL数量
         let max_sol_amount = calculate_with_slippage_buy(
-            params.amount_sol,
+            params.sol_amount,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
 
@@ -257,8 +257,8 @@ impl PumpSwapInstructionBuilder {
         let rpc = params.rpc.as_ref().unwrap().clone();
 
         // 获取代币余额
-        let mut amount = params.amount_token;
-        if params.amount_token.is_none() {
+        let mut amount = params.token_amount;
+        if params.token_amount.is_none() {
             let balance_u64 =
                 get_token_balance(rpc.as_ref(), &params.payer.pubkey(), &params.mint).await?;
             amount = Some(balance_u64);

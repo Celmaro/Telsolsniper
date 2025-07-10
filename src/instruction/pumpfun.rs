@@ -38,7 +38,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             .downcast_ref::<PumpFunParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpFun"))?;
 
-        if params.amount_sol == 0 {
+        if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
@@ -49,13 +49,13 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         };
 
         let max_sol_cost = calculate_with_slippage_buy(
-            params.amount_sol,
+            params.sol_amount,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
         let creator_vault_pda = bonding_curve.get_creator_vault_pda();
 
         let mut buy_token_amount =
-            get_buy_token_amount_from_sol_amount(&bonding_curve, params.amount_sol);
+            get_buy_token_amount_from_sol_amount(&bonding_curve, params.sol_amount);
         if buy_token_amount <= 100 * 1_000_000_u64 {
             buy_token_amount = if max_sol_cost > sol_to_lamports(0.01) {
                 25547619 * 1_000_000_u64
@@ -91,7 +91,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
-        let amount_token = if let Some(amount) = params.amount_token {
+        let token_amount = if let Some(amount) = params.token_amount {
             if amount == 0 {
                 return Err(anyhow!("Amount cannot be zero"));
             }
@@ -113,9 +113,9 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             return Err(anyhow!("RPC client is required to get token balance"));
         };
 
-        let mut amount_token = amount_token;
-        if amount_token > balance_u64 {
-            amount_token = balance_u64;
+        let mut token_amount = token_amount;
+        if token_amount > balance_u64 {
+            token_amount = balance_u64;
         }
 
         let mut instructions = vec![sell(
@@ -124,13 +124,13 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &creator_vault_pda,
             &FEE_RECIPIENT,
             Sell {
-                _amount: amount_token,
+                _amount: token_amount,
                 _min_sol_output: 1,
             },
         )];
 
         // 如果卖出全部代币，关闭账户
-        if amount_token >= balance_u64 {
+        if token_amount >= balance_u64 {
             instructions.push(close_account(
                 &spl_token::ID,
                 &ata,
