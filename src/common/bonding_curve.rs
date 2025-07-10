@@ -28,7 +28,7 @@
 use serde::{Serialize, Deserialize};
 use solana_sdk::pubkey::Pubkey;
 
-use crate::{constants::pumpfun::global_constants::{INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, TOKEN_TOTAL_SUPPLY}, trading::pumpfun::common::{get_bonding_curve_pda, get_creator_vault_pda}};
+use crate::{constants::pumpfun::global_constants::{INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES, TOKEN_TOTAL_SUPPLY}, streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent, trading::pumpfun::common::{get_bonding_curve_pda, get_creator_vault_pda}};
 
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,17 +54,7 @@ pub struct BondingCurveAccount {
 }
 
 impl BondingCurveAccount {
-    /// Creates a new bonding curve instance
-    ///
-    /// # Arguments
-    /// * `discriminator` - Unique identifier for the curve
-    /// * `virtual_token_reserves` - Virtual token reserves for price calculations
-    /// * `virtual_sol_reserves` - Virtual SOL reserves for price calculations
-    /// * `real_token_reserves` - Actual token reserves available
-    /// * `real_sol_reserves` - Actual SOL reserves available
-    /// * `token_total_supply` - Total supply of tokens
-    /// * `complete` - Whether the curve is complete
-    pub fn new(mint: &Pubkey, dev_buy_token: u64, dev_cost_sol: u64, creator: Pubkey) -> Self {
+    pub fn from_dev_trade(mint: &Pubkey, dev_buy_token: u64, dev_cost_sol: u64, creator: Pubkey) -> Self {
         Self {
             discriminator: 0,
             account: get_bonding_curve_pda(mint).unwrap(),
@@ -75,6 +65,20 @@ impl BondingCurveAccount {
             token_total_supply: TOKEN_TOTAL_SUPPLY,
             complete: false,
             creator: creator,
+        }
+    }
+
+    pub fn from_trade(event: &PumpFunTradeEvent) -> Self {
+        Self {
+            discriminator: 0,
+            account: get_bonding_curve_pda(&event.mint).unwrap(),
+            virtual_token_reserves: event.virtual_token_reserves,
+            virtual_sol_reserves: event.virtual_sol_reserves,
+            real_token_reserves: event.real_token_reserves,
+            real_sol_reserves: event.real_sol_reserves,
+            token_total_supply: TOKEN_TOTAL_SUPPLY,
+            complete: false,
+            creator: event.creator,
         }
     }
 

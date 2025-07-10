@@ -187,7 +187,7 @@ pub async fn init_bonding_curve_account(
     dev_sol_cost: u64,
     creator: Pubkey,
 ) -> Result<Arc<BondingCurveAccount>, anyhow::Error> {
-    let bonding_curve = BondingCurveAccount::new(mint, dev_buy_token, dev_sol_cost, creator);
+    let bonding_curve = BondingCurveAccount::from_dev_trade(mint, dev_buy_token, dev_sol_cost, creator);
     let bonding_curve = Arc::new(bonding_curve);
     Ok(bonding_curve)
 }

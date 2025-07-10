@@ -215,50 +215,45 @@ use sol_trade_sdk::{
     trading::{
         core::params::PumpFunParams,
         factory::TradingProtocol,
-        pumpfun::common::get_bonding_curve_account_v2,
     },
 };
 
-async fn test_pumpfun() -> AnyResult<()> {
+async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+
     println!("Testing PumpFun trading...");
 
+    // 如果不是开发者购买，则返回
+    if !trade_info.is_dev_create_token_trade && !trade_info.is_buy {
+        return Ok(());
+    }
+
     let solana_trade_client = test_create_solana_trade_client().await?;
-    let creator = Pubkey::from_str("xxxxxx")?; // dev account
-    let buy_sol_cost = 100_000; // 0.0001 SOL
+    let mint_pubkey = trade_info.mint;
+    let creator = trade_info.creator;
+    let dev_sol_amount = trade_info.max_sol_cost;
+    let dev_token_amount = trade_info.token_amount;
     let slippage_basis_points = Some(100);
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
-    let mint_pubkey = Pubkey::from_str("xxxxxx")?; // token mint
-
-    println!("Buying tokens from PumpFun...");
-    // get bonding curve
-    let (bonding_curve, bonding_curve_pda) =
-        get_bonding_curve_account_v2(&solana_trade_client.rpc, &mint_pubkey).await?;
-    let virtual_token_reserves = bonding_curve.virtual_token_reserves;
-    let virtual_sol_reserves = bonding_curve.virtual_sol_reserves;
-    let real_token_reserves = bonding_curve.real_token_reserves;
-    let real_sol_reserves = bonding_curve.real_sol_reserves;
-    let bonding_curve = BondingCurveAccount {
-        discriminator: bonding_curve.discriminator,
-        account: bonding_curve_pda,
-        virtual_token_reserves: virtual_token_reserves,
-        virtual_sol_reserves: virtual_sol_reserves,
-        real_token_reserves: real_token_reserves,
-        real_sol_reserves: real_sol_reserves,
-        token_total_supply: TOKEN_TOTAL_SUPPLY,
-        complete: false,
-        creator: creator,
-    };
-    // 如果是狙击开发者
-    // let bonding_curve =
-    //     BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
     
-    // buy
+    println!("Buying tokens from PumpFun...");
+    
+    // 不使用rpc调用获取bonding_curve，可以节约交易时间
+    let bonding_curve = BondingCurveAccount::from_dev_trade(
+        &mint_pubkey,
+        dev_token_amount,
+        dev_sol_amount,
+        creator,
+    );
+
+    // 我本次交易所花的的sol金额
+    let buy_sol_amount = 100_000;
+ 
     solana_trade_client
         .buy(
             DexType::PumpFun,
             mint_pubkey,
             Some(creator),
-            buy_sol_cost,
+            buy_sol_amount,
             slippage_basis_points,
             recent_blockhash,
             None,
@@ -268,10 +263,50 @@ async fn test_pumpfun() -> AnyResult<()> {
             })),
         )
         .await?;
-    
-    // sell
-    println!("Selling tokens from PumpFun...");
-    let amount_token = 0; // 写上真实的amount_token
+
+    Ok(())
+}
+
+async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+
+    println!("Testing PumpFun trading...");
+
+    let solana_trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = trade_info.mint;
+    let creator = trade_info.creator;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+
+    println!("Buying tokens from PumpFun...");
+
+    // 我本次交易所花的的sol金额
+    let buy_sol_amount = 100_000;
+
+    // 不使用rpc调用获取bonding_curve，可以节约交易时间
+    let bonding_curve = BondingCurveAccount::from_trade(&trade_info);
+
+    solana_trade_client
+        .buy(
+            DexType::PumpFun,
+            mint_pubkey,
+            Some(creator),
+            buy_sol_amount,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            Some(Box::new(PumpFunParams {
+                bonding_curve: Some(Arc::new(bonding_curve.clone())),
+            })),
+        )
+        .await?;
+
+    Ok(())
+}
+
+async fn test_pumpfun_sell(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+    let amount_token = 100_000_000; 
     solana_trade_client
         .sell(
             DexType::PumpFun,
@@ -285,7 +320,6 @@ async fn test_pumpfun() -> AnyResult<()> {
             None,
         )
         .await?;
-    Ok(())
 }
 ```
 
