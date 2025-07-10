@@ -20,7 +20,7 @@ use sol_trade_sdk::{
     },
     swqos::{SwqosConfig, SwqosRegion},
     trading::{
-        core::params::PumpFunParams, factory::TradingProtocol,
+        core::params::PumpFunParams, factory::DexType,
         pumpfun::common::get_bonding_curve_account_v2,
     },
     SolanaTrade,
@@ -105,6 +105,7 @@ async fn test_pumpfun() -> AnyResult<()> {
     // buy
     solana_trade_client
         .buy(
+            DexType::PumpFun,
             mint_pubkey,
             Some(creator),
             buy_sol_cost,
@@ -112,7 +113,6 @@ async fn test_pumpfun() -> AnyResult<()> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::PumpFun,
             Some(Box::new(PumpFunParams {
                 bonding_curve: Some(Arc::new(bonding_curve.clone())),
             })),
@@ -123,6 +123,7 @@ async fn test_pumpfun() -> AnyResult<()> {
     let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
         .sell(
+            DexType::PumpFun,
             mint_pubkey,
             Some(creator),
             amount_token,
@@ -130,7 +131,6 @@ async fn test_pumpfun() -> AnyResult<()> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::PumpFun,
             None,
         )
         .await?;
@@ -151,6 +151,7 @@ async fn test_pumpswap() -> AnyResult<()> {
     // buy
     solana_trade_client
         .buy(
+            DexType::PumpFun,
             mint_pubkey,
             Some(creator),
             buy_sol_cost,
@@ -158,7 +159,6 @@ async fn test_pumpswap() -> AnyResult<()> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::PumpSwap,
             None,
         )
         .await?;
@@ -167,6 +167,7 @@ async fn test_pumpswap() -> AnyResult<()> {
     let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
         .sell(
+            DexType::PumpSwap,
             mint_pubkey,
             Some(creator),
             amount_token,
@@ -174,7 +175,6 @@ async fn test_pumpswap() -> AnyResult<()> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::PumpSwap,
             None,
         )
         .await?;
@@ -194,6 +194,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     // buy
     solana_trade_client
         .buy(
+            DexType::Bonk,
             mint_pubkey,
             None,
             buy_sol_cost,
@@ -201,7 +202,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::Bonk,
             None,
         )
         .await?;
@@ -210,6 +210,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
         .sell(
+            DexType::Bonk,
             mint_pubkey,
             None,
             amount_token,
@@ -217,7 +218,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             recent_blockhash,
             None,
             false,
-            TradingProtocol::Bonk,
             None,
         )
         .await?;

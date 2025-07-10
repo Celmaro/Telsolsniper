@@ -12,7 +12,7 @@ use crate::trading::core::params::BonkParams;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpSwapParams;
 use crate::trading::core::traits::ProtocolParams;
-use crate::trading::factory::TradingProtocol;
+use crate::trading::factory::DexType;
 use crate::trading::BuyParams;
 use crate::trading::SellParams;
 use crate::trading::TradeFactory;
@@ -153,28 +153,28 @@ impl SolanaTrade {
     /// ```
     pub async fn buy(
         &self,
+        dex_type: DexType,
         mint: Pubkey,
         creator: Option<Pubkey>,
         amount_sol: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
-        with_tip: bool,
-        protocol: TradingProtocol,
-        protocol_params: Option<Box<dyn ProtocolParams>>,
+        with_tip: bool,  
+        extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
-        let executor = TradeFactory::create_executor(protocol.clone());
-        let protocol_params = if let Some(params) = protocol_params {
+        let executor = TradeFactory::create_executor(dex_type.clone());
+        let protocol_params = if let Some(params) = extension_params {
             params
         } else {
-            match protocol {
-                TradingProtocol::PumpFun => {
+            match dex_type {
+                DexType::PumpFun => {
                     Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>
                 }
-                TradingProtocol::PumpSwap => {
+                DexType::PumpSwap => {
                     Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>
                 }
-                TradingProtocol::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
+                DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
             }
         };
         let buy_params = BuyParams {
@@ -203,16 +203,16 @@ impl SolanaTrade {
         let buy_with_tip_params = buy_params.clone().with_tip(self.swqos_clients.clone());
 
         // Validate protocol params
-        let is_valid_params = match protocol {
-            TradingProtocol::PumpFun => protocol_params
+        let is_valid_params = match dex_type {
+            DexType::PumpFun => protocol_params
                 .as_any()
                 .downcast_ref::<PumpFunParams>()
                 .is_some(),
-            TradingProtocol::PumpSwap => protocol_params
+            DexType::PumpSwap => protocol_params
                 .as_any()
                 .downcast_ref::<PumpSwapParams>()
                 .is_some(),
-            TradingProtocol::Bonk => protocol_params
+            DexType::Bonk => protocol_params
                 .as_any()
                 .downcast_ref::<BonkParams>()
                 .is_some(),
@@ -262,7 +262,7 @@ impl SolanaTrade {
     /// ```rust
     /// use solana_sdk::pubkey::Pubkey;
     /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::TradingProtocol;
+    /// use crate::trading::factory::DexType;
     ///
     /// let mint = Pubkey::new_unique();
     /// let amount_token = 1_000_000; // Amount of tokens to sell
@@ -277,12 +277,13 @@ impl SolanaTrade {
     ///     recent_blockhash,
     ///     None,
     ///     true,
-    ///     TradingProtocol::PumpFun,
+    ///     DexType::PumpFun,
     ///     None,
     /// ).await?;
     /// ```
     pub async fn sell(
         &self,
+        dex_type: DexType,
         mint: Pubkey,
         creator: Option<Pubkey>,
         amount_token: u64,
@@ -290,21 +291,20 @@ impl SolanaTrade {
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
-        protocol: TradingProtocol,
-        protocol_params: Option<Box<dyn ProtocolParams>>,
+        extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
-        let executor = TradeFactory::create_executor(protocol.clone());
-        let protocol_params = if let Some(params) = protocol_params {
+        let executor = TradeFactory::create_executor(dex_type.clone());
+        let protocol_params = if let Some(params) = extension_params {
             params
         } else {
-            match protocol {
-                TradingProtocol::PumpFun => {
+            match dex_type {
+                DexType::PumpFun => {
                     Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>
                 }
-                TradingProtocol::PumpSwap => {
+                DexType::PumpSwap => {
                     Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>
                 }
-                TradingProtocol::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
+                DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
             }
         };
         let sell_params = SellParams {
@@ -332,16 +332,16 @@ impl SolanaTrade {
         let sell_with_tip_params = sell_params.clone().with_tip(self.swqos_clients.clone());
 
         // Validate protocol params
-        let is_valid_params = match protocol {
-            TradingProtocol::PumpFun => protocol_params
+        let is_valid_params = match dex_type {
+            DexType::PumpFun => protocol_params
                 .as_any()
                 .downcast_ref::<PumpFunParams>()
                 .is_some(),
-            TradingProtocol::PumpSwap => protocol_params
+            DexType::PumpSwap => protocol_params
                 .as_any()
                 .downcast_ref::<PumpSwapParams>()
                 .is_some(),
-            TradingProtocol::Bonk => protocol_params
+            DexType::Bonk => protocol_params
                 .as_any()
                 .downcast_ref::<BonkParams>()
                 .is_some(),
@@ -414,12 +414,13 @@ impl SolanaTrade {
     ///     recent_blockhash,
     ///     None,
     ///     true,
-    ///     TradingProtocol::PumpFun,
+    ///     DexType::PumpFun,
     ///     None,
     /// ).await?;
     /// ```
     pub async fn sell_by_percent(
         &self,
+        dex_type: DexType,
         mint: Pubkey,
         creator: Option<Pubkey>,
         amount_token: u64,
@@ -428,14 +429,14 @@ impl SolanaTrade {
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
-        protocol: TradingProtocol,
-        protocol_params: Option<Box<dyn ProtocolParams>>,
+        extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
         }
         let amount = amount_token * percent / 100;
         self.sell(
+            dex_type,
             mint,
             creator,
             amount,
@@ -443,8 +444,7 @@ impl SolanaTrade {
             recent_blockhash,
             custom_buy_tip_fee,
             with_tip,
-            protocol,
-            protocol_params,
+            extension_params,
         )
         .await
     }
