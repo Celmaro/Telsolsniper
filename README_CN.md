@@ -223,7 +223,7 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
     println!("Testing PumpFun trading...");
 
     // 如果不是开发者购买，则返回
-    if !trade_info.is_dev_create_token_trade && !trade_info.is_buy {
+    if !trade_info.is_dev_create_token_trade {
         return Ok(());
     }
 
