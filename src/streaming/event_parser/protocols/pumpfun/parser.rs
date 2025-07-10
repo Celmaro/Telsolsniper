@@ -2,7 +2,7 @@ use solana_sdk::{instruction::CompiledInstruction, pubkey::Pubkey};
 use solana_transaction_status::UiCompiledInstruction;
 
 use crate::streaming::event_parser::{
-    common::{utils::*, EventMetadata, EventType, ProtocolType},
+    common::{EventMetadata, EventType, ProtocolType},
     core::traits::{EventParser, GenericEventParseConfig, GenericEventParser, UnifiedEvent},
     protocols::pumpfun::{discriminators, PumpFunCreateTokenEvent, PumpFunTradeEvent},
 };

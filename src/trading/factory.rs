@@ -9,30 +9,30 @@ use super::{
 
 /// 支持的交易协议
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Protocol {
+pub enum TradingProtocol {
     PumpFun,
     PumpSwap,
     Bonk,
 }
 
-impl std::fmt::Display for Protocol {
+impl std::fmt::Display for TradingProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Protocol::PumpFun => write!(f, "PumpFun"),
-            Protocol::PumpSwap => write!(f, "PumpSwap"),
-            Protocol::Bonk => write!(f, "Bonk"),
+            TradingProtocol::PumpFun => write!(f, "PumpFun"),
+            TradingProtocol::PumpSwap => write!(f, "PumpSwap"),
+            TradingProtocol::Bonk => write!(f, "Bonk"),
         }
     }
 }
 
-impl std::str::FromStr for Protocol {
+impl std::str::FromStr for TradingProtocol {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "pumpfun" => Ok(Protocol::PumpFun),
-            "pumpswap" => Ok(Protocol::PumpSwap),
-            "bonk" => Ok(Protocol::Bonk),
+            "pumpfun" => Ok(TradingProtocol::PumpFun),
+            "pumpswap" => Ok(TradingProtocol::PumpSwap),
+            "bonk" => Ok(TradingProtocol::Bonk),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -43,17 +43,17 @@ pub struct TradeFactory;
 
 impl TradeFactory {
     /// 创建指定协议的交易执行器
-    pub fn create_executor(protocol: Protocol) -> Arc<dyn TradeExecutor> {
+    pub fn create_executor(protocol: TradingProtocol) -> Arc<dyn TradeExecutor> {
         match protocol {
-            Protocol::PumpFun => {
+            TradingProtocol::PumpFun => {
                 let instruction_builder = Arc::new(PumpFunInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "PumpFun"))
             }
-            Protocol::PumpSwap => {
+            TradingProtocol::PumpSwap => {
                 let instruction_builder = Arc::new(PumpSwapInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "PumpSwap"))
             }
-            Protocol::Bonk => {
+            TradingProtocol::Bonk => {
                 let instruction_builder = Arc::new(BonkInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(
                     instruction_builder,
@@ -64,16 +64,16 @@ impl TradeFactory {
     }
 
     /// 获取所有支持的协议
-    pub fn supported_protocols() -> Vec<Protocol> {
+    pub fn supported_protocols() -> Vec<TradingProtocol> {
         vec![
-            Protocol::PumpFun,
-            Protocol::PumpSwap,
-            Protocol::Bonk,
+            TradingProtocol::PumpFun,
+            TradingProtocol::PumpSwap,
+            TradingProtocol::Bonk,
         ]
     }
 
     /// 检查协议是否支持
-    pub fn is_supported(protocol: &Protocol) -> bool {
+    pub fn is_supported(protocol: &TradingProtocol) -> bool {
         Self::supported_protocols().contains(protocol)
     }
 }

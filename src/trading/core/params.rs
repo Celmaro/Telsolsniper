@@ -3,9 +3,9 @@ use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use std::sync::Arc;
 
 use super::traits::ProtocolParams;
+use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::swqos::SwqosClient;
-use crate::common::bonding_curve::BondingCurveAccount;
 
 /// 通用买入参数
 #[derive(Clone)]
@@ -74,24 +74,18 @@ pub struct SellWithTipParams {
 /// PumpFun协议特定参数
 #[derive(Clone)]
 pub struct PumpFunParams {
-    pub trade_type: String,
     pub bonding_curve: Option<Arc<BondingCurveAccount>>,
 }
 
-impl ProtocolParams for PumpFunParams {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn clone_box(&self) -> Box<dyn ProtocolParams> {
-        Box::new(self.clone())
+impl PumpFunParams {
+    pub fn default() -> Self {
+        Self {
+            bonding_curve: None,
+        }
     }
 }
 
-#[derive(Clone)]
-pub struct PumpFunSellParams {}
-
-impl ProtocolParams for PumpFunSellParams {
+impl ProtocolParams for PumpFunParams {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -105,11 +99,16 @@ impl ProtocolParams for PumpFunSellParams {
 #[derive(Clone)]
 pub struct PumpSwapParams {
     pub pool: Option<Pubkey>,
-    pub pool_base_token_account: Option<Pubkey>,
-    pub pool_quote_token_account: Option<Pubkey>,
-    pub user_base_token_account: Option<Pubkey>,
-    pub user_quote_token_account: Option<Pubkey>,
     pub auto_handle_wsol: bool,
+}
+
+impl PumpSwapParams {
+    pub fn default() -> Self {
+        Self {
+            pool: None,
+            auto_handle_wsol: true,
+        }
+    }
 }
 
 impl ProtocolParams for PumpSwapParams {
@@ -130,6 +129,18 @@ pub struct BonkParams {
     pub real_base_before: Option<u128>,
     pub real_quote_before: Option<u128>,
     pub auto_handle_wsol: bool,
+}
+
+impl BonkParams {
+    pub fn default() -> Self {
+        Self {
+            virtual_base: None,
+            virtual_quote: None,
+            real_base_before: None,
+            real_quote_before: None,
+            auto_handle_wsol: true,
+        }
+    }
 }
 
 impl ProtocolParams for BonkParams {

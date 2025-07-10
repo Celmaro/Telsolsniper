@@ -1,7 +1,7 @@
 use crate::streaming::event_parser::protocols::bonk::types::{
     CurveParams, MintParams, PoolStatus, TradeDirection, VestingParams,
 };
-use crate::streaming::event_parser::{common::EventMetadata, core::traits::UnifiedEvent};
+use crate::streaming::event_parser::common::EventMetadata;
 use crate::impl_unified_event;
 use borsh::BorshDeserialize;
 use serde::{Deserialize, Serialize};

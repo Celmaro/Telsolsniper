@@ -12,7 +12,7 @@
 6. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
 7. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute 等服务
 8. **并发交易**: 同时使用多个 MEV 服务发送交易，最快的成功，其他失败
-9. **统一交易接口**: 使用统一的参数结构进行交易操作
+9. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
 
 ## 安装
 
@@ -38,18 +38,20 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.1.0" }
 
 ```rust
 use sol_trade_sdk::{
-    event_parser::{
-        protocols::{
-            pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
-            pumpswap::{
-                PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
-                PumpSwapSellEvent, PumpSwapWithdrawEvent,
+    streaming::{
+        event_parser::{
+            protocols::{
+                bonk::{BonkPoolCreateEvent, BonkTradeEvent},
+                pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
+                pumpswap::{
+                    PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
+                    PumpSwapSellEvent, PumpSwapWithdrawEvent,
+                },
             },
-            bonk::{BonkPoolCreateEvent, BonkTradeEvent},
+            Protocol, UnifiedEvent,
         },
-        Protocol, UnifiedEvent,
+        YellowstoneGrpc,
     },
-    grpc::YellowstoneGrpc,
     match_event,
 };
 
@@ -97,11 +99,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
 
     // 订阅多个协议的事件
     println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![
-        Protocol::PumpFun,
-        Protocol::PumpSwap,
-        Protocol::Bonk,
-    ];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
 
@@ -112,7 +110,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
 #### 1.2 使用 ShredStream 订阅事件
 
 ```rust
-use sol_trade_sdk::grpc::ShredStreamGrpc;
+use sol_trade_sdk::streaming::ShredStreamGrpc;
 
 async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // 使用 ShredStream 客户端订阅事件
@@ -155,11 +153,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 
     // 订阅事件
     println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![
-        Protocol::PumpFun,
-        Protocol::PumpSwap,
-        Protocol::Bonk,
-    ];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)
         .await?;
@@ -177,127 +171,120 @@ use sol_trade_sdk::{
     swqos::{SwqosConfig, SwqosRegion},
     SolanaTrade
 };
-use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 
-// 创建交易者账户
-let payer = Keypair::new();
-let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+/// 创建 SolanaTrade 客户端的示例
+async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
+    println!("Creating SolanaTrade client...");
 
-// 配置多个MEV服务，支持并发交易
-let swqos_configs = vec![
-    SwqosConfig::Jito(SwqosRegion::Frankfurt),
-    SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-    SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
-    SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
-    SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
-    SwqosConfig::Default(rpc_url.clone()),
-];
+    let payer = Keypair::new();
+    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
 
-// 定义交易配置
-let trade_config = TradeConfig {
-    rpc_url: rpc_url.clone(),
-    commitment: CommitmentConfig::confirmed(),
-    priority_fee: PriorityFee::default(),
-    swqos_configs,
-    lookup_table_key: None,
-};
+    // 配置各种 SWQOS 服务
+    let swqos_configs = vec![
+        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Default(rpc_url.clone()),
+    ];
 
-// 创建SolanaTrade实例
-let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
+    // 定义交易配置
+    let trade_config = TradeConfig {
+        rpc_url: rpc_url.clone(),
+        commitment: CommitmentConfig::confirmed(),
+        priority_fee: PriorityFee::default(),
+        swqos_configs,
+        lookup_table_key: None,
+    };
+
+    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
+    println!("SolanaTrade client created successfully!");
+
+    Ok(solana_trade_client)
+}
 ```
 
 ### 3. PumpFun 交易操作
 
 ```rust
 use sol_trade_sdk::{
-    accounts::BondingCurveAccount,
-    constants::{pumpfun::global_constants::TOKEN_TOTAL_SUPPLY, trade_type},
-    pumpfun::common::get_bonding_curve_account_v2,
+    common::bonding_curve::BondingCurveAccount,
+    constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY,
     trading::{
-        core::params::{PumpFunParams, PumpFunSellParams},
-        BuyParams, SellParams,
+        core::params::PumpFunParams,
+        factory::TradingProtocol,
+        pumpfun::common::get_bonding_curve_account_v2,
     },
 };
 
 async fn test_pumpfun() -> AnyResult<()> {
-    // 基本参数设置
-    let creator = Pubkey::from_str("xxxxxx")?; // 开发者账户
-    let mint_pubkey = Pubkey::from_str("xxxxxx")?; // 代币地址
+    println!("Testing PumpFun trading...");
+
+    let solana_trade_client = test_create_solana_trade_client().await?;
+    let creator = Pubkey::from_str("xxxxxx")?; // dev account
     let buy_sol_cost = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(rpc_url);
-    let recent_blockhash = rpc.get_latest_blockhash().unwrap();
+    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxx")?; // token mint
 
     println!("Buying tokens from PumpFun...");
-
-    // 获取bonding curve信息
+    // get bonding curve
     let (bonding_curve, bonding_curve_pda) =
         get_bonding_curve_account_v2(&solana_trade_client.rpc, &mint_pubkey).await?;
-
+    let virtual_token_reserves = bonding_curve.virtual_token_reserves;
+    let virtual_sol_reserves = bonding_curve.virtual_sol_reserves;
+    let real_token_reserves = bonding_curve.real_token_reserves;
+    let real_sol_reserves = bonding_curve.real_sol_reserves;
     let bonding_curve = BondingCurveAccount {
         discriminator: bonding_curve.discriminator,
         account: bonding_curve_pda,
-        virtual_token_reserves: bonding_curve.virtual_token_reserves,
-        virtual_sol_reserves: bonding_curve.virtual_sol_reserves,
-        real_token_reserves: bonding_curve.real_token_reserves,
-        real_sol_reserves: bonding_curve.real_sol_reserves,
+        virtual_token_reserves: virtual_token_reserves,
+        virtual_sol_reserves: virtual_sol_reserves,
+        real_token_reserves: real_token_reserves,
+        real_sol_reserves: real_sol_reserves,
         token_total_supply: TOKEN_TOTAL_SUPPLY,
         complete: false,
         creator: creator,
     };
-
-    // 购买操作
-    let buy_protocol_params = PumpFunParams {
-        trade_type: trade_type::COPY_BUY.to_string(),
-        bonding_curve: Some(Arc::new(bonding_curve)),
-    };
-
-    let buy_params = BuyParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint_pubkey,
-        creator: creator,
-        amount_sol: buy_sol_cost,
-        slippage_basis_points: slippage_basis_points,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        data_size_limit: 0,
-        protocol_params: Box::new(buy_protocol_params.clone()),
-    };
-
-    // 使用MEV保护的购买
-    let buy_with_tip_params = buy_params
-        .clone()
-        .with_tip(solana_trade_client.swqos_clients.clone());
-
+    // 如果是狙击开发者
+    // let bonding_curve =
+    //     BondingCurveAccount::new(&mint_pubkey, dev_buy_token, dev_cost_sol, creator);
+    
+    // buy
     solana_trade_client
-        .buy_use_buy_params(buy_with_tip_params, None)
+        .buy(
+            mint_pubkey,
+            Some(creator),
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::PumpFun,
+            Some(Box::new(PumpFunParams {
+                bonding_curve: Some(Arc::new(bonding_curve.clone())),
+            })),
+        )
         .await?;
-
-    // 卖出操作
+    
+    // sell
     println!("Selling tokens from PumpFun...");
-    let sell_protocol_params = PumpFunSellParams {};
-    let amount_token = 1000000; // 写上真实的代币数量
-
-    let sell_params = SellParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint_pubkey,
-        creator: creator,
-        amount_token: Some(amount_token),
-        slippage_basis_points: None,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        protocol_params: Box::new(sell_protocol_params.clone()),
-    };
-
+    let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
-        .sell_by_amount_use_sell_params(sell_params)
+        .sell(
+            mint_pubkey,
+            Some(creator),
+            amount_token,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::PumpFun,
+            None,
+        )
         .await?;
-
     Ok(())
 }
 ```
@@ -305,73 +292,48 @@ async fn test_pumpfun() -> AnyResult<()> {
 ### 4. PumpSwap 交易操作
 
 ```rust
-use sol_trade_sdk::trading::core::params::PumpSwapParams;
-
 async fn test_pumpswap() -> AnyResult<()> {
-    // 基本参数设置
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?; // 开发者账户
-    let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?; // 代币地址
+    println!("Testing PumpSwap trading...");
+
+    let solana_trade_client = test_create_solana_trade_client().await?;
+    let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
     let buy_sol_cost = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100);
-    let rpc = RpcClient::new(rpc_url);
-    let recent_blockhash = rpc.get_latest_blockhash().unwrap();
+    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?; // token mint
 
     println!("Buying tokens from PumpSwap...");
-
-    // PumpSwap参数配置
-    let protocol_params = PumpSwapParams {
-        pool: None,
-        pool_base_token_account: None,
-        pool_quote_token_account: None,
-        user_base_token_account: None,
-        user_quote_token_account: None,
-        auto_handle_wsol: true,
-    };
-
-    // 购买操作
-    let buy_params = BuyParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint_pubkey,
-        creator: creator,
-        amount_sol: buy_sol_cost,
-        slippage_basis_points: slippage_basis_points,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        data_size_limit: 0,
-        protocol_params: Box::new(protocol_params.clone()),
-    };
-
-    let buy_with_tip_params = buy_params
-        .clone()
-        .with_tip(solana_trade_client.swqos_clients.clone());
-
+    // buy
     solana_trade_client
-        .buy_use_buy_params(buy_with_tip_params, None)
+        .buy(
+            mint_pubkey,
+            Some(creator),
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::PumpSwap,
+            None,
+        )
         .await?;
-
-    // 卖出操作
+    
+    // sell
     println!("Selling tokens from PumpSwap...");
-    let amount_token = 1000000; // 写上真实的代币数量
-
-    let sell_params = SellParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint_pubkey,
-        creator: creator,
-        amount_token: Some(amount_token),
-        slippage_basis_points: None,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        protocol_params: Box::new(protocol_params.clone()),
-    };
-
+    let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
-        .sell_by_amount_use_sell_params(sell_params)
+        .sell(
+            mint_pubkey,
+            Some(creator),
+            amount_token,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::PumpSwap,
+            None,
+        )
         .await?;
-
     Ok(())
 }
 ```
@@ -379,68 +341,47 @@ async fn test_pumpswap() -> AnyResult<()> {
 ### 5. Bonk 交易操作
 
 ```rust
-use sol_trade_sdk::trading::core::params::BonkParams;
-
 async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
-    // 基本参数设置
-    let amount = 100_000; // 0.0001 SOL
-    let mint = Pubkey::from_str("xxxxxxx")?;
-    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    println!("Testing Bonk trading...");
 
-    // Bonk参数配置
-    let bonk_params = BonkParams {
-        virtual_base: None,
-        virtual_quote: None,
-        real_base_before: None,
-        real_quote_before: None,
-        auto_handle_wsol: true,
-    };
+    let solana_trade_client = test_create_solana_trade_client().await?;
+    let buy_sol_cost = 100_000; // 0.0001 SOL
+    let slippage_basis_points = Some(100); // 1%
+    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
 
     println!("Buying tokens from letsbonk.fun...");
-
-    // 购买操作
-    let buy_params = BuyParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint,
-        creator: Pubkey::default(),
-        amount_sol: amount,
-        slippage_basis_points: None,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        data_size_limit: 0,
-        protocol_params: Box::new(bonk_params.clone()),
-    };
-
-    let buy_with_tip_params = buy_params
-        .clone()
-        .with_tip(solana_trade_client.swqos_clients.clone());
-
+    // buy
     solana_trade_client
-        .buy_use_buy_params(buy_with_tip_params, None)
+        .buy(
+            mint_pubkey,
+            None,
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::Bonk,
+            None,
+        )
         .await?;
-
-    // 卖出操作
+    
+    // sell
     println!("Selling tokens from letsbonk.fun...");
-
-    let sell_params = SellParams {
-        rpc: Some(solana_trade_client.rpc.clone()),
-        payer: solana_trade_client.payer.clone(),
-        mint: mint,
-        creator: Pubkey::default(),
-        amount_token: None,
-        slippage_basis_points: None,
-        priority_fee: solana_trade_client.trade_config.clone().priority_fee,
-        lookup_table_key: solana_trade_client.trade_config.clone().lookup_table_key,
-        recent_blockhash,
-        protocol_params: Box::new(bonk_params.clone()),
-    };
-
+    let amount_token = 0; // 写上真实的amount_token
     solana_trade_client
-        .sell_by_amount_use_sell_params(sell_params)
+        .sell(
+            mint_pubkey,
+            None,
+            amount_token,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            TradingProtocol::Bonk,
+            None,
+        )
         .await?;
-
     Ok(())
 }
 ```
@@ -487,11 +428,11 @@ let trade_config = TradeConfig {
 
 ## 新架构特性
 
-### 统一参数结构
+### 统一交易接口
 
-- **BuyParams**: 统一的购买参数结构
-- **SellParams**: 统一的卖出参数结构
-- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams、PumpSwapParams、BonkParams）
+- **TradingProtocol 枚举**: 使用统一的协议枚举（PumpFun、PumpSwap、Bonk）
+- **统一的 buy/sell 方法**: 所有协议都使用相同的交易方法签名
+- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams 等）
 
 ### 事件解析系统
 
@@ -509,29 +450,28 @@ let trade_config = TradeConfig {
 
 ```
 src/
-├── accounts/         # 账户相关定义
 ├── common/           # 通用功能和工具
 ├── constants/        # 常量定义
-├── error/            # 错误处理
-├── event_parser/     # 事件解析系统
-│   ├── common/       # 通用事件解析工具
-│   ├── core/         # 核心解析特征和接口
-│   ├── protocols/    # 协议特定解析器
-│   │   ├── pumpfun/  # PumpFun事件解析
-│   │   ├── pumpswap/ # PumpSwap事件解析
-│   │   └── bonk/     # Bonk事件解析
-│   └── factory.rs    # 解析器工厂
-├── grpc/             # gRPC客户端
 ├── instruction/      # 指令构建
-├── protos/           # 协议缓冲区定义
-├── pumpfun/          # PumpFun交易功能
-├── pumpswap/         # PumpSwap交易功能
-├── bonk/             # Bonk交易功能
+├── streaming/        # 事件流处理
+│   ├── event_parser/ # 事件解析系统
+│   │   ├── common/   # 通用事件解析工具
+│   │   ├── core/     # 核心解析特征和接口
+│   │   ├── protocols/# 协议特定解析器
+│   │   │   ├── bonk/ # Bonk事件解析
+│   │   │   ├── pumpfun/ # PumpFun事件解析
+│   │   │   └── pumpswap/ # PumpSwap事件解析
+│   │   └── factory.rs # 解析器工厂
+│   ├── shred_stream.rs # ShredStream客户端
+│   └── yellowstone_grpc.rs # Yellowstone gRPC客户端
 ├── swqos/            # MEV服务客户端
 ├── trading/          # 统一交易引擎
 │   ├── common/       # 通用交易工具
 │   ├── core/         # 核心交易引擎
-│   └── protocols/    # 协议特定交易实现
+│   ├── bonk/         # Bonk交易实现
+│   ├── pumpfun/      # PumpFun交易实现
+│   ├── pumpswap/     # PumpSwap交易实现
+│   └── factory.rs    # 交易工厂
 ├── lib.rs            # 主库文件
 └── main.rs           # 示例程序
 ```

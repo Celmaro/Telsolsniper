@@ -1,8 +1,5 @@
-use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
-use spl_associated_token_account::get_associated_token_address;
-
-use crate::{common::SolanaRpcClient, constants};
+use crate::constants;
 
 pub fn get_amount_out(
     amount_in: u64,
@@ -56,20 +53,4 @@ pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
     let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
-}
-
-pub async fn get_token_balance(
-    rpc: &SolanaRpcClient,
-    payer: &Pubkey,
-    mint: &Pubkey,
-) -> Result<u64, anyhow::Error> {
-    println!("payer: {:?}", payer);
-    println!("mint: {:?}", mint);
-    let ata = get_associated_token_address(payer, mint);
-    let balance = rpc.get_token_account_balance(&ata).await?;
-    let balance_u64 = balance
-        .amount
-        .parse::<u64>()
-        .map_err(|_| anyhow!("Failed to parse token balance"))?;
-    Ok(balance_u64)
 }

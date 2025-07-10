@@ -2,7 +2,6 @@ use crate::{common::SolanaRpcClient, constants::pumpswap::accounts};
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 
 #[derive(Debug, Clone)]
 pub struct Pool {

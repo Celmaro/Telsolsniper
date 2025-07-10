@@ -3,7 +3,7 @@ use std::sync::Arc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 use serde::Deserialize;
-use crate::{constants::pumpfun::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::{SwqosClient, SwqosConfig, SwqosRegion}};
+use crate::{constants::trade::trade::{DEFAULT_BUY_TIP_FEE, DEFAULT_COMPUTE_UNIT_LIMIT, DEFAULT_COMPUTE_UNIT_PRICE, DEFAULT_RPC_UNIT_LIMIT, DEFAULT_RPC_UNIT_PRICE, DEFAULT_SELL_TIP_FEE}, swqos::{SwqosClient, SwqosConfig}};
 
 #[derive(Debug, Clone)]
 pub struct TradeConfig {

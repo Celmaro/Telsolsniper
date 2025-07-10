@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::signer::Signer;
 use std::sync::Arc;
 
 use super::{
@@ -12,6 +11,8 @@ use crate::{
     swqos::TradeType,
     trading::common::{build_rpc_transaction, build_sell_transaction},
 };
+
+const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 256 * 1024;
 
 /// 通用交易执行器实现
 pub struct GenericTradeExecutor {
@@ -29,26 +30,14 @@ impl GenericTradeExecutor {
             protocol_name,
         }
     }
-
-    /// 获取代币余额
-    async fn get_token_balance(
-        &self,
-        rpc: Arc<crate::common::SolanaRpcClient>,
-        payer: &solana_sdk::signature::Keypair,
-        mint: &solana_sdk::pubkey::Pubkey,
-    ) -> Result<u64> {
-        let ata = spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint);
-        let balance = rpc.get_token_account_balance(&ata).await?;
-        balance
-            .amount
-            .parse::<u64>()
-            .map_err(|_| anyhow!("Failed to parse token balance"))
-    }
 }
 
 #[async_trait::async_trait]
 impl TradeExecutor for GenericTradeExecutor {
-    async fn buy(&self, params: BuyParams) -> Result<()> {
+    async fn buy(&self, mut params: BuyParams) -> Result<()> {
+        if params.data_size_limit == 0 {
+            params.data_size_limit = MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
+        }
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
@@ -80,7 +69,10 @@ impl TradeExecutor for GenericTradeExecutor {
         Ok(())
     }
 
-    async fn buy_with_tip(&self, params: BuyWithTipParams) -> Result<()> {
+    async fn buy_with_tip(&self, mut params: BuyWithTipParams) -> Result<()> {
+        if params.data_size_limit == 0 {
+            params.data_size_limit = MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
+        }
         let mut timer = TradeTimer::new("构建买入交易指令");
 
         // 验证参数 - 转换为BuyParams进行验证

@@ -3,17 +3,18 @@ use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 
 use crate::{
-    constants::pumpswap::{
-        accounts, trade::DEFAULT_SLIPPAGE, BUY_DISCRIMINATOR, SELL_DISCRIMINATOR,
-    },
-    trading::pumpswap::common::{
-        calculate_with_slippage_buy, calculate_with_slippage_sell, coin_creator_vault_ata,
-        coin_creator_vault_authority, find_pool, get_buy_token_amount, get_sell_sol_amount,
-        get_token_balance,
+    constants::pumpswap::{accounts, BUY_DISCRIMINATOR, SELL_DISCRIMINATOR},
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    trading::common::utils::{
+        calculate_with_slippage_buy, calculate_with_slippage_sell, get_token_balance,
     },
     trading::core::{
         params::{BuyParams, PumpSwapParams, SellParams},
         traits::InstructionBuilder,
+    },
+    trading::pumpswap::common::{
+        coin_creator_vault_ata, coin_creator_vault_authority, find_pool, get_buy_token_amount,
+        get_sell_sol_amount,
     },
 };
 
@@ -35,27 +36,11 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         }
 
         // 根据是否提供了账户信息来构建指令
-        match (
-            &protocol_params.pool,
-            &protocol_params.pool_base_token_account,
-            &protocol_params.pool_quote_token_account,
-            &protocol_params.user_base_token_account,
-            &protocol_params.user_quote_token_account,
-        ) {
-            (
-                Some(pool),
-                Some(pool_base_token_account),
-                Some(pool_quote_token_account),
-                Some(user_base_token_account),
-                Some(user_quote_token_account),
-            ) => {
+        match (&protocol_params.pool,) {
+            (Some(pool),) => {
                 self.build_buy_instructions_with_accounts(
                     params,
                     *pool,
-                    *pool_base_token_account,
-                    *pool_quote_token_account,
-                    *user_base_token_account,
-                    *user_quote_token_account,
                     protocol_params.auto_handle_wsol,
                 )
                 .await
@@ -73,29 +58,10 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
 
         // 根据是否提供了账户信息来构建指令
-        match (
-            &protocol_params.pool,
-            &protocol_params.pool_base_token_account,
-            &protocol_params.pool_quote_token_account,
-            &protocol_params.user_base_token_account,
-            &protocol_params.user_quote_token_account,
-        ) {
-            (
-                Some(pool),
-                Some(pool_base_token_account),
-                Some(pool_quote_token_account),
-                Some(user_base_token_account),
-                Some(user_quote_token_account),
-            ) => {
-                self.build_sell_instructions_with_accounts(
-                    params,
-                    *pool,
-                    *pool_base_token_account,
-                    *pool_quote_token_account,
-                    *user_base_token_account,
-                    *user_quote_token_account,
-                )
-                .await
+        match (&protocol_params.pool,) {
+            (Some(pool),) => {
+                self.build_sell_instructions_with_accounts(params, *pool)
+                    .await
             }
             _ => self.build_sell_instructions_auto_discover(params).await,
         }
@@ -115,41 +81,8 @@ impl PumpSwapInstructionBuilder {
         // 查找池
         let pool = find_pool(rpc.as_ref(), &params.mint).await?;
 
-        // 创建用户代币账户
-        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &params.mint,
-        );
-        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
-        );
-
-        // 获取池的代币账户
-        let pool_base_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(
-                &pool,
-                &params.mint,
-                &accounts::TOKEN_PROGRAM,
-            );
-
-        let pool_quote_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(
-                &pool,
-                &accounts::WSOL_TOKEN_ACCOUNT,
-                &accounts::TOKEN_PROGRAM,
-            );
-
-        self.build_buy_instructions_with_accounts(
-            params,
-            pool,
-            pool_base_token_account,
-            pool_quote_token_account,
-            user_base_token_account,
-            user_quote_token_account,
-            true,
-        )
-        .await
+        self.build_buy_instructions_with_accounts(params, pool, true)
+            .await
     }
 
     /// 自动发现池和账户信息并构建卖出指令
@@ -165,6 +98,30 @@ impl PumpSwapInstructionBuilder {
         // 查找池
         let pool = find_pool(rpc.as_ref(), &params.mint).await?;
 
+        self.build_sell_instructions_with_accounts(params, pool)
+            .await
+    }
+
+    /// 使用提供的账户信息构建买入指令
+    async fn build_buy_instructions_with_accounts(
+        &self,
+        params: &BuyParams,
+        pool: Pubkey,
+        auto_handle_wsol: bool,
+    ) -> Result<Vec<Instruction>> {
+        if params.rpc.is_none() {
+            return Err(anyhow!("RPC is not set"));
+        }
+        let rpc = params.rpc.as_ref().unwrap().clone();
+        // 计算预期的代币数量
+        let token_amount = get_buy_token_amount(rpc.as_ref(), &pool, params.amount_sol).await?;
+
+        // 计算滑点后的最大SOL数量
+        let max_sol_amount = calculate_with_slippage_buy(
+            params.amount_sol,
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+        );
+
         // 创建用户代币账户
         let user_base_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
@@ -189,41 +146,6 @@ impl PumpSwapInstructionBuilder {
                 &accounts::WSOL_TOKEN_ACCOUNT,
                 &accounts::TOKEN_PROGRAM,
             );
-
-        self.build_sell_instructions_with_accounts(
-            params,
-            pool,
-            pool_base_token_account,
-            pool_quote_token_account,
-            user_base_token_account,
-            user_quote_token_account,
-        )
-        .await
-    }
-
-    /// 使用提供的账户信息构建买入指令
-    async fn build_buy_instructions_with_accounts(
-        &self,
-        params: &BuyParams,
-        pool: Pubkey,
-        pool_base_token_account: Pubkey,
-        pool_quote_token_account: Pubkey,
-        user_base_token_account: Pubkey,
-        user_quote_token_account: Pubkey,
-        auto_handle_wsol: bool,
-    ) -> Result<Vec<Instruction>> {
-        if params.rpc.is_none() {
-            return Err(anyhow!("RPC is not set"));
-        }
-        let rpc = params.rpc.as_ref().unwrap().clone();
-        // 计算预期的代币数量
-        let token_amount = get_buy_token_amount(rpc.as_ref(), &pool, params.amount_sol).await?;
-
-        // 计算滑点后的最大SOL数量
-        let max_sol_amount = calculate_with_slippage_buy(
-            params.amount_sol,
-            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
-        );
 
         let mut instructions = vec![];
 
@@ -328,10 +250,6 @@ impl PumpSwapInstructionBuilder {
         &self,
         params: &SellParams,
         pool: Pubkey,
-        pool_base_token_account: Pubkey,
-        pool_quote_token_account: Pubkey,
-        user_base_token_account: Pubkey,
-        user_quote_token_account: Pubkey,
     ) -> Result<Vec<Instruction>> {
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
@@ -341,8 +259,8 @@ impl PumpSwapInstructionBuilder {
         // 获取代币余额
         let mut amount = params.amount_token;
         if params.amount_token.is_none() {
-            let (balance_u64, _) =
-                get_token_balance(rpc.as_ref(), params.payer.as_ref(), &params.mint).await?;
+            let balance_u64 =
+                get_token_balance(rpc.as_ref(), &params.payer.pubkey(), &params.mint).await?;
             amount = Some(balance_u64);
         }
         let amount = amount.unwrap_or(0);
@@ -362,6 +280,27 @@ impl PumpSwapInstructionBuilder {
 
         let coin_creator_vault_ata = coin_creator_vault_ata(params.creator);
         let coin_creator_vault_authority = coin_creator_vault_authority(params.creator);
+
+        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
+            &params.payer.pubkey(),
+            &params.mint,
+        );
+        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
+            &params.payer.pubkey(),
+            &accounts::WSOL_TOKEN_ACCOUNT,
+        );
+        let pool_base_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &pool,
+                &params.mint,
+                &accounts::TOKEN_PROGRAM,
+            );
+        let pool_quote_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &pool,
+                &accounts::WSOL_TOKEN_ACCOUNT,
+                &accounts::TOKEN_PROGRAM,
+            );
 
         let mut instructions = vec![];
 

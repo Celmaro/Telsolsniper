@@ -38,7 +38,7 @@ pub mod global_constants {
     pub const INITIAL_REAL_TOKEN_RESERVES: u64 = 793_100_000_000_000;
 
     pub const TOKEN_TOTAL_SUPPLY: u64 = 1_000_000_000_000_000;
-    
+
     pub const FEE_BASIS_POINTS: u64 = 95;
 
     pub const ENABLE_MIGRATE: bool = false;
@@ -75,8 +75,8 @@ pub mod global_constants {
     pub const PUMPFUN_AMM_FEE_4: Pubkey = pubkey!("AVmoTthdrX6tKt4nDjco2D775W2YK3sDhxPcMmzUAmTY"); // Pump.fun AMM: Protocol Fee 4
     pub const PUMPFUN_AMM_FEE_5: Pubkey = pubkey!("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM"); // Pump.fun AMM: Protocol Fee 5
     pub const PUMPFUN_AMM_FEE_6: Pubkey = pubkey!("FWsW1xNtWscwNmKv6wVsU1iTzRN6wmmk3MjxRP5tT7hz"); // Pump.fun AMM: Protocol Fee 6
-    pub const PUMPFUN_AMM_FEE_7: Pubkey = pubkey!("G5UZAVbAf46s7cKWoyKu8kYTip9DGTpbLZ2qa9Aq69dP"); // Pump.fun AMM: Protocol Fee 7
-
+    pub const PUMPFUN_AMM_FEE_7: Pubkey = pubkey!("G5UZAVbAf46s7cKWoyKu8kYTip9DGTpbLZ2qa9Aq69dP");
+    // Pump.fun AMM: Protocol Fee 7
 }
 
 /// Constants related to program accounts and authorities
@@ -99,7 +99,8 @@ pub mod accounts {
     pub const TOKEN_PROGRAM: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
     /// Associated Token Program ID
-    pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey = pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+    pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
+        pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
     /// Rent Sysvar ID
     pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
@@ -107,20 +108,8 @@ pub mod accounts {
     pub const AMM_PROGRAM: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 }
 
-pub mod trade {
-    pub const TRADER_TIP_AMOUNT: f64 = 0.0001;
-    pub const DEFAULT_SLIPPAGE: u64 = 1000; // 10%
-    pub const DEFAULT_COMPUTE_UNIT_LIMIT: u32 = 78000;
-    pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 500000;
-    pub const DEFAULT_BUY_TIP_FEE: f64 = 0.0006;
-    pub const DEFAULT_SELL_TIP_FEE: f64 = 0.0001;
-    pub const DEFAULT_RPC_UNIT_LIMIT: u32 = 1000000;
-    pub const DEFAULT_RPC_UNIT_PRICE: u64 = 500000;
-}
-
 pub struct Symbol;
 
 impl Symbol {
     pub const SOLANA: &'static str = "solana";
 }
-

@@ -4,10 +4,8 @@ use chrono::Local;
 use futures::{channel::mpsc, sink::Sink, SinkExt, Stream, StreamExt};
 use log::{error, info};
 use rustls::crypto::{ring::default_provider, CryptoProvider};
-use solana_sdk::{pubkey, pubkey::Pubkey, signature::Signature};
-use solana_transaction_status::{
-    option_serializer::OptionSerializer, EncodedTransactionWithStatusMeta, UiTransactionEncoding,
-};
+use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_transaction_status::{EncodedTransactionWithStatusMeta, UiTransactionEncoding};
 use tonic::{transport::channel::ClientTlsConfig, Status};
 use yellowstone_grpc_client::{GeyserGrpcClient, Interceptor};
 use yellowstone_grpc_proto::geyser::{
@@ -21,8 +19,6 @@ use crate::streaming::event_parser::{EventParserFactory, Protocol, UnifiedEvent}
 
 type TransactionsFilterMap = HashMap<String, SubscribeRequestFilterTransactions>;
 
-const PUMP_PROGRAM_ID: Pubkey = pubkey!("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
-const SYSTEM_PROGRAM_ID: Pubkey = pubkey!("11111111111111111111111111111111");
 const CONNECT_TIMEOUT: u64 = 10;
 const REQUEST_TIMEOUT: u64 = 60;
 const CHANNEL_SIZE: usize = 1000;

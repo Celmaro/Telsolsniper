@@ -1,47 +1,9 @@
-use anyhow::anyhow;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
 use crate::common::SolanaRpcClient;
 use crate::trading::pumpswap;
-
-// Calculate slippage for buy operations
-pub fn calculate_with_slippage_buy(amount: u64, basis_points: u64) -> u64 {
-    amount + (amount * basis_points / 10000)
-}
-
-// Calculate slippage for sell operations
-pub fn calculate_with_slippage_sell(amount: u64, basis_points: u64) -> u64 {
-    if amount <= basis_points / 10000 {
-        1
-    } else {
-        amount - (amount * basis_points / 10000)
-    }
-}
-
-// Get token balance for a specific mint and owner
-pub async fn get_token_balance(
-    rpc: &SolanaRpcClient,
-    owner: &Keypair,
-    mint: &Pubkey,
-) -> Result<(u64, Pubkey), anyhow::Error> {
-    let ata = spl_associated_token_account::get_associated_token_address(&owner.pubkey(), mint);
-
-    match rpc.get_token_account_balance(&ata).await {
-        Ok(balance) => {
-            let amount = balance.amount.parse::<u64>().map_err(|e| anyhow!(e))?;
-            Ok((amount, ata))
-        }
-        Err(_) => Ok((0, ata)),
-    }
-}
+use solana_sdk::pubkey::Pubkey;
 
 // Find a pool for a specific mint
-pub async fn find_pool(
-    rpc: &SolanaRpcClient,
-    mint: &Pubkey,
-) -> Result<Pubkey, anyhow::Error> {
+pub async fn find_pool(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<Pubkey, anyhow::Error> {
     let (pool_address, _) = pumpswap::pool::Pool::find_by_mint(rpc, mint).await?;
     Ok(pool_address)
 }

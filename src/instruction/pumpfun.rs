@@ -1,34 +1,28 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::{
-    instruction::Instruction, native_token::sol_to_lamports,
-};
+use solana_sdk::{instruction::Instruction, native_token::sol_to_lamports};
 use spl_associated_token_account::{
     get_associated_token_address, instruction::create_associated_token_account,
 };
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants, trading::pumpfun::common::{
-        get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda
-    }
+    constants,
+    trading::pumpfun::common::{
+        get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda,
+    },
 };
 
-use solana_sdk::{
-    instruction::AccountMeta,
-    pubkey::Pubkey,
-    signature::Keypair,
-    signer::Signer,
-};
+use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer};
 
 use crate::{
-    constants::pumpfun::{global_constants::FEE_RECIPIENT, trade::DEFAULT_SLIPPAGE},
-    trading::pumpfun::common::{
-        calculate_with_slippage_buy, get_buy_token_amount_from_sol_amount, get_creator_vault_pda,
-    },
+    constants::pumpfun::global_constants::FEE_RECIPIENT,
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    trading::common::utils::calculate_with_slippage_buy,
     trading::core::{
         params::{BuyParams, PumpFunParams, SellParams},
         traits::InstructionBuilder,
     },
+    trading::pumpfun::common::{get_buy_token_amount_from_sol_amount, get_creator_vault_pda},
 };
 
 /// PumpFun协议的指令构建器
@@ -56,9 +50,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
 
         let max_sol_cost = calculate_with_slippage_buy(
             params.amount_sol,
-            params
-                .slippage_basis_points
-                .unwrap_or(DEFAULT_SLIPPAGE),
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
         let creator_vault_pda = bonding_curve.get_creator_vault_pda();
 
@@ -161,22 +153,24 @@ pub struct Create {
 
 impl Create {
     pub fn data(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(8 + 4 + self._name.len() + 4 + self._symbol.len() + 4 + self._uri.len() + 32);
+        let mut data = Vec::with_capacity(
+            8 + 4 + self._name.len() + 4 + self._symbol.len() + 4 + self._uri.len() + 32,
+        );
 
         // 追加 discriminator
         data.extend_from_slice(&[24, 30, 200, 40, 5, 28, 7, 119]); // discriminator
 
         // 添加 name 字符串长度和内容
-        data.extend_from_slice(&(self._name.len() as u32).to_le_bytes());  // 添加 name 长度
-        data.extend_from_slice(self._name.as_bytes());  // 添加 name 内容
+        data.extend_from_slice(&(self._name.len() as u32).to_le_bytes()); // 添加 name 长度
+        data.extend_from_slice(self._name.as_bytes()); // 添加 name 内容
 
         // 添加 symbol 字符串长度和内容
-        data.extend_from_slice(&(self._symbol.len() as u32).to_le_bytes());  // 添加 symbol 长度
-        data.extend_from_slice(self._symbol.as_bytes());  // 添加 symbol 内容
+        data.extend_from_slice(&(self._symbol.len() as u32).to_le_bytes()); // 添加 symbol 长度
+        data.extend_from_slice(self._symbol.as_bytes()); // 添加 symbol 内容
 
         // 添加 uri 字符串长度和内容
-        data.extend_from_slice(&(self._uri.len() as u32).to_le_bytes());  // 添加 uri 长度
-        data.extend_from_slice(self._uri.as_bytes());  // 添加 uri 内容
+        data.extend_from_slice(&(self._uri.len() as u32).to_le_bytes()); // 添加 uri 长度
+        data.extend_from_slice(self._uri.as_bytes()); // 添加 uri 内容
 
         data.extend_from_slice(&self._creator.to_bytes());
 
@@ -233,7 +227,10 @@ pub fn create(payer: &Keypair, mint: &Keypair, args: Create) -> Instruction {
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(constants::pumpfun::accounts::SYSTEM_PROGRAM, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::ASSOCIATED_TOKEN_PROGRAM, false),
+            AccountMeta::new_readonly(
+                constants::pumpfun::accounts::ASSOCIATED_TOKEN_PROGRAM,
+                false,
+            ),
             AccountMeta::new_readonly(constants::pumpfun::accounts::RENT, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),

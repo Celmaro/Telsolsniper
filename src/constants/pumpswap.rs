@@ -32,7 +32,7 @@ pub mod accounts {
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
-    pub const FEE_RECIPIENT_ATA:Pubkey = pubkey!("94qWNrtmfn42h3ZjUZwWvK1MEo9uVmmrBPd2hpNjYDjb");
+    pub const FEE_RECIPIENT_ATA: Pubkey = pubkey!("94qWNrtmfn42h3ZjUZwWvK1MEo9uVmmrBPd2hpNjYDjb");
 
     /// Public key for the global PDA
     pub const GLOBAL_ACCOUNT: Pubkey = pubkey!("ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw");
@@ -49,26 +49,18 @@ pub mod accounts {
     pub const TOKEN_PROGRAM: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
     /// Associated Token Program ID
-    pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey = pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+    pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
+        pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
     // PumpSwap 协议费用接收者
-    pub const PROTOCOL_FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
+    pub const PROTOCOL_FEE_RECIPIENT: Pubkey =
+        pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
     /// Rent Sysvar ID
     pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
 
     pub const AMM_PROGRAM: Pubkey = pubkey!("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
-
 }
 
 pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];
 pub const SELL_DISCRIMINATOR: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
-
-pub mod trade {
-    pub const TRADER_TIP_AMOUNT: u64 = 100000; // 0.0001 SOL in lamports
-    pub const DEFAULT_SLIPPAGE: u64 = 1000; // 10%
-    pub const DEFAULT_COMPUTE_UNIT_LIMIT: u32 = 78000;
-    pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 500000;
-    pub const DEFAULT_BUY_TIP_FEE: u64 = 600000; // 0.0006 SOL in lamports
-    pub const DEFAULT_SELL_TIP_FEE: u64 = 100000; // 0.0001 SOL in lamports
-}

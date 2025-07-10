@@ -1,15 +1,17 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
+use solana_sdk::{instruction::Instruction, signer::Signer};
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 
 use crate::{
     constants::bonk::{
-        accounts, trade::DEFAULT_SLIPPAGE, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR,
+        accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR,
     },
+    constants::trade::trade::DEFAULT_SLIPPAGE,
     trading::bonk::{
-        common::{get_amount_out, get_pool_pda, get_token_balance, get_vault_pda},
+        common::{get_amount_out, get_pool_pda, get_vault_pda},
         pool::Pool,
     },
+    trading::common::utils::get_token_balance,
     trading::core::{
         params::{BuyParams, BonkParams, SellParams},
         traits::InstructionBuilder,

@@ -4,9 +4,6 @@ use rand::seq::IndexedRandom;
 use reqwest::Client;
 use serde_json::json;
 use std::{sync::Arc, time::Instant};
-
-use solana_sdk::{signature::Signature};
-
 use std::time::Duration;
 use solana_transaction_status::UiTransactionEncoding;
 

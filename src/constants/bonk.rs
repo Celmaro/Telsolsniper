@@ -35,12 +35,3 @@ pub mod accounts {
 
 pub const BUY_EXECT_IN_DISCRIMINATOR: [u8; 8] = [250, 234, 13, 123, 213, 156, 19, 236];
 pub const SELL_EXECT_IN_DISCRIMINATOR: [u8; 8] = [149, 39, 222, 155, 211, 124, 152, 26];
-
-pub mod trade {
-    pub const TRADER_TIP_AMOUNT: u64 = 100000; // 0.0001 SOL in lamports
-    pub const DEFAULT_SLIPPAGE: u64 = 100; // 1%
-    pub const DEFAULT_COMPUTE_UNIT_LIMIT: u32 = 78000;
-    pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 500000;
-    pub const DEFAULT_BUY_TIP_FEE: u64 = 600000; // 0.0006 SOL in lamports
-    pub const DEFAULT_SELL_TIP_FEE: u64 = 100000; // 0.0001 SOL in lamports
-}

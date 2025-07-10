@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use solana_hash::Hash;
 use solana_sdk::{
     instruction::Instruction,
