@@ -220,7 +220,6 @@ use sol_trade_sdk::{
 
 // pumpfun sniper trade
 async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
-
     println!("Testing PumpFun trading...");
 
     // if not dev trade, return
@@ -228,7 +227,8 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
         return Ok(());
     }
 
-    let solana_trade_client = test_create_solana_trade_client().await?;
+    let trade_client = test_create_solana_trade_client().await?;
+
     let mint_pubkey = trade_info.mint;
     let creator = trade_info.creator;
     let dev_sol_amount = trade_info.max_sol_cost;
@@ -249,36 +249,34 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
     // my trade cost sol amount
     let buy_sol_amount = 100_000;
  
-    solana_trade_client
-        .buy(
-            DexType::PumpFun,
-            mint_pubkey,
-            Some(creator),
-            buy_sol_amount,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            Some(Box::new(PumpFunParams {
-                bonding_curve: Some(Arc::new(bonding_curve.clone())),
-            })),
-        )
-        .await?;
+    trade_client.buy(
+        DexType::PumpFun,
+        mint_pubkey,
+        Some(creator),
+        buy_sol_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        Some(Box::new(PumpFunParams {
+            bonding_curve: Some(Arc::new(bonding_curve.clone())),
+        })),
+    )
+    .await?;
 
     Ok(())
 }
 
 // pumpfun copy trade
 async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
-
     println!("Testing PumpFun trading...");
 
-    let solana_trade_client = test_create_solana_trade_client().await?;
+    let trade_client = test_create_solana_trade_client().await?;
 
     let mint_pubkey = trade_info.mint;
     let creator = trade_info.creator;
     let slippage_basis_points = Some(100);
-    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
 
     println!("Buying tokens from PumpFun...");
 
@@ -288,41 +286,40 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
     // By not using RPC to fetch the bonding curve, transaction time can be saved.
     let bonding_curve = BondingCurveAccount::from_trade(&trade_info);
 
-    solana_trade_client
-        .buy(
-            DexType::PumpFun,
-            mint_pubkey,
-            Some(creator),
-            buy_sol_amount,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            Some(Box::new(PumpFunParams {
-                bonding_curve: Some(Arc::new(bonding_curve.clone())),
-            })),
-        )
-        .await?;
+    trade_client.buy(
+        DexType::PumpFun,
+        mint_pubkey,
+        Some(creator),
+        buy_sol_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        Some(Box::new(PumpFunParams {
+            bonding_curve: Some(Arc::new(bonding_curve.clone())),
+        })),
+    )
+    .await?;
 
     Ok(())
 }
 
 // pumpfun sell token
 async fn test_pumpfun_sell() -> AnyResult<()> {
-    let amount_token = 100_000_000; 
-    solana_trade_client
-        .sell(
-            DexType::PumpFun,
-            mint_pubkey,
-            Some(creator),
-            amount_token,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            None,
-        )
-        .await?;
+    let token_amount = 100_000_000; 
+
+    trade_client.sell(
+        DexType::PumpFun,
+        mint_pubkey,
+        Some(creator),
+        token_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        None,
+    )
+    .await?;
 }
 ```
 
@@ -332,45 +329,44 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
 async fn test_pumpswap() -> AnyResult<()> {
     println!("Testing PumpSwap trading...");
 
-    let solana_trade_client = test_create_solana_trade_client().await?;
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?; // dev account
-    let buy_sol_cost = 100_000; // 0.0001 SOL
+    let trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?; // token mint
+    let creator = Pubkey::from_str("xxxxxxxxx")?; // dev account
+    let buy_sol_amount = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100);
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
-    let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?; // token mint
 
     println!("Buying tokens from PumpSwap...");
-    // buy
-    solana_trade_client
-        .buy(
-            DexType::PumpSwap,
-            mint_pubkey,
-            Some(creator),
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            None,
-        )
-        .await?;
+    trade_client.buy(
+        DexType::PumpSwap,
+        mint_pubkey,
+        Some(creator),
+        buy_sol_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        None,
+    )
+    .await?;
     
-    // sell
+
     println!("Selling tokens from PumpSwap...");
-    let amount_token = 0; // Enter the actual amount_token
-    solana_trade_client
-        .sell(
-            DexType::PumpSwap,
-            mint_pubkey,
-            Some(creator),
-            amount_token,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            None,
-        )
-        .await?;
+    let token_amount = 100_000; 
+    trade_client.sell(
+        DexType::PumpSwap,
+        mint_pubkey,
+        Some(creator),
+        token_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        None,
+    )
+    .await?;
+
     Ok(())
 }
 ```
@@ -381,44 +377,44 @@ async fn test_pumpswap() -> AnyResult<()> {
 async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing Bonk trading...");
 
-    let solana_trade_client = test_create_solana_trade_client().await?;
-    let buy_sol_cost = 100_000; // 0.0001 SOL
+    let trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
+    let buy_sol_amount = 100_000; // 0.0001 SOL
     let slippage_basis_points = Some(100); // 1%
     let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
+    
 
     println!("Buying tokens from letsbonk.fun...");
-    // buy
-    solana_trade_client
-        .buy(
-            DexType::Bonk,
-            mint_pubkey,
-            None,
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            None,
-        )
-        .await?;
+    trade_client.buy(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        buy_sol_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        None,
+    )
+    .await?;
     
-    // sell
     println!("Selling tokens from letsbonk.fun...");
-    let amount_token = 0; // Enter the actual amount_token
-    solana_trade_client
-        .sell(
-            DexType::Bonk,
-            mint_pubkey,
-            None,
-            amount_token,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            false,
-            None,
-        )
-        .await?;
+
+    let token_amount = 100_000; 
+    trade_client.sell(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        token_amount,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        None,
+    )
+    .await?;
+
     Ok(())
 }
 ```
