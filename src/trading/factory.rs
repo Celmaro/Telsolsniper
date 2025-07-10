@@ -43,8 +43,8 @@ pub struct TradeFactory;
 
 impl TradeFactory {
     /// 创建指定协议的交易执行器
-    pub fn create_executor(protocol: DexType) -> Arc<dyn TradeExecutor> {
-        match protocol {
+    pub fn create_executor(dex_type: DexType) -> Arc<dyn TradeExecutor> {
+        match dex_type {
             DexType::PumpFun => {
                 let instruction_builder = Arc::new(PumpFunInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "PumpFun"))
@@ -64,12 +64,12 @@ impl TradeFactory {
     }
 
     /// 获取所有支持的协议
-    pub fn supported_protocols() -> Vec<DexType> {
+    pub fn supported_dex_types() -> Vec<DexType> {
         vec![DexType::PumpFun, DexType::PumpSwap, DexType::Bonk]
     }
 
     /// 检查协议是否支持
-    pub fn is_supported(protocol: &DexType) -> bool {
-        Self::supported_protocols().contains(protocol)
+    pub fn is_supported(dex_type: &DexType) -> bool {
+        Self::supported_dex_types().contains(dex_type)
     }
 }
