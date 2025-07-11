@@ -1,5 +1,5 @@
-use solana_sdk::pubkey::Pubkey;
 use crate::constants;
+use solana_sdk::pubkey::Pubkey;
 
 pub fn get_amount_out(
     amount_in: u64,
@@ -53,4 +53,30 @@ pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
     let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
+}
+
+pub fn get_token_price(
+    virtual_base: u128,
+    virtual_quote: u128,
+    real_base: u128,
+    real_quote: u128,
+    decimal_base: u64,
+    decimal_quote: u64,
+) -> f64 {
+    // 计算小数位数差异
+    let decimal_diff = decimal_quote as i32 - decimal_base as i32;
+    let decimal_factor = if decimal_diff >= 0 {
+        10_f64.powi(decimal_diff)
+    } else {
+        1.0 / 10_f64.powi(-decimal_diff)
+    };
+
+    // 计算价格前的状态
+    let quote_reserves = virtual_quote.checked_add(real_quote).unwrap();
+    let base_reserves = virtual_base.checked_sub(real_base).unwrap();
+
+    // 使用浮点数计算价格，避免整数除法的精度丢失
+    let price = (quote_reserves as f64) / (base_reserves as f64) / decimal_factor;
+
+    price
 }

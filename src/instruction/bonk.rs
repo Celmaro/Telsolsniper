@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{instruction::Instruction, signer::Signer};
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
+use spl_token::instruction::close_account;
 
 use crate::{
     constants::bonk::{
@@ -241,14 +242,6 @@ impl BonkInstructionBuilder {
             ),
         );
 
-        // 创建用户的代币账户
-        instructions.push(create_associated_token_account_idempotent(
-            &params.payer.pubkey(),
-            &params.payer.pubkey(),
-            &params.mint,
-            &accounts::TOKEN_PROGRAM,
-        ));
-
         // 创建卖出指令
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
@@ -280,6 +273,8 @@ impl BonkInstructionBuilder {
             accounts,
             data,
         });
+
+        instructions.push(close_account(&accounts::TOKEN_PROGRAM, &user_quote_token_account, &params.payer.pubkey(), &params.payer.pubkey(), &[&params.payer.pubkey()]).unwrap());
 
         Ok(instructions)
     }

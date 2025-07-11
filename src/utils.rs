@@ -22,10 +22,6 @@ impl SolanaTrade {
         payer: &Pubkey,
         mint: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
-        println!(
-            "get_token_balance payer: {}, mint: {}, rpc_url: {}",
-            payer, mint, self.trade_config.rpc_url
-        );
         trading::common::utils::get_token_balance(&self.rpc, payer, mint).await
     }
 
@@ -161,5 +157,27 @@ impl SolanaTrade {
         let (base_amount, _) = pool.get_token_balances(&self.rpc).await?;
 
         Ok(base_amount)
+    }
+
+    // -------------------------------- Bonk --------------------------------
+
+    #[inline]
+    pub fn get_bonk_token_price(
+        &self,
+        virtual_base: u128,
+        virtual_quote: u128,
+        real_base: u128,
+        real_quote: u128,
+        decimal_base: u64,
+        decimal_quote: u64,
+    ) -> f64 {
+        trading::bonk::common::get_token_price(
+            virtual_base,
+            virtual_quote,
+            real_base,
+            real_quote,
+            decimal_base,
+            decimal_quote,
+        )
     }
 }
