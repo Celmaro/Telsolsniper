@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 /// 交易时间测量器
+#[derive(Clone)]
 pub struct TradeTimer {
     start_time: Instant,
     stage: String,
@@ -25,9 +26,10 @@ impl TradeTimer {
     }
     
     /// 完成计时并输出最终耗时
-    pub fn finish(self) {
+    pub fn finish(mut self) {
         let elapsed = self.start_time.elapsed();
         println!(" {} 耗时: {:?}", self.stage, elapsed);
+        self.stage.clear(); // 清空stage，避免Drop时重复打印
     }
     
     /// 获取当前阶段的耗时（不重置计时器）

@@ -48,7 +48,7 @@ impl TradeExecutor for GenericTradeExecutor {
             .instruction_builder
             .build_buy_instructions(&params)
             .await?;
-        timer.stage("买入交易指令");
+        timer.stage("构建rpc交易指令");
 
         // 构建交易
         let transaction = build_rpc_transaction(
@@ -60,7 +60,7 @@ impl TradeExecutor for GenericTradeExecutor {
             params.data_size_limit,
         )
         .await?;
-        timer.stage("买入交易签名");
+        timer.stage("rpc提交确认");
 
         // 发送交易
         rpc.send_and_confirm_transaction(&transaction).await?;
@@ -73,7 +73,7 @@ impl TradeExecutor for GenericTradeExecutor {
         if params.data_size_limit == 0 {
             params.data_size_limit = MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
         }
-        let mut timer = TradeTimer::new("构建买入交易指令");
+        let timer = TradeTimer::new("构建买入交易指令");
 
         // 验证参数 - 转换为BuyParams进行验证
         let buy_params = BuyParams {
@@ -95,7 +95,8 @@ impl TradeExecutor for GenericTradeExecutor {
             .instruction_builder
             .build_buy_instructions(&buy_params)
             .await?;
-        timer.stage("买入交易指令");
+
+        timer.finish();
 
         // 并行执行交易
         parallel_execute_with_tips(
@@ -110,7 +111,6 @@ impl TradeExecutor for GenericTradeExecutor {
         )
         .await?;
 
-        timer.finish();
         Ok(())
     }
 
@@ -147,7 +147,7 @@ impl TradeExecutor for GenericTradeExecutor {
     }
 
     async fn sell_with_tip(&self, params: SellWithTipParams) -> Result<()> {
-        let mut timer = TradeTimer::new("构建卖出交易指令");
+        let timer = TradeTimer::new("构建卖出交易指令");
 
         // 转换为SellParams进行指令构建
         let sell_params = SellParams {
@@ -168,7 +168,8 @@ impl TradeExecutor for GenericTradeExecutor {
             .instruction_builder
             .build_sell_instructions(&sell_params)
             .await?;
-        timer.stage("卖出交易指令");
+
+        timer.finish();
 
         // 并行执行交易
         parallel_execute_with_tips(
@@ -183,7 +184,6 @@ impl TradeExecutor for GenericTradeExecutor {
         )
         .await?;
 
-        timer.finish();
         Ok(())
     }
 
