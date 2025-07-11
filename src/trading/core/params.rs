@@ -126,8 +126,8 @@ impl ProtocolParams for PumpSwapParams {
 pub struct BonkParams {
     pub virtual_base: Option<u128>,
     pub virtual_quote: Option<u128>,
-    pub real_base_before: Option<u128>,
-    pub real_quote_before: Option<u128>,
+    pub real_base: Option<u128>,
+    pub real_quote: Option<u128>,
     pub auto_handle_wsol: bool,
 }
 
@@ -136,8 +136,8 @@ impl BonkParams {
         Self {
             virtual_base: None,
             virtual_quote: None,
-            real_base_before: None,
-            real_quote_before: None,
+            real_base: None,
+            real_quote: None,
             auto_handle_wsol: true,
         }
     }

@@ -8,8 +8,8 @@ pub fn get_amount_out(
     share_fee_rate: u128,
     virtual_base: u128,
     virtual_quote: u128,
-    real_base_before: u128,
-    real_quote_before: u128,
+    real_base: u128,
+    real_quote: u128,
     slippage_basis_points: u128,
 ) -> u64 {
     let amount_in_u128 = amount_in as u128;
@@ -23,8 +23,8 @@ pub fn get_amount_out(
         .unwrap()
         .checked_sub(share_fee)
         .unwrap();
-    let input_reserve = virtual_quote.checked_add(real_quote_before).unwrap();
-    let output_reserve = virtual_base.checked_sub(real_base_before).unwrap();
+    let input_reserve = virtual_quote.checked_add(real_quote).unwrap();
+    let output_reserve = virtual_base.checked_sub(real_base).unwrap();
     let numerator = amount_in_net.checked_mul(output_reserve).unwrap();
     let denominator = input_reserve.checked_add(amount_in_net).unwrap();
     let mut amount_out = numerator.checked_div(denominator).unwrap();

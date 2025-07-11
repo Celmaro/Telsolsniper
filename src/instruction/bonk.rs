@@ -66,19 +66,19 @@ impl BonkInstructionBuilder {
 
         let mut virtual_base = protocol_params.virtual_base.unwrap_or(0);
         let mut virtual_quote = protocol_params.virtual_quote.unwrap_or(0);
-        let mut real_base_before = protocol_params.real_base_before.unwrap_or(0);
-        let mut real_quote_before = protocol_params.real_quote_before.unwrap_or(0);
+        let mut real_base = protocol_params.real_base.unwrap_or(0);
+        let mut real_quote = protocol_params.real_quote.unwrap_or(0);
 
         if virtual_base == 0
             || virtual_quote == 0
-            || real_base_before == 0
-            || real_quote_before == 0
+            || real_base == 0
+            || real_quote == 0
         {
             let pool = Pool::fetch(params.rpc.as_ref().unwrap(), &pool_state).await?;
             virtual_base = pool.virtual_base as u128;
             virtual_quote = pool.virtual_quote as u128;
-            real_base_before = pool.real_base as u128;
-            real_quote_before = pool.real_quote as u128;
+            real_base = pool.real_base as u128;
+            real_quote = pool.real_quote as u128;
         }
 
         let amount_in: u64 = params.sol_amount;
@@ -90,8 +90,8 @@ impl BonkInstructionBuilder {
             accounts::SHARE_FEE_RATE,
             virtual_base,
             virtual_quote,
-            real_base_before,
-            real_quote_before,
+            real_base,
+            real_quote,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
         );
 
