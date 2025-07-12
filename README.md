@@ -234,7 +234,7 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
     let dev_sol_amount = trade_info.max_sol_cost;
     let dev_token_amount = trade_info.token_amount;
     let slippage_basis_points = Some(100);
-    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
     
     println!("Buying tokens from PumpFun...");
     
@@ -248,7 +248,6 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
 
     // my trade cost sol amount
     let buy_sol_amount = 100_000;
- 
     trade_client.buy(
         DexType::PumpFun,
         mint_pubkey,
@@ -257,7 +256,6 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
@@ -294,7 +292,6 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
@@ -306,17 +303,15 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
 
 // pumpfun sell token
 async fn test_pumpfun_sell() -> AnyResult<()> {
-    let token_amount = 100_000_000; 
-
+    let amount_token = 100_000_000; 
     trade_client.sell(
         DexType::PumpFun,
         mint_pubkey,
         Some(creator),
-        token_amount,
+        amount_token,
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -331,13 +326,14 @@ async fn test_pumpswap() -> AnyResult<()> {
 
     let trade_client = test_create_solana_trade_client().await?;
 
-    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?; // token mint
-    let creator = Pubkey::from_str("xxxxxxxxx")?; // dev account
-    let buy_sol_amount = 100_000; // 0.0001 SOL
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?; 
+    let creator = Pubkey::from_str("xxxxxx")?; 
+    let buy_sol_amount = 100_000; 
     let slippage_basis_points = Some(100);
-    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
 
     println!("Buying tokens from PumpSwap...");
+    // buy
     trade_client.buy(
         DexType::PumpSwap,
         mint_pubkey,
@@ -346,23 +342,23 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
     
-
+    
+    // sell
     println!("Selling tokens from PumpSwap...");
-    let token_amount = 100_000; 
+
+    let amount_token = 100_000; 
     trade_client.sell(
         DexType::PumpSwap,
         mint_pubkey,
         Some(creator),
-        token_amount,
+        amount_token,
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -380,12 +376,12 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     let trade_client = test_create_solana_trade_client().await?;
 
     let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
-    let buy_sol_amount = 100_000; // 0.0001 SOL
+    let buy_sol_amount = 100_000; 
     let slippage_basis_points = Some(100); // 1%
-    let recent_blockhash = solana_trade_client.rpc.get_latest_blockhash().await?;
-    
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
 
     println!("Buying tokens from letsbonk.fun...");
+
     trade_client.buy(
         DexType::Bonk,
         mint_pubkey,
@@ -394,23 +390,21 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
     
     println!("Selling tokens from letsbonk.fun...");
 
-    let token_amount = 100_000; 
+    let amount_token = 100_000; 
     trade_client.sell(
         DexType::Bonk,
         mint_pubkey,
         None,
-        token_amount,
+        amount_token,
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -449,7 +443,7 @@ let trade_config = TradeConfig {
 
 - **PumpFun**: Primary meme coin trading platform
 - **PumpSwap**: PumpFun's swap protocol
-- **Bonk**: token launch platform (letsbonk.fun)
+- **Bonk**: Token launch platform (letsbonk.fun)
 
 ## MEV Protection Services
 

@@ -48,7 +48,7 @@ impl Clone for SolanaTrade {
 
 impl SolanaTrade {
     #[inline]
-    pub async fn new(payer: Arc<Keypair>, trade_config: TradeConfig) -> Self {
+    pub async fn new(payer: Arc<Keypair>, mut trade_config: TradeConfig) -> Self {
         if CryptoProvider::get_default().is_none() {
             let _ = default_provider()
                 .install_default()
@@ -57,8 +57,22 @@ impl SolanaTrade {
 
         let rpc_url = trade_config.rpc_url.clone();
         let swqos_configs = trade_config.swqos_configs.clone();
-        let priority_fee = trade_config.priority_fee.clone();
+        let mut priority_fee = trade_config.priority_fee.clone();
         let commitment = trade_config.commitment.clone();
+        if priority_fee.buy_tip_fees.len() < swqos_configs.len() {
+            // 补齐数组,只补齐缺少的
+            let mut buy_tip_fees = priority_fee.buy_tip_fees.clone();
+            let default_fee = priority_fee.buy_tip_fee;
+            // 计算需要补充的元素数量
+            let missing_count = swqos_configs.len() - buy_tip_fees.len();
+            // 添加缺少的元素，使用默认值
+            for _ in 0..missing_count {
+                buy_tip_fees.push(default_fee);
+            }
+            // 更新 priority_fee 中的 buy_tip_fees
+            priority_fee.buy_tip_fees = buy_tip_fees;
+            trade_config.priority_fee = priority_fee.clone();
+        }
 
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
 
@@ -105,15 +119,14 @@ impl SolanaTrade {
     ///
     /// # Arguments
     ///
+    /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to buy
     /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
-    /// * `amount_sol` - Amount of SOL to spend on the purchase (in lamports)
+    /// * `sol_amount` - Amount of SOL to spend on the purchase (in lamports)
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
-    /// * `with_tip` - Whether to include tip for MEV protection and priority processing
-    /// * `protocol` - Trading protocol to use (PumpFun, PumpSwap, or Bonk)
-    /// * `protocol_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     ///
     /// # Returns
     ///
@@ -132,22 +145,21 @@ impl SolanaTrade {
     /// ```rust
     /// use solana_sdk::pubkey::Pubkey;
     /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::TradingProtocol;
+    /// use crate::trading::factory::DexType;
     ///
     /// let mint = Pubkey::new_unique();
-    /// let amount_sol = 1_000_000_000; // 1 SOL in lamports
+    /// let sol_amount = 1_000_000_000; // 1 SOL in lamports
     /// let slippage = Some(500); // 5% slippage
     /// let recent_blockhash = Hash::default();
     ///
     /// solana_trade.buy(
+    ///     DexType::PumpFun,
     ///     mint,
     ///     None,
-    ///     amount_sol,
+    ///     sol_amount,
     ///     slippage,
     ///     recent_blockhash,
     ///     None,
-    ///     true,
-    ///     TradingProtocol::PumpFun,
     ///     None,
     /// ).await?;
     /// ```
@@ -160,7 +172,6 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
-        with_tip: bool,  
         extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
@@ -222,27 +233,21 @@ impl SolanaTrade {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
-        // Execute buy based on tip preference
-        if with_tip {
-            executor.buy_with_tip(buy_with_tip_params).await
-        } else {
-            executor.buy(buy_params).await
-        }
+        executor.buy_with_tip(buy_with_tip_params).await
     }
 
     /// Execute a sell order for a specified token
     ///
     /// # Arguments
     ///
+    /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to sell
     /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
-    /// * `amount_token` - Amount of tokens to sell (in smallest token units)
+    /// * `token_amount` - Amount of tokens to sell (in smallest token units)
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
-    /// * `with_tip` - Whether to include tip for MEV protection and priority processing
-    /// * `protocol` - Trading protocol to use (PumpFun, PumpSwap, or Bonk)
-    /// * `protocol_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     ///
     /// # Returns
     ///
@@ -265,19 +270,18 @@ impl SolanaTrade {
     /// use crate::trading::factory::DexType;
     ///
     /// let mint = Pubkey::new_unique();
-    /// let amount_token = 1_000_000; // Amount of tokens to sell
+    /// let token_amount = 1_000_000; // Amount of tokens to sell
     /// let slippage = Some(500); // 5% slippage
     /// let recent_blockhash = Hash::default();
     ///
     /// solana_trade.sell(
+    ///     DexType::PumpFun,
     ///     mint,
     ///     None,
-    ///     amount_token,
+    ///     token_amount,
     ///     slippage,
     ///     recent_blockhash,
     ///     None,
-    ///     true,
-    ///     DexType::PumpFun,
     ///     None,
     /// ).await?;
     /// ```
@@ -290,7 +294,6 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
-        with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
@@ -352,11 +355,7 @@ impl SolanaTrade {
         }
 
         // Execute sell based on tip preference
-        if with_tip {
-            executor.sell_with_tip(sell_with_tip_params).await
-        } else {
-            executor.sell(sell_params).await
-        }
+        executor.sell_with_tip(sell_with_tip_params).await
     }
 
     /// Execute a sell order for a percentage of the specified token amount
@@ -366,6 +365,7 @@ impl SolanaTrade {
     ///
     /// # Arguments
     ///
+    /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to sell
     /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
     /// * `amount_token` - Total amount of tokens available (in smallest token units)
@@ -373,9 +373,7 @@ impl SolanaTrade {
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
-    /// * `with_tip` - Whether to include tip for MEV protection and priority processing
-    /// * `protocol` - Trading protocol to use (PumpFun, PumpSwap, or Bonk)
-    /// * `protocol_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     ///
     /// # Returns
     ///
@@ -396,7 +394,7 @@ impl SolanaTrade {
     /// ```rust
     /// use solana_sdk::pubkey::Pubkey;
     /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::TradingProtocol;
+    /// use crate::trading::factory::DexType;
     ///
     /// let mint = Pubkey::new_unique();
     /// let total_tokens = 10_000_000; // Total tokens available
@@ -406,6 +404,7 @@ impl SolanaTrade {
     ///
     /// // This will sell 5_000_000 tokens (50% of 10_000_000)
     /// solana_trade.sell_by_percent(
+    ///     DexType::PumpFun,
     ///     mint,
     ///     None,
     ///     total_tokens,
@@ -413,8 +412,6 @@ impl SolanaTrade {
     ///     slippage,
     ///     recent_blockhash,
     ///     None,
-    ///     true,
-    ///     DexType::PumpFun,
     ///     None,
     /// ).await?;
     /// ```
@@ -428,7 +425,6 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
-        with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
@@ -443,7 +439,6 @@ impl SolanaTrade {
             slippage_basis_points,
             recent_blockhash,
             custom_buy_tip_fee,
-            with_tip,
             extension_params,
         )
         .await

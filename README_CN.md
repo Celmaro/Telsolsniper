@@ -256,7 +256,6 @@ async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
@@ -292,7 +291,6 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
@@ -313,7 +311,6 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -344,7 +341,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -361,7 +357,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -393,7 +388,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
@@ -409,7 +403,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        false,
         None,
     )
     .await?;
