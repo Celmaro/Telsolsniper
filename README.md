@@ -212,10 +212,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 use sol_trade_sdk::{
     common::bonding_curve::BondingCurveAccount,
     constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY,
-    trading::{
-        core::params::PumpFunParams,
-        factory::TradingProtocol,
-    },
+    trading::{core::params::PumpFunParams, factory::DexType},
 };
 
 // pumpfun sniper trade
