@@ -5,7 +5,11 @@ use std::sync::Arc;
 use super::traits::ProtocolParams;
 use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::{PriorityFee, SolanaRpcClient};
+use crate::constants::bonk::accounts::{PLATFORM_FEE_RATE, PROTOCOL_FEE_RATE, SHARE_FEE_RATE};
+use crate::streaming::event_parser::common::EventType;
+use crate::streaming::event_parser::protocols::bonk::BonkTradeEvent;
 use crate::swqos::SwqosClient;
+use crate::trading::bonk::common::{get_amount_in, get_amount_in_net, get_amount_out};
 
 /// 通用买入参数
 #[derive(Clone)]
@@ -138,6 +142,64 @@ impl BonkParams {
             virtual_quote: None,
             real_base: None,
             real_quote: None,
+            auto_handle_wsol: true,
+        }
+    }
+    pub fn from_trade(trade_info: BonkTradeEvent) -> Self {
+        Self {
+            virtual_base: Some(trade_info.virtual_base as u128),
+            virtual_quote: Some(trade_info.virtual_quote as u128),
+            real_base: Some(trade_info.real_base_after as u128),
+            real_quote: Some(trade_info.real_quote_after as u128),
+            auto_handle_wsol: true,
+        }
+    }
+
+    pub fn from_dev_trade(trade_info: BonkTradeEvent) -> Self {
+        const DEFAULT_VIRTUAL_BASE: u128 = 1073025605596382;
+        const DEFAULT_VIRTUAL_QUOTE: u128 = 30000852951;
+        let amount_in = if trade_info.metadata.event_type == EventType::BonkBuyExactIn {
+            trade_info.amount_in
+        } else {
+            get_amount_in(
+                trade_info.amount_out,
+                PROTOCOL_FEE_RATE,
+                PLATFORM_FEE_RATE,
+                SHARE_FEE_RATE,
+                DEFAULT_VIRTUAL_BASE,
+                DEFAULT_VIRTUAL_QUOTE,
+                0,
+                0,
+                0,
+            )
+        };
+        let real_quote = get_amount_in_net(
+            amount_in,
+            PROTOCOL_FEE_RATE,
+            PLATFORM_FEE_RATE,
+            SHARE_FEE_RATE,
+        ) as u128;
+        let amount_out = if trade_info.metadata.event_type == EventType::BonkBuyExactIn {
+            get_amount_out(
+                trade_info.amount_in,
+                PROTOCOL_FEE_RATE,
+                PLATFORM_FEE_RATE,
+                SHARE_FEE_RATE,
+                DEFAULT_VIRTUAL_BASE,
+                DEFAULT_VIRTUAL_QUOTE,
+                0,
+                0,
+                0,
+            ) as u128
+        } else {
+            trade_info.amount_out as u128
+        };
+        let real_base = amount_out;
+        Self {
+            virtual_base: Some(DEFAULT_VIRTUAL_BASE),
+            virtual_quote: Some(DEFAULT_VIRTUAL_QUOTE),
+            real_base: Some(real_base),
+            real_quote: Some(real_quote),
             auto_handle_wsol: true,
         }
     }

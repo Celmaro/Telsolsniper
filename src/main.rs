@@ -18,7 +18,7 @@ use sol_trade_sdk::{
         ShredStreamGrpc, YellowstoneGrpc,
     },
     swqos::{SwqosConfig, SwqosRegion},
-    trading::{core::params::PumpFunParams, factory::DexType},
+    trading::{core::params::{BonkParams, PumpFunParams}, factory::DexType},
     SolanaTrade,
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
@@ -70,7 +70,7 @@ fn create_trade_config(rpc_url: String, swqos_configs: Vec<SwqosConfig>) -> Trad
     }
 }
 
-async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
     println!("Testing PumpFun trading...");
 
     let client = test_create_solana_trade_client().await?;
@@ -113,7 +113,7 @@ async fn test_pumpfun_copy_trade_width_grpc(trade_info: PumpFunTradeEvent) -> An
     Ok(())
 }
 
-async fn test_pumpfun_sniper_trade_width_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
     println!("Testing PumpFun trading...");
 
     if !trade_info.is_dev_create_token_trade {
@@ -205,6 +205,91 @@ async fn test_pumpswap() -> AnyResult<()> {
 
     Ok(())
 }
+
+
+
+async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult<()> {
+    println!("Testing Bonk trading...");
+
+    let client = test_create_solana_trade_client().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+
+    // Buy tokens
+    println!("Buying tokens from letsbonk.fun...");
+    client.buy(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(BonkParams::from_trade(trade_info))),
+    ).await?;
+
+    // Sell tokens
+    println!("Selling tokens from letsbonk.fun...");
+    let amount_token = 0;
+    client.sell(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        None,
+    ).await?;
+
+    Ok(())
+}
+
+async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<()> {
+    println!("Testing Bonk trading...");
+
+    if !trade_info.is_dev_create_token_trade {
+        return Ok(());
+    }
+
+    let client = test_create_solana_trade_client().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+
+    // Buy tokens
+    println!("Buying tokens from letsbonk.fun...");
+    client.buy(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+    ).await?;
+
+    // Sell tokens
+    println!("Selling tokens from letsbonk.fun...");
+    let amount_token = 0;
+    client.sell(
+        DexType::Bonk,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        None,
+    ).await?;
+
+    Ok(())
+}
+
 
 async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing Bonk trading...");
