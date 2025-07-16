@@ -7,12 +7,13 @@
 1. **PumpFun 交易**: 支持`购买`、`卖出`功能
 2. **PumpSwap 交易**: 支持 PumpSwap 池的交易操作
 3. **Bonk 交易**: 支持 Bonk 的交易操作
-4. **事件订阅**: 订阅 PumpFun、PumpSwap 和 Bonk 程序的交易事件
-5. **Yellowstone gRPC**: 使用 Yellowstone gRPC 订阅程序事件
-6. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
-7. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute 等服务
-8. **并发交易**: 同时使用多个 MEV 服务发送交易，最快的成功，其他失败
-9. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
+4. **Raydium CPMM 交易**: 支持 Raydium CPMM (Concentrated Pool Market Maker) 的交易操作
+5. **事件订阅**: 订阅 PumpFun、PumpSwap、Bonk 和 Raydium CPMM 程序的交易事件
+6. **Yellowstone gRPC**: 使用 Yellowstone gRPC 订阅程序事件
+7. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
+8. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute 等服务
+9. **并发交易**: 同时使用多个 MEV 服务发送交易，最快的成功，其他失败
+10. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
 
 ## 安装
 
@@ -47,6 +48,7 @@ use sol_trade_sdk::{
                     PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
                     PumpSwapSellEvent, PumpSwapWithdrawEvent,
                 },
+                raydium_cpmm::RaydiumCpmmSwapEvent,
             },
             Protocol, UnifiedEvent,
         },
@@ -94,12 +96,15 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
             PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
                 println!("Withdraw event: {:?}", e);
             },
+            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
+                println!("Raydium CPMM Swap event: {:?}", e);
+            },
         });
     };
 
     // 订阅多个协议的事件
     println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
 
@@ -148,12 +153,15 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
             PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
                 println!("Withdraw event: {:?}", e);
             },
+            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
+                println!("Raydium CPMM Swap event: {:?}", e);
+            },
         });
     };
 
     // 订阅事件
     println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)
         .await?;
@@ -362,7 +370,71 @@ async fn test_pumpswap() -> AnyResult<()> {
 }
 ```
 
-### 5. Bonk 交易操作
+### 5. Raydium CPMM 交易操作
+
+```rust
+use sol_trade_sdk::{
+    trading::{
+        core::params::RaydiumCpmmParams, 
+        factory::DexType, 
+        raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
+    },
+};
+
+async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Raydium CPMM trading...");
+
+    let trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?; // 代币地址
+    let buy_sol_cost = 100_000; // 0.0001 SOL（以lamports为单位）
+    let slippage_basis_points = Some(100); // 1% 滑点
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    let pool_state = Pubkey::from_str("xxxxxxx")?; // 池状态地址
+
+    // 计算买入时预期获得的代币数量
+    let buy_amount_out = get_buy_token_amount(&trade_client.rpc, &pool_state, buy_sol_cost).await?;
+
+    println!("Buying tokens from Raydium CPMM...");
+    trade_client.buy(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            minimum_amount_out: Some(buy_amount_out), // 如果不传，默认为0
+            auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
+        })),
+    ).await?;
+
+    println!("Selling tokens from Raydium CPMM...");
+    let amount_token = 100_000_000; // 卖出代币数量
+    let sell_sol_amount = get_sell_sol_amount(&trade_client.rpc, &pool_state, amount_token).await?;
+    
+    trade_client.sell(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            minimum_amount_out: Some(sell_sol_amount), // 如果不传，默认为0
+            auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
+        })),
+    ).await?;
+
+    Ok(())
+}
+```
+
+### 6. Bonk 交易操作
 
 ```rust
 
@@ -494,7 +566,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 6. 自定义优先费用配置
+### 7. 自定义优先费用配置
 
 ```rust
 use sol_trade_sdk::common::PriorityFee;
@@ -525,6 +597,7 @@ let trade_config = TradeConfig {
 - **PumpFun**: 主要的 meme 币交易平台
 - **PumpSwap**: PumpFun 的交换协议
 - **Bonk**: 代币发行平台（letsbonk.fun）
+- **Raydium CPMM**: Raydium 的集中流动性做市商协议
 
 ## MEV 保护服务
 
@@ -538,9 +611,9 @@ let trade_config = TradeConfig {
 
 ### 统一交易接口
 
-- **TradingProtocol 枚举**: 使用统一的协议枚举（PumpFun、PumpSwap、Bonk）
+- **TradingProtocol 枚举**: 使用统一的协议枚举（PumpFun、PumpSwap、Bonk、RaydiumCpmm）
 - **统一的 buy/sell 方法**: 所有协议都使用相同的交易方法签名
-- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams 等）
+- **协议特定参数**: 每个协议都有自己的参数结构（PumpFunParams、RaydiumCpmmParams 等）
 
 ### 事件解析系统
 
@@ -568,7 +641,8 @@ src/
 │   │   ├── protocols/# 协议特定解析器
 │   │   │   ├── bonk/ # Bonk事件解析
 │   │   │   ├── pumpfun/ # PumpFun事件解析
-│   │   │   └── pumpswap/ # PumpSwap事件解析
+│   │   │   ├── pumpswap/ # PumpSwap事件解析
+│   │   │   └── raydium_cpmm/ # Raydium CPMM事件解析
 │   │   └── factory.rs # 解析器工厂
 │   ├── shred_stream.rs # ShredStream客户端
 │   └── yellowstone_grpc.rs # Yellowstone gRPC客户端
@@ -579,6 +653,7 @@ src/
 │   ├── bonk/         # Bonk交易实现
 │   ├── pumpfun/      # PumpFun交易实现
 │   ├── pumpswap/     # PumpSwap交易实现
+│   ├── raydium_cpmm/ # Raydium CPMM交易实现
 │   └── factory.rs    # 交易工厂
 ├── lib.rs            # 主库文件
 └── main.rs           # 示例程序

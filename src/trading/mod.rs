@@ -4,6 +4,7 @@ pub mod factory;
 pub mod bonk;
 pub mod pumpfun;
 pub mod pumpswap;
+pub mod raydium_cpmm;
 
 pub use core::params::{BuyParams, BuyWithTipParams, SellParams, SellWithTipParams};
 pub use core::traits::{InstructionBuilder, TradeExecutor};

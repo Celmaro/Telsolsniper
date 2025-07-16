@@ -12,6 +12,7 @@ pub enum ProtocolType {
     PumpSwap,
     PumpFun,
     Bonk,
+    RaydiumCpmm,
 }
 
 /// 事件类型枚举
@@ -38,6 +39,10 @@ pub enum EventType {
     BonkSellExactIn,
     BonkSellExactOut,
     BonkInitialize,
+
+    // Raydium CPMM 事件
+    RaydiumCpmmSwapBaseInput,
+    RaydiumCpmmSwapBaseOutput,
 
     // 通用事件
     Unknown,

@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
-use crate::instruction::{bonk::BonkInstructionBuilder, pumpfun::PumpFunInstructionBuilder, pumpswap::PumpSwapInstructionBuilder};
-
-use super::{
-    core::{executor::GenericTradeExecutor, traits::TradeExecutor},
+use crate::instruction::{
+    bonk::BonkInstructionBuilder, pumpfun::PumpFunInstructionBuilder,
+    pumpswap::PumpSwapInstructionBuilder, raydium_cpmm::RaydiumCpmmInstructionBuilder,
 };
+
+use super::core::{executor::GenericTradeExecutor, traits::TradeExecutor};
 
 /// 支持的交易协议
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub enum DexType {
     PumpFun,
     PumpSwap,
     Bonk,
+    RaydiumCpmm,
 }
 
 impl std::fmt::Display for DexType {
@@ -21,6 +23,7 @@ impl std::fmt::Display for DexType {
             DexType::PumpFun => write!(f, "PumpFun"),
             DexType::PumpSwap => write!(f, "PumpSwap"),
             DexType::Bonk => write!(f, "Bonk"),
+            DexType::RaydiumCpmm => write!(f, "RaydiumCpmm"),
         }
     }
 }
@@ -33,6 +36,7 @@ impl std::str::FromStr for DexType {
             "pumpfun" => Ok(DexType::PumpFun),
             "pumpswap" => Ok(DexType::PumpSwap),
             "bonk" => Ok(DexType::Bonk),
+            "raydiumcpmm" => Ok(DexType::RaydiumCpmm),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -55,9 +59,13 @@ impl TradeFactory {
             }
             DexType::Bonk => {
                 let instruction_builder = Arc::new(BonkInstructionBuilder);
+                Arc::new(GenericTradeExecutor::new(instruction_builder, "Bonk"))
+            }
+            DexType::RaydiumCpmm => {
+                let instruction_builder = Arc::new(RaydiumCpmmInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(
                     instruction_builder,
-                    "Bonk",
+                    "RaydiumCpmm",
                 ))
             }
         }
@@ -65,7 +73,7 @@ impl TradeFactory {
 
     /// 获取所有支持的协议
     pub fn supported_dex_types() -> Vec<DexType> {
-        vec![DexType::PumpFun, DexType::PumpSwap, DexType::Bonk]
+        vec![DexType::PumpFun, DexType::PumpSwap, DexType::Bonk, DexType::RaydiumCpmm]
     }
 
     /// 检查协议是否支持

@@ -1,18 +1,19 @@
 # Sol Trade SDK
 
-A comprehensive Rust SDK for seamless interaction with Solana DEX trading programs. This SDK provides a robust set of tools and interfaces to integrate PumpFun, PumpSwap, and Bonk functionality into your applications.
+A comprehensive Rust SDK for seamless interaction with Solana DEX trading programs. This SDK provides a robust set of tools and interfaces to integrate PumpFun, PumpSwap, Bonk, and Raydium CPMM functionality into your applications.
 
 ## Project Features
 
 1. **PumpFun Trading**: Support for `buy` and `sell` operations
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
 3. **Bonk Trading**: Support for Bonk trading operations
-4. **Event Subscription**: Subscribe to PumpFun, PumpSwap, and Bonk program trading events
-5. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
-6. **ShredStream Support**: Subscribe to program events using ShredStream
-7. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
-8. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
-9. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
+4. **Raydium CPMM Trading**: Support for Raydium CPMM (Concentrated Pool Market Maker) trading operations
+5. **Event Subscription**: Subscribe to PumpFun, PumpSwap, Bonk, and Raydium CPMM program trading events
+6. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
+7. **ShredStream Support**: Subscribe to program events using ShredStream
+8. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
+9. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
+10. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
 
 ## Installation
 
@@ -47,6 +48,7 @@ use sol_trade_sdk::{
                     PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
                     PumpSwapSellEvent, PumpSwapWithdrawEvent,
                 },
+                raydium_cpmm::RaydiumCpmmSwapEvent,
             },
             Protocol, UnifiedEvent,
         },
@@ -94,12 +96,15 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
             PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
                 println!("Withdraw event: {:?}", e);
             },
+            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
+                println!("Raydium CPMM Swap event: {:?}", e);
+            },
         });
     };
 
     // Subscribe to events from multiple protocols
     println!("Starting to listen for events, press Ctrl+C to stop...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     grpc.subscribe_events(protocols, None, None, None, callback)
         .await?;
 
@@ -148,12 +153,15 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
             PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
                 println!("Withdraw event: {:?}", e);
             },
+            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
+                println!("Raydium CPMM Swap event: {:?}", e);
+            },
         });
     };
 
     // Subscribe to events
     println!("Starting to listen for events, press Ctrl+C to stop...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     shred_stream
         .shredstream_subscribe(protocols, None, callback)
         .await?;
@@ -364,7 +372,71 @@ async fn test_pumpswap() -> AnyResult<()> {
 }
 ```
 
-### 5. Bonk Trading Operations
+### 5. Raydium CPMM Trading Operations
+
+```rust
+use sol_trade_sdk::{
+    trading::{
+        core::params::RaydiumCpmmParams, 
+        factory::DexType, 
+        raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
+    },
+};
+
+async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Raydium CPMM trading...");
+
+    let trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?; // Token address
+    let buy_sol_cost = 100_000; // 0.0001 SOL (in lamports)
+    let slippage_basis_points = Some(100); // 1% slippage
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    let pool_state = Pubkey::from_str("xxxxxxx")?; // Pool state address
+
+    // Calculate expected token amount when buying
+    let buy_amount_out = get_buy_token_amount(&trade_client.rpc, &pool_state, buy_sol_cost).await?;
+
+    println!("Buying tokens from Raydium CPMM...");
+    trade_client.buy(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            minimum_amount_out: Some(buy_amount_out), // If not provided, defaults to 0
+            auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
+        })),
+    ).await?;
+
+    println!("Selling tokens from Raydium CPMM...");
+    let amount_token = 100_000_000; // Token amount to sell
+    let sell_sol_amount = get_sell_sol_amount(&trade_client.rpc, &pool_state, amount_token).await?;
+    
+    trade_client.sell(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            minimum_amount_out: Some(sell_sol_amount), // If not provided, defaults to 0
+            auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
+        })),
+    ).await?;
+
+    Ok(())
+}
+```
+
+### 6. Bonk Trading Operations
 
 ```rust
 
@@ -496,7 +568,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 6. Custom Priority Fee Configuration
+### 7. Custom Priority Fee Configuration
 
 ```rust
 use sol_trade_sdk::common::PriorityFee;
@@ -527,6 +599,7 @@ let trade_config = TradeConfig {
 - **PumpFun**: Primary meme coin trading platform
 - **PumpSwap**: PumpFun's swap protocol
 - **Bonk**: Token launch platform (letsbonk.fun)
+- **Raydium CPMM**: Raydium's Concentrated Pool Market Maker protocol
 
 ## MEV Protection Services
 
@@ -540,9 +613,9 @@ let trade_config = TradeConfig {
 
 ### Unified Trading Interface
 
-- **TradingProtocol Enum**: Use unified protocol enums (PumpFun, PumpSwap, Bonk)
+- **TradingProtocol Enum**: Use unified protocol enums (PumpFun, PumpSwap, Bonk, RaydiumCpmm)
 - **Unified buy/sell Methods**: All protocols use the same trading method signatures
-- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, etc.)
+- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, RaydiumCpmmParams, etc.)
 
 ### Event Parsing System
 
@@ -570,7 +643,8 @@ src/
 │   │   ├── protocols/# Protocol-specific parsers
 │   │   │   ├── bonk/ # Bonk event parsing
 │   │   │   ├── pumpfun/ # PumpFun event parsing
-│   │   │   └── pumpswap/ # PumpSwap event parsing
+│   │   │   ├── pumpswap/ # PumpSwap event parsing
+│   │   │   └── raydium_cpmm/ # Raydium CPMM event parsing
 │   │   └── factory.rs # Parser factory
 │   ├── shred_stream.rs # ShredStream client
 │   └── yellowstone_grpc.rs # Yellowstone gRPC client
@@ -581,6 +655,7 @@ src/
 │   ├── bonk/         # Bonk trading implementation
 │   ├── pumpfun/      # PumpFun trading implementation
 │   ├── pumpswap/     # PumpSwap trading implementation
+│   ├── raydium_cpmm/ # Raydium CPMM trading implementation
 │   └── factory.rs    # Trading factory
 ├── lib.rs            # Main library file
 └── main.rs           # Example program

@@ -215,6 +215,34 @@ impl ProtocolParams for BonkParams {
     }
 }
 
+/// RaydiumCpmm协议特定参数
+#[derive(Clone)]
+pub struct RaydiumCpmmParams {
+    pub pool_state: Option<Pubkey>,
+    pub minimum_amount_out: Option<u64>,
+    pub auto_handle_wsol: bool,
+}
+
+impl RaydiumCpmmParams {
+    pub fn default() -> Self {
+        Self {
+            pool_state: None,
+            minimum_amount_out: None,
+            auto_handle_wsol: true,
+        }
+    }
+}
+
+impl ProtocolParams for RaydiumCpmmParams {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolParams> {
+        Box::new(self.clone())
+    }
+}
+
 impl BuyParams {
     /// 转换为BuyWithTipParams
     pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> BuyWithTipParams {

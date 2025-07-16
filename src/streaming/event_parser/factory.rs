@@ -3,7 +3,9 @@ use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 
 use crate::streaming::event_parser::protocols::{
-    pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, bonk::parser::BONK_PROGRAM_ID, BonkEventParser,
+    bonk::parser::BONK_PROGRAM_ID, pumpfun::parser::PUMPFUN_PROGRAM_ID,
+    pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID,
+    BonkEventParser, RaydiumCpmmEventParser,
 };
 
 use super::{
@@ -17,6 +19,7 @@ pub enum Protocol {
     PumpSwap,
     PumpFun,
     Bonk,
+    RaydiumCpmm,
 }
 
 impl Protocol {
@@ -25,6 +28,7 @@ impl Protocol {
             Protocol::PumpSwap => vec![PUMPSWAP_PROGRAM_ID],
             Protocol::PumpFun => vec![PUMPFUN_PROGRAM_ID],
             Protocol::Bonk => vec![BONK_PROGRAM_ID],
+            Protocol::RaydiumCpmm => vec![RAYDIUM_CPMM_PROGRAM_ID],
         }
     }
 }
@@ -35,6 +39,7 @@ impl std::fmt::Display for Protocol {
             Protocol::PumpSwap => write!(f, "PumpSwap"),
             Protocol::PumpFun => write!(f, "PumpFun"),
             Protocol::Bonk => write!(f, "Bonk"),
+            Protocol::RaydiumCpmm => write!(f, "RaydiumCpmm"),
         }
     }
 }
@@ -47,6 +52,7 @@ impl std::str::FromStr for Protocol {
             "pumpswap" => Ok(Protocol::PumpSwap),
             "pumpfun" => Ok(Protocol::PumpFun),
             "bonk" => Ok(Protocol::Bonk),
+            "raydiumcpmm" => Ok(Protocol::RaydiumCpmm),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -62,6 +68,7 @@ impl EventParserFactory {
             Protocol::PumpSwap => Arc::new(PumpSwapEventParser::new()),
             Protocol::PumpFun => Arc::new(PumpFunEventParser::new()),
             Protocol::Bonk => Arc::new(BonkEventParser::new()),
+            Protocol::RaydiumCpmm => Arc::new(RaydiumCpmmEventParser::new()),
         }
     }
 

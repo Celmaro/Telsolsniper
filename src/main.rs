@@ -11,14 +11,14 @@ use sol_trade_sdk::{
                 pumpswap::{
                     PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
                     PumpSwapSellEvent, PumpSwapWithdrawEvent,
-                },
+                }, raydium_cpmm::RaydiumCpmmSwapEvent,
             },
             Protocol, UnifiedEvent,
         },
         ShredStreamGrpc, YellowstoneGrpc,
     },
     swqos::{SwqosConfig, SwqosRegion},
-    trading::{core::params::{BonkParams, PumpFunParams}, factory::DexType},
+    trading::{core::params::{BonkParams, PumpFunParams, RaydiumCpmmParams}, factory::DexType, raydium_cpmm::{common::{get_buy_token_amount, get_sell_sol_amount}}},
     SolanaTrade,
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
@@ -28,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_create_solana_trade_client().await?;
     test_pumpswap().await?;
     test_bonk().await?;
+    test_raydium_cpmm().await?;
     test_grpc().await?;
     test_shreds().await?;
     Ok(())
@@ -330,6 +331,56 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+
+async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Raydium Cpmm trading...");
+
+    let client = test_create_solana_trade_client().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let pool_state = Pubkey::from_str("xxxxxxx")?;
+    let buy_amount_out = get_buy_token_amount(&client.rpc, &pool_state, buy_sol_cost).await?;
+    // Buy tokens
+    println!("Buying tokens from Raydium Cpmm...");
+    client.buy(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            minimum_amount_out: Some(buy_amount_out), // 如果不传、默认为0
+            auto_handle_wsol: true,
+        })),
+    ).await?;
+
+    // Sell tokens
+    println!("Selling tokens from Raydium Cpmm...");
+    let amount_token = 0;
+    let sell_sol_amount = get_sell_sol_amount(&client.rpc, &pool_state, amount_token).await?;
+    client.sell(
+        DexType::RaydiumCpmm,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        Some(Box::new(RaydiumCpmmParams {
+            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            minimum_amount_out: Some(sell_sol_amount), // 如果不传、默认为0
+            auto_handle_wsol: true,
+        })),
+    ).await?;
+
+    Ok(())
+}
+
 async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     println!("正在订阅 GRPC 事件...");
 
@@ -339,7 +390,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let callback = create_event_callback();
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk];
+    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
 
     println!("开始监听事件，按 Ctrl+C 停止...");
     grpc.subscribe_events(protocols, None, None, None, callback).await?;
@@ -389,6 +440,9 @@ fn create_event_callback() -> impl Fn(Box<dyn UnifiedEvent>) {
             },
             PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
                 println!("Withdraw event: {:?}", e);
+            },
+            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
+                println!("RaydiumCpmmSwapEvent: {:?}", e);
             },
         });
     }

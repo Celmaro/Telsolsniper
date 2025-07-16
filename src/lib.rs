@@ -11,6 +11,7 @@ use crate::swqos::SwqosConfig;
 use crate::trading::core::params::BonkParams;
 use crate::trading::core::params::PumpFunParams;
 use crate::trading::core::params::PumpSwapParams;
+use crate::trading::core::params::RaydiumCpmmParams;
 use crate::trading::core::traits::ProtocolParams;
 use crate::trading::factory::DexType;
 use crate::trading::BuyParams;
@@ -179,13 +180,12 @@ impl SolanaTrade {
             params
         } else {
             match dex_type {
-                DexType::PumpFun => {
-                    Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>
-                }
-                DexType::PumpSwap => {
-                    Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>
-                }
+                DexType::PumpFun => Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>,
+                DexType::PumpSwap => Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>,
                 DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
+                DexType::RaydiumCpmm => {
+                    Box::new(RaydiumCpmmParams::default()) as Box<dyn ProtocolParams>
+                }
             }
         };
         let buy_params = BuyParams {
@@ -226,6 +226,10 @@ impl SolanaTrade {
             DexType::Bonk => protocol_params
                 .as_any()
                 .downcast_ref::<BonkParams>()
+                .is_some(),
+            DexType::RaydiumCpmm => protocol_params
+                .as_any()
+                .downcast_ref::<RaydiumCpmmParams>()
                 .is_some(),
         };
 
@@ -301,13 +305,12 @@ impl SolanaTrade {
             params
         } else {
             match dex_type {
-                DexType::PumpFun => {
-                    Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>
-                }
-                DexType::PumpSwap => {
-                    Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>
-                }
+                DexType::PumpFun => Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>,
+                DexType::PumpSwap => Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>,
                 DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
+                DexType::RaydiumCpmm => {
+                    Box::new(RaydiumCpmmParams::default()) as Box<dyn ProtocolParams>
+                }
             }
         };
         let sell_params = SellParams {
@@ -347,6 +350,10 @@ impl SolanaTrade {
             DexType::Bonk => protocol_params
                 .as_any()
                 .downcast_ref::<BonkParams>()
+                .is_some(),
+            DexType::RaydiumCpmm => protocol_params
+                .as_any()
+                .downcast_ref::<RaydiumCpmmParams>()
                 .is_some(),
         };
 
