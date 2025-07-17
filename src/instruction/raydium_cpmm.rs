@@ -124,7 +124,7 @@ impl RaydiumCpmmInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &accounts::TOKEN_PROGRAM,
+            &protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM),
         ));
 
         // 创建买入指令
@@ -138,7 +138,7 @@ impl RaydiumCpmmInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Output Vault Account
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Input Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Output Token Program (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM), false), // Output Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Input token mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Output token mint (readonly)
             solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
@@ -253,7 +253,7 @@ impl RaydiumCpmmInstructionBuilder {
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &accounts::WSOL_TOKEN_ACCOUNT,
-                &accounts::TOKEN_PROGRAM,
+                &protocol_params.mint_token_program.unwrap(),
             ),
         );
 
@@ -267,7 +267,7 @@ impl RaydiumCpmmInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Output Token Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Output Vault Account
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Input Token Program (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM), false), // Input Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Output Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Input token mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Output token mint (readonly)

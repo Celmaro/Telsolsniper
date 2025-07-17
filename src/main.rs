@@ -354,6 +354,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            mint_token_program: Some(spl_token::ID), // spl_token_2022::ID
             minimum_amount_out: Some(buy_amount_out), // 如果不传、默认为0
             auto_handle_wsol: true,
         })),
@@ -373,6 +374,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            mint_token_program: Some(spl_token::ID), // spl_token_2022::ID
             minimum_amount_out: Some(sell_sol_amount), // 如果不传、默认为0
             auto_handle_wsol: true,
         })),

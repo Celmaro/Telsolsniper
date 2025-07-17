@@ -382,6 +382,8 @@ use sol_trade_sdk::{
         raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
     },
 };
+use spl_token; // For standard SPL Token
+// use spl_token_2022; // For Token 2022 standard (if needed)
 
 async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing Raydium CPMM trading...");
@@ -408,6 +410,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
             minimum_amount_out: Some(buy_amount_out), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),
@@ -427,6 +430,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
             minimum_amount_out: Some(sell_sol_amount), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),

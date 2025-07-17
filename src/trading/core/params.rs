@@ -219,6 +219,7 @@ impl ProtocolParams for BonkParams {
 #[derive(Clone)]
 pub struct RaydiumCpmmParams {
     pub pool_state: Option<Pubkey>,
+    pub mint_token_program: Option<Pubkey>, // spl_token_2022::ID
     pub minimum_amount_out: Option<u64>,
     pub auto_handle_wsol: bool,
 }
@@ -227,6 +228,7 @@ impl RaydiumCpmmParams {
     pub fn default() -> Self {
         Self {
             pool_state: None,
+            mint_token_program: Some(spl_token::ID),
             minimum_amount_out: None,
             auto_handle_wsol: true,
         }

@@ -380,6 +380,8 @@ use sol_trade_sdk::{
         raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
     },
 };
+use spl_token; // 用于标准 SPL Token
+// use spl_token_2022; // 用于 Token 2022 标准（如果需要）
 
 async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
     println!("Testing Raydium CPMM trading...");
@@ -406,6 +408,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
             minimum_amount_out: Some(buy_amount_out), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),
@@ -425,6 +428,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         None,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
             minimum_amount_out: Some(sell_sol_amount), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),

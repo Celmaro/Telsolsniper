@@ -96,7 +96,7 @@ pub mod accounts {
     pub const SYSTEM_PROGRAM: Pubkey = pubkey!("11111111111111111111111111111111");
 
     /// Token Program ID
-    pub const TOKEN_PROGRAM: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
 
     /// Associated Token Program ID
     pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
