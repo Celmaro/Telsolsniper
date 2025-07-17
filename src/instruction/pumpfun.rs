@@ -144,40 +144,6 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
     }
 }
 
-pub struct Create {
-    pub _name: String,
-    pub _symbol: String,
-    pub _uri: String,
-    pub _creator: Pubkey,
-}
-
-impl Create {
-    pub fn data(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(
-            8 + 4 + self._name.len() + 4 + self._symbol.len() + 4 + self._uri.len() + 32,
-        );
-
-        // 追加 discriminator
-        data.extend_from_slice(&[24, 30, 200, 40, 5, 28, 7, 119]); // discriminator
-
-        // 添加 name 字符串长度和内容
-        data.extend_from_slice(&(self._name.len() as u32).to_le_bytes()); // 添加 name 长度
-        data.extend_from_slice(self._name.as_bytes()); // 添加 name 内容
-
-        // 添加 symbol 字符串长度和内容
-        data.extend_from_slice(&(self._symbol.len() as u32).to_le_bytes()); // 添加 symbol 长度
-        data.extend_from_slice(self._symbol.as_bytes()); // 添加 symbol 内容
-
-        // 添加 uri 字符串长度和内容
-        data.extend_from_slice(&(self._uri.len() as u32).to_le_bytes()); // 添加 uri 长度
-        data.extend_from_slice(self._uri.as_bytes()); // 添加 uri 内容
-
-        data.extend_from_slice(&self._creator.to_bytes());
-
-        data
-    }
-}
-
 pub struct Buy {
     pub _amount: u64,
     pub _max_sol_cost: u64,
@@ -206,36 +172,6 @@ impl Sell {
         data.extend_from_slice(&self._min_sol_output.to_le_bytes());
         data
     }
-}
-
-pub fn create(payer: &Keypair, mint: &Keypair, args: Create) -> Instruction {
-    let bonding_curve: Pubkey = get_bonding_curve_pda(&mint.pubkey()).unwrap();
-    Instruction::new_with_bytes(
-        constants::pumpfun::accounts::PUMPFUN,
-        &args.data(),
-        vec![
-            AccountMeta::new(mint.pubkey(), true),
-            AccountMeta::new(get_mint_authority_pda(), false),
-            AccountMeta::new(bonding_curve, false),
-            AccountMeta::new(
-                get_associated_token_address(&bonding_curve, &mint.pubkey()),
-                false,
-            ),
-            AccountMeta::new_readonly(get_global_pda(), false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::MPL_TOKEN_METADATA, false),
-            AccountMeta::new(get_metadata_pda(&mint.pubkey()), false),
-            AccountMeta::new(payer.pubkey(), true),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::SYSTEM_PROGRAM, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new_readonly(
-                constants::pumpfun::accounts::ASSOCIATED_TOKEN_PROGRAM,
-                false,
-            ),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::RENT, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
-        ],
-    )
 }
 
 pub fn buy(
