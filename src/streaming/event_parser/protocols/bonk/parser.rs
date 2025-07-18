@@ -5,8 +5,8 @@ use crate::streaming::event_parser::{
     common::{utils::*, EventMetadata, EventType, ProtocolType},
     core::traits::{EventParser, GenericEventParseConfig, GenericEventParser, UnifiedEvent},
     protocols::bonk::{
-        discriminators, ConstantCurve, CurveParams, FixedCurve, LinearCurve, MintParams,
-        BonkPoolCreateEvent, BonkTradeEvent, TradeDirection, VestingParams,
+        discriminators, BonkPoolCreateEvent, BonkTradeEvent, ConstantCurve, CurveParams,
+        FixedCurve, LinearCurve, MintParams, TradeDirection, VestingParams,
     },
 };
 
@@ -60,11 +60,7 @@ impl BonkEventParser {
             },
         ];
 
-        let inner = GenericEventParser::new(
-            BONK_PROGRAM_ID,
-            ProtocolType::Bonk,
-            configs,
-        );
+        let inner = GenericEventParser::new(BONK_PROGRAM_ID, ProtocolType::Bonk, configs);
 
         Self { inner }
     }
@@ -98,6 +94,19 @@ impl BonkEventParser {
                 metadata.signature,
                 event.pool_state.to_string()
             ));
+            if metadata.event_type == EventType::BonkBuyExactIn
+                || metadata.event_type == EventType::BonkBuyExactOut
+            {
+                if event.trade_direction != TradeDirection::Buy {
+                    return None;
+                }
+            } else if metadata.event_type == EventType::BonkSellExactIn
+                || metadata.event_type == EventType::BonkSellExactOut
+            {
+                if event.trade_direction != TradeDirection::Sell {
+                    return None;
+                }
+            }
             Some(Box::new(BonkTradeEvent {
                 metadata: metadata,
                 ..event

@@ -5,11 +5,15 @@ use solana_sdk::{
 use solana_transaction_status::{
     EncodedTransactionWithStatusMeta, UiCompiledInstruction, UiInstruction,
 };
-use std::collections::HashMap;
 use std::fmt::Debug;
+use std::{collections::HashMap, str::FromStr};
 
 use crate::streaming::event_parser::{
-    common::{utils::*, EventMetadata, EventType, ProtocolType}, protocols::{pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent}, bonk::{BonkPoolCreateEvent, BonkTradeEvent}},
+    common::{utils::*, EventMetadata, EventType, ProtocolType},
+    protocols::{
+        bonk::{BonkPoolCreateEvent, BonkTradeEvent},
+        pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
+    },
 };
 
 /// 统一事件接口 - 所有协议的事件都需要实现此trait
@@ -70,11 +74,13 @@ pub trait EventParser: Send + Sync {
         versioned_tx: &VersionedTransaction,
         signature: &str,
         slot: Option<u64>,
+        accounts: &[Pubkey],
     ) -> Result<Vec<Box<dyn UnifiedEvent>>> {
         let mut instruction_events = Vec::new();
         // 获取交易的指令和账户
         let compiled_instructions = versioned_tx.message.instructions();
-        let accounts = versioned_tx.message.static_account_keys();
+        let mut accounts: Vec<Pubkey> = accounts.to_vec();
+
         // 检查交易中是否包含程序
         let has_program = accounts.iter().any(|account| self.should_handle(account));
         if has_program {
@@ -82,19 +88,18 @@ pub trait EventParser: Send + Sync {
             for instruction in compiled_instructions {
                 if let Some(program_id) = accounts.get(instruction.program_id_index as usize) {
                     if self.should_handle(program_id) {
-                        // 验证账户索引的有效性
-                        let all_accounts_valid = instruction
-                            .accounts
-                            .iter()
-                            .all(|&acc_idx| (acc_idx as usize) < accounts.len());
-
-                        if all_accounts_valid {
-                            if let Ok(events) = self
-                                .parse_instruction(instruction, accounts, signature, slot)
-                                .await
-                            {
-                                instruction_events.extend(events);
+                        let max_idx = instruction.accounts.iter().max().unwrap_or(&0);
+                        // 补齐accounts(使用Pubkey::default())
+                        if *max_idx as usize > accounts.len() {
+                            for _i in accounts.len()..*max_idx as usize {
+                                accounts.push(Pubkey::default());
                             }
+                        }
+                        if let Ok(events) = self
+                            .parse_instruction(instruction, &accounts, signature, slot)
+                            .await
+                        {
+                            instruction_events.extend(events);
                         }
                     }
                 }
@@ -110,8 +115,16 @@ pub trait EventParser: Send + Sync {
         slot: Option<u64>,
         bot_wallet: Option<Pubkey>,
     ) -> Result<Vec<Box<dyn UnifiedEvent>>> {
-        let events = self.parse_instruction_events_from_versioned_transaction(versioned_tx, signature, slot)
-            .await.unwrap_or_else(|_e| vec![]);
+        let accounts: Vec<Pubkey> = versioned_tx.message.static_account_keys().to_vec();
+        let events = self
+            .parse_instruction_events_from_versioned_transaction(
+                versioned_tx,
+                signature,
+                slot,
+                &accounts,
+            )
+            .await
+            .unwrap_or_else(|_e| vec![]);
         Ok(self.process_events(events, bot_wallet))
     }
 
@@ -123,23 +136,46 @@ pub trait EventParser: Send + Sync {
         bot_wallet: Option<Pubkey>,
     ) -> Result<Vec<Box<dyn UnifiedEvent>>> {
         let transaction = tx.transaction;
-        let mut instruction_events = Vec::new();
-
-        // 解析指令事件
-        if let Some(versioned_tx) = transaction.decode() {
-            instruction_events = self
-                .parse_instruction_events_from_versioned_transaction(&versioned_tx, signature, slot)
-                .await
-                .unwrap_or_else(|_e| vec![]);
-        }
-
-        // 解析内联指令事件
-        let mut inner_instruction_events = Vec::new();
         // 检查交易元数据
         let meta = tx
             .meta
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Missing transaction metadata"))?;
+
+        let mut address_table_lookups: Vec<Pubkey> = vec![];
+        if meta.err.is_none() {
+            let loaded_addresses = meta.loaded_addresses.as_ref().unwrap();
+            for lookup in &loaded_addresses.writable {
+                address_table_lookups.push(Pubkey::from_str(lookup).unwrap());
+            }
+            for lookup in &loaded_addresses.readonly {
+                address_table_lookups.push(Pubkey::from_str(lookup).unwrap());
+            }
+        }
+        let mut accounts: Vec<Pubkey> = vec![];
+
+        let mut instruction_events = Vec::new();
+
+        // 解析指令事件
+        if let Some(versioned_tx) = transaction.decode() {
+            accounts = versioned_tx.message.static_account_keys().to_vec();
+            accounts.extend(address_table_lookups.clone());
+
+            instruction_events = self
+                .parse_instruction_events_from_versioned_transaction(
+                    &versioned_tx,
+                    signature,
+                    slot,
+                    &accounts,
+                )
+                .await
+                .unwrap_or_else(|_e| vec![]);
+        } else {
+            accounts.extend(address_table_lookups.clone());
+        }
+
+        // 解析内联指令事件
+        let mut inner_instruction_events = Vec::new();
         // 检查交易是否成功
         if meta.err.is_none() {
             let inner_instructions = meta.inner_instructions.as_ref().unwrap();
@@ -147,6 +183,23 @@ pub trait EventParser: Send + Sync {
                 for instruction in &inner_instruction.instructions {
                     match instruction {
                         UiInstruction::Compiled(compiled) => {
+                            // 解析嵌套指令
+                            let compiled_instruction = CompiledInstruction {
+                                program_id_index: compiled.program_id_index,
+                                accounts: compiled.accounts.clone(),
+                                data: bs58::decode(compiled.data.clone()).into_vec().unwrap(),
+                            };
+                            if let Ok(events) = self
+                                .parse_instruction(
+                                    &compiled_instruction,
+                                    &accounts,
+                                    signature,
+                                    slot,
+                                )
+                                .await
+                            {
+                                instruction_events.extend(events);
+                            }
                             if let Ok(events) = self
                                 .parse_inner_instruction(compiled, signature, slot)
                                 .await
@@ -175,14 +228,17 @@ pub trait EventParser: Send + Sync {
         Ok(self.process_events(instruction_events, bot_wallet))
     }
 
-    fn process_events(&self, mut events: Vec<Box<dyn UnifiedEvent>>, bot_wallet: Option<Pubkey>) -> Vec<Box<dyn UnifiedEvent>> {
+    fn process_events(
+        &self,
+        mut events: Vec<Box<dyn UnifiedEvent>>,
+        bot_wallet: Option<Pubkey>,
+    ) -> Vec<Box<dyn UnifiedEvent>> {
         let mut dev_address = None;
         let mut bonk_dev_address = None;
         for event in &mut events {
             if let Some(token_info) = event.as_any().downcast_ref::<PumpFunCreateTokenEvent>() {
                 dev_address = Some(token_info.user);
-            } else if let Some(trade_info) =
-                event.as_any_mut().downcast_mut::<PumpFunTradeEvent>()
+            } else if let Some(trade_info) = event.as_any_mut().downcast_mut::<PumpFunTradeEvent>()
             {
                 if Some(trade_info.user) == dev_address {
                     trade_info.is_dev_create_token_trade = true;
@@ -192,15 +248,9 @@ pub trait EventParser: Send + Sync {
                     trade_info.is_dev_create_token_trade = false;
                 }
             }
-            if let Some(pool_info) = event
-                .as_any()
-                .downcast_ref::<BonkPoolCreateEvent>()
-            {
+            if let Some(pool_info) = event.as_any().downcast_ref::<BonkPoolCreateEvent>() {
                 bonk_dev_address = Some(pool_info.creator);
-            } else if let Some(trade_info) = event
-                .as_any_mut()
-                .downcast_mut::<BonkTradeEvent>()
-            {
+            } else if let Some(trade_info) = event.as_any_mut().downcast_mut::<BonkTradeEvent>() {
                 if Some(trade_info.payer) == bonk_dev_address {
                     trade_info.is_dev_create_token_trade = true;
                 } else if Some(trade_info.payer) == bot_wallet {

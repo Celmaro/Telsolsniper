@@ -48,6 +48,29 @@ pub enum EventType {
     Unknown,
 }
 
+impl EventType {
+    pub fn to_string(&self) -> String {
+        match self {
+            EventType::PumpSwapBuy => "PumpSwapBuy".to_string(),
+            EventType::PumpSwapSell => "PumpSwapSell".to_string(),
+            EventType::PumpSwapCreatePool => "PumpSwapCreatePool".to_string(),
+            EventType::PumpSwapDeposit => "PumpSwapDeposit".to_string(),
+            EventType::PumpSwapWithdraw => "PumpSwapWithdraw".to_string(),
+            EventType::PumpFunCreateToken => "PumpFunCreateToken".to_string(),
+            EventType::PumpFunBuy => "PumpFunBuy".to_string(),
+            EventType::PumpFunSell => "PumpFunSell".to_string(),
+            EventType::BonkBuyExactIn => "BonkBuyExactIn".to_string(),
+            EventType::BonkBuyExactOut => "BonkBuyExactOut".to_string(),
+            EventType::BonkSellExactIn => "BonkSellExactIn".to_string(),
+            EventType::BonkSellExactOut => "BonkSellExactOut".to_string(),
+            EventType::BonkInitialize => "BonkInitialize".to_string(),
+            EventType::RaydiumCpmmSwapBaseInput => "RaydiumCpmmSwapBaseInput".to_string(),
+            EventType::RaydiumCpmmSwapBaseOutput => "RaydiumCpmmSwapBaseOutput".to_string(),
+            EventType::Unknown => "Unknown".to_string(),
+        }
+    }
+}
+
 /// 解析结果
 #[derive(Debug, Clone)]
 pub struct ParseResult<T> {
@@ -133,9 +156,10 @@ impl EventMetadata {
         }
     }
     pub fn set_id(&mut self, id: String) {
+        let _id = format!("{}-{}-{}", self.signature, self.event_type.to_string(), id);
         // 对传入的 id 进行哈希处理
         let mut hasher = DefaultHasher::new();
-        id.hash(&mut hasher);
+        _id.hash(&mut hasher);
         let hash_value = hasher.finish();
         self.id = format!("{:x}", hash_value);
     }

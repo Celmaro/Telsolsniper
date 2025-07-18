@@ -21,3 +21,6 @@ Cargo.lock
 #.idea/
 
 .cargo/
+
+tmp_*.rs
+tmp_*.log
