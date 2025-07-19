@@ -436,6 +436,10 @@ impl EventParser for GenericEventParser {
         signature: &str,
         slot: u64,
     ) -> Vec<Box<dyn UnifiedEvent>> {
+        let program_id = accounts[instruction.program_id_index as usize];
+        if !self.should_handle(&program_id) {
+            return Vec::new();
+        }
         let mut events = Vec::new();
         for (disc, configs) in &self.instruction_configs {
             if instruction.data.len() < disc.len() {

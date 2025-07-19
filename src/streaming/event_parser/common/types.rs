@@ -13,6 +13,7 @@ pub enum ProtocolType {
     PumpFun,
     Bonk,
     RaydiumCpmm,
+    RaydiumClmm,
 }
 
 /// 事件类型枚举
@@ -44,6 +45,10 @@ pub enum EventType {
     RaydiumCpmmSwapBaseInput,
     RaydiumCpmmSwapBaseOutput,
 
+    // Raydium CLMM 事件
+    RaydiumClmmSwap,
+    RaydiumClmmSwapV2,
+
     // 通用事件
     Unknown,
 }
@@ -66,6 +71,8 @@ impl EventType {
             EventType::BonkInitialize => "BonkInitialize".to_string(),
             EventType::RaydiumCpmmSwapBaseInput => "RaydiumCpmmSwapBaseInput".to_string(),
             EventType::RaydiumCpmmSwapBaseOutput => "RaydiumCpmmSwapBaseOutput".to_string(),
+            EventType::RaydiumClmmSwap => "RaydiumClmmSwap".to_string(),
+            EventType::RaydiumClmmSwapV2 => "RaydiumClmmSwapV2".to_string(),
             EventType::Unknown => "Unknown".to_string(),
         }
     }

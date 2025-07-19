@@ -29,10 +29,22 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.0" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.1" }
 ```
 
 ## 使用示例
+
+### 重要参数说明
+
+#### auto_handle_wsol 参数
+
+在 PumpSwap、Bonk、Raydium CPMM 交易中，`auto_handle_wsol` 参数用于自动处理 wSOL（Wrapped SOL）：
+
+- **作用机制**：
+  - 当 `auto_handle_wsol: true` 时，SDK 会自动处理 SOL 与 wSOL 之间的转换
+  - 买入时：自动将 SOL 包装为 wSOL 进行交易
+  - 卖出时：自动将获得的 wSOL 解包装为 SOL
+  - 默认值为 `true`
 
 ### 1. 事件订阅 - 监听代币交易
 
@@ -408,8 +420,9 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            pool_state: Some(pool_state), // 如果不传，会自动计算
             mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
+            mint_token_in_pool_state_index: Some(1), // mint_token 在 pool_state 中的索引,默认在索引1
             minimum_amount_out: Some(buy_amount_out), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),
@@ -428,8 +441,9 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // 如果不传，会自动计算 wsol-mint 方向的池子
+            pool_state: Some(pool_state), // 如果不传，会自动计算
             mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
+            mint_token_in_pool_state_index: Some(1), // mint_token 在 pool_state 中的索引,默认在索引1
             minimum_amount_out: Some(sell_sol_amount), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),

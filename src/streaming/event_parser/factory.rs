@@ -5,7 +5,8 @@ use std::sync::Arc;
 use crate::streaming::event_parser::protocols::{
     bonk::parser::BONK_PROGRAM_ID, pumpfun::parser::PUMPFUN_PROGRAM_ID,
     pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID,
-    BonkEventParser, RaydiumCpmmEventParser,
+    raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, BonkEventParser, RaydiumCpmmEventParser,
+    RaydiumClmmEventParser,
 };
 
 use super::{
@@ -20,6 +21,7 @@ pub enum Protocol {
     PumpFun,
     Bonk,
     RaydiumCpmm,
+    RaydiumClmm,
 }
 
 impl Protocol {
@@ -29,6 +31,7 @@ impl Protocol {
             Protocol::PumpFun => vec![PUMPFUN_PROGRAM_ID],
             Protocol::Bonk => vec![BONK_PROGRAM_ID],
             Protocol::RaydiumCpmm => vec![RAYDIUM_CPMM_PROGRAM_ID],
+            Protocol::RaydiumClmm => vec![RAYDIUM_CLMM_PROGRAM_ID],
         }
     }
 }
@@ -40,6 +43,7 @@ impl std::fmt::Display for Protocol {
             Protocol::PumpFun => write!(f, "PumpFun"),
             Protocol::Bonk => write!(f, "Bonk"),
             Protocol::RaydiumCpmm => write!(f, "RaydiumCpmm"),
+            Protocol::RaydiumClmm => write!(f, "RaydiumClmm"),
         }
     }
 }
@@ -53,6 +57,7 @@ impl std::str::FromStr for Protocol {
             "pumpfun" => Ok(Protocol::PumpFun),
             "bonk" => Ok(Protocol::Bonk),
             "raydiumcpmm" => Ok(Protocol::RaydiumCpmm),
+            "raydiumclmm" => Ok(Protocol::RaydiumClmm),
             _ => Err(anyhow!("Unsupported protocol: {}", s)),
         }
     }
@@ -69,6 +74,7 @@ impl EventParserFactory {
             Protocol::PumpFun => Arc::new(PumpFunEventParser::new()),
             Protocol::Bonk => Arc::new(BonkEventParser::new()),
             Protocol::RaydiumCpmm => Arc::new(RaydiumCpmmEventParser::new()),
+            Protocol::RaydiumClmm => Arc::new(RaydiumClmmEventParser::new()),
         }
     }
 

@@ -4,9 +4,7 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::bonk::{
-        accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR,
-    },
+    constants::bonk::{accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR},
     constants::trade::trade::DEFAULT_SLIPPAGE,
     trading::bonk::{
         common::{get_amount_out, get_pool_pda, get_vault_pda},
@@ -14,7 +12,7 @@ use crate::{
     },
     trading::common::utils::get_token_balance,
     trading::core::{
-        params::{BuyParams, BonkParams, SellParams},
+        params::{BonkParams, BuyParams, SellParams},
         traits::InstructionBuilder,
     },
 };
@@ -70,11 +68,7 @@ impl BonkInstructionBuilder {
         let mut real_base = protocol_params.real_base.unwrap_or(0);
         let mut real_quote = protocol_params.real_quote.unwrap_or(0);
 
-        if virtual_base == 0
-            || virtual_quote == 0
-            || real_base == 0
-            || real_quote == 0
-        {
+        if virtual_base == 0 || virtual_quote == 0 || real_base == 0 || real_quote == 0 {
             let pool = Pool::fetch(params.rpc.as_ref().unwrap(), &pool_state).await?;
             virtual_base = pool.virtual_base as u128;
             virtual_quote = pool.virtual_quote as u128;
@@ -147,7 +141,7 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
-            solana_sdk::instruction::AccountMeta::new(params.mint, false), // Base Token Mint (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Base Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
@@ -253,7 +247,7 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
-            solana_sdk::instruction::AccountMeta::new(params.mint, false), // Base Token Mint (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Base Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
@@ -274,7 +268,24 @@ impl BonkInstructionBuilder {
             data,
         });
 
-        instructions.push(close_account(&accounts::TOKEN_PROGRAM, &user_quote_token_account, &params.payer.pubkey(), &params.payer.pubkey(), &[&params.payer.pubkey()]).unwrap());
+        let protocol_params = params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<BonkParams>()
+            .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
+
+        if protocol_params.auto_handle_wsol {
+            instructions.push(
+                close_account(
+                    &accounts::TOKEN_PROGRAM,
+                    &user_quote_token_account,
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &[&params.payer.pubkey()],
+                )
+                .unwrap(),
+            );
+        }
 
         Ok(instructions)
     }

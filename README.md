@@ -29,10 +29,22 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.0" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.1" }
 ```
 
 ## Usage Examples
+
+### Important Parameter Description
+
+#### auto_handle_wsol Parameter
+
+In PumpSwap, Bonk, and Raydium CPMM trading, the `auto_handle_wsol` parameter is used to automatically handle wSOL (Wrapped SOL):
+
+- **Mechanism**:
+  - When `auto_handle_wsol: true`, the SDK automatically handles the conversion between SOL and wSOL
+  - When buying: automatically wraps SOL to wSOL for trading
+  - When selling: automatically unwraps the received wSOL to SOL
+  - Default value is `true`
 
 ### 1. Event Subscription - Monitor Token Trading
 
@@ -410,8 +422,9 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            pool_state: Some(pool_state), // If not provided, will auto-calculate
             mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
+            mint_token_in_pool_state_index: Some(1), // Index of mint_token in pool_state, default is at index 1
             minimum_amount_out: Some(buy_amount_out), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),
@@ -430,8 +443,9 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // If not provided, will auto-calculate wsol-mint direction pool
+            pool_state: Some(pool_state), // If not provided, will auto-calculate
             mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
+            mint_token_in_pool_state_index: Some(1), // Index of mint_token in pool_state, default is at index 1
             minimum_amount_out: Some(sell_sol_amount), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),

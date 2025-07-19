@@ -56,6 +56,22 @@ pub fn read_u64_le(data: &[u8], offset: usize) -> Option<u64> {
     Some(u64::from_le_bytes(bytes))
 }
 
+pub fn read_u128_le(data: &[u8], offset: usize) -> Option<u128> {
+    if data.len() < offset + 16 {
+        return None;
+    }
+    let bytes: [u8; 16] = data[offset..offset + 16].try_into().ok()?;
+    Some(u128::from_le_bytes(bytes))
+}
+
+pub fn read_u8_le(data: &[u8], offset: usize) -> Option<u8> {
+    if data.len() < offset + 1 {
+        return None;
+    }
+    let bytes: [u8; 1] = data[offset..offset + 1].try_into().ok()?;
+    Some(u8::from_le_bytes(bytes))
+}
+
 /// 安全地从字节数组中读取u32
 pub fn read_u32_le(data: &[u8], offset: usize) -> Option<u32> {
     if data.len() < offset + 4 {

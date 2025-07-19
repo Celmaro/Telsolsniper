@@ -218,8 +218,14 @@ impl ProtocolParams for BonkParams {
 /// RaydiumCpmm协议特定参数
 #[derive(Clone)]
 pub struct RaydiumCpmmParams {
+    /// 池子状态账户地址
     pub pool_state: Option<Pubkey>,
-    pub mint_token_program: Option<Pubkey>, // spl_token_2022::ID
+    /// 代币程序ID
+    /// 指定代币使用的程序，通常为 spl_token::ID 或 spl_token_2022::ID
+    pub mint_token_program: Option<Pubkey>,
+    /// 指定 mint_token 在 pool_state 账户数据中的索引位置
+    /// 默认值为1，表示在索引1的位置
+    pub mint_token_in_pool_state_index: Option<usize>,
     pub minimum_amount_out: Option<u64>,
     pub auto_handle_wsol: bool,
 }
@@ -229,6 +235,7 @@ impl RaydiumCpmmParams {
         Self {
             pool_state: None,
             mint_token_program: Some(spl_token::ID),
+            mint_token_in_pool_state_index: Some(1),
             minimum_amount_out: None,
             auto_handle_wsol: true,
         }
