@@ -12,8 +12,9 @@ use crate::{
     constants::{
         self, pumpfun::global_constants::{CREATOR_FEE, FEE_BASIS_POINTS}, trade::trade::DEFAULT_SLIPPAGE
     },
-    streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent, trading::common::calculate_with_slippage_buy
+    trading::common::calculate_with_slippage_buy
 };
+use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 
 lazy_static::lazy_static! {
     static ref ACCOUNT_CACHE: RwLock<HashMap<Pubkey, Arc<GlobalAccount>>> = RwLock::new(HashMap::new());

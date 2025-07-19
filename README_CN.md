@@ -18,6 +18,8 @@
 
 ## 安装
 
+### 直接克隆
+
 将此项目克隆到您的项目目录：
 
 ```bash
@@ -29,7 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.2" }
+```
+
+### 使用 crates.io
+
+```toml
+# 添加到您的 Cargo.toml
+sol-trade-sdk = "0.2.2"
 ```
 
 ## 使用示例
@@ -51,7 +60,7 @@ sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.1" }
 #### 1.1 使用 Yellowstone gRPC 订阅事件
 
 ```rust
-use sol_trade_sdk::{
+use sol_trade_sdk::solana_streamer_sdk::{
     streaming::{
         event_parser::{
             protocols::{
@@ -128,7 +137,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
 #### 1.2 使用 ShredStream 订阅事件
 
 ```rust
-use sol_trade_sdk::streaming::ShredStreamGrpc;
+use sol_trade_sdk::solana_streamer_sdk::streaming::ShredStreamGrpc;
 
 async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // 使用 ShredStream 客户端订阅事件
@@ -653,18 +662,6 @@ src/
 ├── common/           # 通用功能和工具
 ├── constants/        # 常量定义
 ├── instruction/      # 指令构建
-├── streaming/        # 事件流处理
-│   ├── event_parser/ # 事件解析系统
-│   │   ├── common/   # 通用事件解析工具
-│   │   ├── core/     # 核心解析特征和接口
-│   │   ├── protocols/# 协议特定解析器
-│   │   │   ├── bonk/ # Bonk事件解析
-│   │   │   ├── pumpfun/ # PumpFun事件解析
-│   │   │   ├── pumpswap/ # PumpSwap事件解析
-│   │   │   └── raydium_cpmm/ # Raydium CPMM事件解析
-│   │   └── factory.rs # 解析器工厂
-│   ├── shred_stream.rs # ShredStream客户端
-│   └── yellowstone_grpc.rs # Yellowstone gRPC客户端
 ├── swqos/            # MEV服务客户端
 ├── trading/          # 统一交易引擎
 │   ├── common/       # 通用交易工具

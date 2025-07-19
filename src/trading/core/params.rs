@@ -6,8 +6,8 @@ use super::traits::ProtocolParams;
 use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::constants::bonk::accounts::{PLATFORM_FEE_RATE, PROTOCOL_FEE_RATE, SHARE_FEE_RATE};
-use crate::streaming::event_parser::common::EventType;
-use crate::streaming::event_parser::protocols::bonk::BonkTradeEvent;
+use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
+use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
 use crate::swqos::SwqosClient;
 use crate::trading::bonk::common::{get_amount_in, get_amount_in_net, get_amount_out};
 

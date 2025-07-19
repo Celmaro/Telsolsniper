@@ -18,6 +18,8 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 
 ## Installation
 
+### Direct Clone
+
 Clone this project to your project directory:
 
 ```bash
@@ -29,7 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.2" }
+```
+
+### Use crates.io
+
+```toml
+# Add to your Cargo.toml
+sol-trade-sdk = "0.2.2"
 ```
 
 ## Usage Examples
@@ -51,7 +60,7 @@ In PumpSwap, Bonk, and Raydium CPMM trading, the `auto_handle_wsol` parameter is
 #### 1.1 Subscribe to Events Using Yellowstone gRPC
 
 ```rust
-use sol_trade_sdk::{
+use sol_trade_sdk::solana_streamer_sdk::{
     streaming::{
         event_parser::{
             protocols::{
@@ -128,7 +137,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
 #### 1.2 Subscribe to Events Using ShredStream
 
 ```rust
-use sol_trade_sdk::streaming::ShredStreamGrpc;
+use sol_trade_sdk::solana_streamer_sdk::streaming::ShredStreamGrpc;
 
 async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     // Subscribe to events using ShredStream client
@@ -655,18 +664,6 @@ src/
 ├── common/           # Common functionality and tools
 ├── constants/        # Constant definitions
 ├── instruction/      # Instruction building
-├── streaming/        # Event stream processing
-│   ├── event_parser/ # Event parsing system
-│   │   ├── common/   # Common event parsing tools
-│   │   ├── core/     # Core parsing traits and interfaces
-│   │   ├── protocols/# Protocol-specific parsers
-│   │   │   ├── bonk/ # Bonk event parsing
-│   │   │   ├── pumpfun/ # PumpFun event parsing
-│   │   │   ├── pumpswap/ # PumpSwap event parsing
-│   │   │   └── raydium_cpmm/ # Raydium CPMM event parsing
-│   │   └── factory.rs # Parser factory
-│   ├── shred_stream.rs # ShredStream client
-│   └── yellowstone_grpc.rs # Yellowstone gRPC client
 ├── swqos/            # MEV service clients
 ├── trading/          # Unified trading engine
 │   ├── common/       # Common trading tools

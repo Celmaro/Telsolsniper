@@ -2,10 +2,10 @@ pub mod common;
 pub mod constants;
 pub mod instruction;
 pub mod protos;
-pub mod streaming;
 pub mod swqos;
 pub mod trading;
 pub mod utils;
+pub use solana_streamer_sdk;
 
 use crate::swqos::SwqosConfig;
 use crate::trading::core::params::BonkParams;

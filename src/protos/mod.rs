@@ -6,7 +6,6 @@ pub mod packet;
 pub mod relayer;
 pub mod searcher;
 pub mod shared;
-pub mod shredstream;
 pub mod trace_shred;
 pub mod convert;
 pub mod nextblock_grpc;

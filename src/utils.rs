@@ -1,4 +1,4 @@
-use crate::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
+use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 use crate::trading;
 use crate::SolanaTrade;
 use solana_sdk::pubkey::Pubkey;
