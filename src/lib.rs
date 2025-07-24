@@ -204,12 +204,11 @@ impl SolanaTrade {
         let mut priority_fee = buy_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
             priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees = vec![
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-            ];
+            priority_fee.buy_tip_fees = priority_fee
+                .buy_tip_fees
+                .iter()
+                .map(|_| custom_buy_tip_fee.unwrap())
+                .collect();
         }
         let buy_with_tip_params = buy_params.clone().with_tip(self.swqos_clients.clone());
 
@@ -328,12 +327,11 @@ impl SolanaTrade {
         let mut priority_fee = sell_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
             priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees = vec![
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-                custom_buy_tip_fee.unwrap(),
-            ];
+            priority_fee.buy_tip_fees = priority_fee
+                .buy_tip_fees
+                .iter()
+                .map(|_| custom_buy_tip_fee.unwrap())
+                .collect();
         }
         let sell_with_tip_params = sell_params.clone().with_tip(self.swqos_clients.clone());
 

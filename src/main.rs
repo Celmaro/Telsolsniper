@@ -399,7 +399,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
 
     println!("开始监听事件，按 Ctrl+C 停止...");
-    grpc.subscribe_events(protocols, None, None, None, callback).await?;
+    grpc.subscribe_events(protocols, None, None, None, None, None, callback).await?;
 
     Ok(())
 }

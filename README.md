@@ -31,14 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.4" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.2.3"
+sol-trade-sdk = "0.2.4"
 ```
 
 ## Usage Examples
@@ -127,7 +127,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // Subscribe to events from multiple protocols
     println!("Starting to listen for events, press Ctrl+C to stop...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
-    grpc.subscribe_events(protocols, None, None, None, callback)
+    grpc.subscribe_events(protocols, None, None, None, None, None, callback)
         .await?;
 
     Ok(())

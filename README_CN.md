@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.4" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.2.3"
+sol-trade-sdk = "0.2.4"
 ```
 
 ## 使用示例
@@ -127,7 +127,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // 订阅多个协议的事件
     println!("开始监听事件，按 Ctrl+C 停止...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
-    grpc.subscribe_events(protocols, None, None, None, callback)
+    grpc.subscribe_events(protocols, None, None, None, None, None, callback)
         .await?;
 
     Ok(())
