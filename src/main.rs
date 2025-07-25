@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use sol_trade_sdk::{
     common::{bonding_curve::BondingCurveAccount, AnyResult, PriorityFee, TradeConfig},
     swqos::{SwqosConfig, SwqosRegion},
-    trading::{core::params::{BonkParams, PumpFunParams, RaydiumCpmmParams}, factory::DexType, raydium_cpmm::{common::{get_buy_token_amount, get_sell_sol_amount}}},
+    trading::{core::params::{BonkParams, PumpFunParams, PumpSwapParams, RaydiumCpmmParams}, factory::DexType, raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}},
     SolanaTrade,
 };
 use sol_trade_sdk::solana_streamer_sdk::{
@@ -178,6 +178,7 @@ async fn test_pumpswap() -> AnyResult<()> {
     let buy_sol_cost = 100_000;
     let slippage_basis_points = Some(100);
     let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let pool_address = Pubkey::from_str("xxxxxxx")?;
 
     // Buy tokens
     println!("Buying tokens from PumpSwap...");
@@ -189,7 +190,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        Some(Box::new(PumpSwapParams {
+            pool: Some(pool_address),
+            auto_handle_wsol: true,
+        })),
     ).await?;
 
     // Sell tokens
@@ -203,7 +207,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        Some(Box::new(PumpSwapParams {
+            pool: Some(pool_address),
+            auto_handle_wsol: true,
+        })),
     ).await?;
 
     Ok(())

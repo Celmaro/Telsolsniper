@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.4" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.5" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.2.4"
+sol-trade-sdk = "0.2.5"
 ```
 
 ## 使用示例
@@ -357,6 +357,7 @@ async fn test_pumpswap() -> AnyResult<()> {
     let buy_sol_amount = 100_000; 
     let slippage_basis_points = Some(100);
     let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    let pool_address = Pubkey::from_str("xxxxxxx")?;
 
     println!("Buying tokens from PumpSwap...");
     // buy
@@ -368,7 +369,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        Some(Box::new(PumpSwapParams {
+            pool: Some(pool_address),
+            auto_handle_wsol: true,
+        })),
     )
     .await?;
     
@@ -384,7 +388,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        Some(Box::new(PumpSwapParams {
+            pool: Some(pool_address),
+            auto_handle_wsol: true,
+        })),
     )
     .await?;
 
