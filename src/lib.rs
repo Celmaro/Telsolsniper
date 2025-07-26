@@ -250,6 +250,7 @@ impl SolanaTrade {
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
+    /// * `with_tip` - Optional boolean to indicate if the transaction should be sent with tip
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     ///
     /// # Returns
@@ -285,6 +286,7 @@ impl SolanaTrade {
     ///     slippage,
     ///     recent_blockhash,
     ///     None,
+    ///     false,
     ///     None,
     /// ).await?;
     /// ```
@@ -297,6 +299,7 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
+        with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
@@ -360,7 +363,11 @@ impl SolanaTrade {
         }
 
         // Execute sell based on tip preference
-        executor.sell_with_tip(sell_with_tip_params).await
+        if with_tip {
+            executor.sell_with_tip(sell_with_tip_params).await
+        } else {
+            executor.sell(sell_params).await
+        }
     }
 
     /// Execute a sell order for a percentage of the specified token amount
@@ -430,6 +437,7 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
+        with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
@@ -444,6 +452,7 @@ impl SolanaTrade {
             slippage_basis_points,
             recent_blockhash,
             custom_buy_tip_fee,
+            with_tip,
             extension_params,
         )
         .await

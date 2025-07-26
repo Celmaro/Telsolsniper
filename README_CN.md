@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.5" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.6" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.2.5"
+sol-trade-sdk = "0.2.6"
 ```
 
 ## 使用示例
@@ -127,8 +127,29 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     // 订阅多个协议的事件
     println!("开始监听事件，按 Ctrl+C 停止...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
-    grpc.subscribe_events(protocols, None, None, None, None, None, callback)
-        .await?;
+    
+    // Filter accounts
+    let account_include = vec![
+        PUMPFUN_PROGRAM_ID.to_string(),      // Listen to pumpfun program ID
+        PUMPSWAP_PROGRAM_ID.to_string(),     // Listen to pumpswap program ID
+        BONK_PROGRAM_ID.to_string(),         // Listen to bonk program ID
+        RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Listen to raydium_cpmm program ID
+        RAYDIUM_CLMM_PROGRAM_ID.to_string(), // Listen to raydium_clmm program ID
+        "xxxxxxxx".to_string(),              // Listen to xxxxx account
+    ];
+    let account_exclude = vec![];
+    let account_required = vec![];
+
+    grpc.subscribe_events_v2(
+        protocols,
+        None,
+        account_include,
+        account_exclude,
+        account_required,
+        None,
+        callback,
+    )
+    .await?;
 
     Ok(())
 }
@@ -388,6 +409,7 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
             auto_handle_wsol: true,
@@ -456,6 +478,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算
             mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
@@ -511,6 +534,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -551,6 +575,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -593,6 +618,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     )
     .await?;

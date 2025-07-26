@@ -24,6 +24,7 @@ use sol_trade_sdk::solana_streamer_sdk::{
     },
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
+use solana_streamer_sdk::streaming::event_parser::protocols::{bonk::parser::BONK_PROGRAM_ID, pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -110,6 +111,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -163,6 +165,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -207,6 +210,7 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
             auto_handle_wsol: true,
@@ -251,6 +255,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -294,6 +299,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -334,6 +340,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         None,
     ).await?;
 
@@ -382,6 +389,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
+        false,
         Some(Box::new(RaydiumCpmmParams {
             pool_state: Some(pool_state), // 如果不传，会自动计算
             mint_token_program: Some(spl_token::ID), // spl_token_2022::ID
@@ -404,9 +412,29 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
 
     let callback = create_event_callback();
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
+    // Filter accounts
+    let account_include = vec![
+        PUMPFUN_PROGRAM_ID.to_string(),      // Listen to pumpfun program ID
+        PUMPSWAP_PROGRAM_ID.to_string(),     // Listen to pumpswap program ID
+        BONK_PROGRAM_ID.to_string(),         // Listen to bonk program ID
+        RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Listen to raydium_cpmm program ID
+        RAYDIUM_CLMM_PROGRAM_ID.to_string(), // Listen to raydium_clmm program ID
+        "xxxxxxxx".to_string(),              // Listen to xxxxx account
+    ];
+    let account_exclude = vec![];
+    let account_required = vec![];
 
     println!("开始监听事件，按 Ctrl+C 停止...");
-    grpc.subscribe_events(protocols, None, None, None, None, None, callback).await?;
+    grpc.subscribe_events_v2(
+        protocols,
+        None,
+        account_include,
+        account_exclude,
+        account_required,
+        None,
+        callback,
+    )
+    .await?;
 
     Ok(())
 }
