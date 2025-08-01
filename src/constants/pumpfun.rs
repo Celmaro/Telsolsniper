@@ -26,6 +26,12 @@ pub mod seeds {
 
     /// Seed for metadata PDAs
     pub const METADATA_SEED: &[u8] = b"metadata";
+
+    /// Seed for user volume accumulator PDAs
+    pub const USER_VOLUME_ACCUMULATOR_SEED: &[u8] = b"user_volume_accumulator";
+
+    /// Seed for global volume accumulator PDAs
+    pub const GLOBAL_VOLUME_ACCUMULATOR_SEED: &[u8] = b"global_volume_accumulator";
 }
 
 pub mod global_constants {

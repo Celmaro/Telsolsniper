@@ -63,6 +63,22 @@ pub fn get_creator_vault_pda(creator: &Pubkey) -> Option<Pubkey> {
 }
 
 #[inline]
+pub fn get_user_volume_accumulator_pda(user: &Pubkey) -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[constants::pumpfun::seeds::USER_VOLUME_ACCUMULATOR_SEED, user.as_ref()];
+    let program_id: &Pubkey = &constants::pumpfun::accounts::PUMPFUN;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
+}
+
+#[inline]
+pub fn get_global_volume_accumulator_pda() -> Option<Pubkey> {
+    let seeds: &[&[u8]; 1] = &[constants::pumpfun::seeds::GLOBAL_VOLUME_ACCUMULATOR_SEED];
+    let program_id: &Pubkey = &constants::pumpfun::accounts::PUMPFUN;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
+}
+
+#[inline]
 pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(
         &[

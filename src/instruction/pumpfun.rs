@@ -8,7 +8,7 @@ use spl_token::instruction::close_account;
 use crate::{
     constants,
     trading::pumpfun::common::{
-        get_bonding_curve_pda, get_global_pda, get_metadata_pda, get_mint_authority_pda,
+        get_bonding_curve_pda, get_global_pda, get_global_volume_accumulator_pda, get_metadata_pda, get_mint_authority_pda, get_user_volume_accumulator_pda
     },
 };
 
@@ -198,6 +198,8 @@ pub fn buy(
             AccountMeta::new(*creator_vault_pda, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
+            AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
+            AccountMeta::new(get_user_volume_accumulator_pda(&payer.pubkey()).unwrap(), false),
         ],
     )
 }
