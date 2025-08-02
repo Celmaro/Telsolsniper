@@ -14,6 +14,7 @@ pub struct Pool {
     pub pool_base_token_account: Pubkey,
     pub pool_quote_token_account: Pubkey,
     pub lp_supply: u64,
+    pub coin_creator: Pubkey,
 }
 
 impl Pool {
@@ -63,6 +64,15 @@ impl Pool {
             data[195], data[196], data[197], data[198], data[199], data[200], data[201], data[202],
         ]);
 
+        let mut coin_creator = Pubkey::default();
+        if data.len() >= 203 + 32 {
+            coin_creator = Pubkey::new_from_array(
+                data[203..203 + 32]
+                    .try_into()
+                    .map_err(|e| anyhow!("Failed to convert coin_creator: {:?}", e))?,
+            );
+        }
+
         Ok(Self {
             pool_bump,
             index,
@@ -73,6 +83,7 @@ impl Pool {
             pool_base_token_account,
             pool_quote_token_account,
             lp_supply,
+            coin_creator,
         })
     }
 
@@ -89,18 +100,17 @@ impl Pool {
         Self::from_bytes(&account.data)
     }
 
-    pub async fn find_by_mint(
+    pub async fn find_by_base_mint(
         rpc: &SolanaRpcClient,
-        mint: &Pubkey,
+        base_mint: &Pubkey,
     ) -> Result<(Pubkey, Self), anyhow::Error> {
         // 使用getProgramAccounts查找给定mint的池子
         let filters = vec![
             // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
             solana_rpc_client_api::filter::RpcFilterType::Memcmp(
-                solana_client::rpc_filter::Memcmp::new_base58_encoded(43, &mint.to_bytes()),
+                solana_client::rpc_filter::Memcmp::new_base58_encoded(43, &base_mint.to_bytes()),
             ),
         ];
-
         let config = solana_rpc_client_api::config::RpcProgramAccountsConfig {
             filters: Some(filters),
             account_config: solana_rpc_client_api::config::RpcAccountInfoConfig {
@@ -112,24 +122,71 @@ impl Pool {
             with_context: None,
             sort_results: None,
         };
-
         let program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
         let accounts = rpc
             .get_program_accounts_with_config(&program_id, config)
             .await?;
-
         if accounts.is_empty() {
-            return Err(anyhow!("No pool found for mint {}", mint));
+            return Err(anyhow!("No pool found for mint {}", base_mint));
         }
-
         let mut pools: Vec<_> = accounts
             .into_iter()
             .filter_map(|(addr, acc)| Self::from_bytes(&acc.data).map(|pool| (addr, pool)).ok())
             .collect();
         pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
-
         let (address, pool) = pools[0].clone();
         Ok((address, pool))
+    }
+
+    pub async fn find_by_quote_mint(
+        rpc: &SolanaRpcClient,
+        quote_mint: &Pubkey,
+    ) -> Result<(Pubkey, Self), anyhow::Error> {
+        // 使用getProgramAccounts查找给定mint的池子
+        let filters = vec![
+            // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
+            solana_rpc_client_api::filter::RpcFilterType::Memcmp(
+                solana_client::rpc_filter::Memcmp::new_base58_encoded(75, &quote_mint.to_bytes()),
+            ),
+        ];
+        let config = solana_rpc_client_api::config::RpcProgramAccountsConfig {
+            filters: Some(filters),
+            account_config: solana_rpc_client_api::config::RpcAccountInfoConfig {
+                encoding: Some(UiAccountEncoding::Base64),
+                data_slice: None,
+                commitment: None,
+                min_context_slot: None,
+            },
+            with_context: None,
+            sort_results: None,
+        };
+        let program_id = crate::constants::pumpswap::accounts::AMM_PROGRAM;
+        let accounts = rpc
+            .get_program_accounts_with_config(&program_id, config)
+            .await?;
+        if accounts.is_empty() {
+            return Err(anyhow!("No pool found for mint {}", quote_mint));
+        }
+        let mut pools: Vec<_> = accounts
+            .into_iter()
+            .filter_map(|(addr, acc)| Self::from_bytes(&acc.data).map(|pool| (addr, pool)).ok())
+            .collect();
+        pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
+        let (address, pool) = pools[0].clone();
+        Ok((address, pool))
+    }
+
+    pub async fn find_by_mint(
+        rpc: &SolanaRpcClient,
+        mint: &Pubkey,
+    ) -> Result<(Pubkey, Self), anyhow::Error> {
+        if let Ok((address, pool)) = Self::find_by_base_mint(rpc, mint).await {
+            return Ok((address, pool));
+        }
+        if let Ok((address, pool)) = Self::find_by_quote_mint(rpc, mint).await {
+            return Ok((address, pool));
+        }
+        Err(anyhow!("No pool found for mint {}", mint))
     }
 
     pub async fn get_token_balances(

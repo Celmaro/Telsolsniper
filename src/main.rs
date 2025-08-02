@@ -182,6 +182,10 @@ async fn test_pumpswap() -> AnyResult<()> {
     let slippage_basis_points = Some(100);
     let recent_blockhash = client.rpc.get_latest_blockhash().await?;
     let pool_address = Pubkey::from_str("xxxxxxx")?;
+    let base_mint = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
+    let quote_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
+    let pool_base_token_reserves = 0; // Input the correct value
+    let pool_quote_token_reserves = 0; // Input the correct value
 
     // Buy tokens
     println!("Buying tokens from PumpSwap...");
@@ -195,6 +199,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         None,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
+            base_mint: Some(base_mint),
+            quote_mint: Some(quote_mint),
+            pool_base_token_reserves: Some(pool_base_token_reserves),
+            pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
     ).await?;
@@ -213,6 +221,10 @@ async fn test_pumpswap() -> AnyResult<()> {
         false,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
+            base_mint: Some(base_mint),
+            quote_mint: Some(quote_mint),
+            pool_base_token_reserves: Some(pool_base_token_reserves),
+            pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
     ).await?;

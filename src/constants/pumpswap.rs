@@ -23,6 +23,9 @@ pub mod seeds {
 
     /// Seed for metadata PDAs
     pub const METADATA_SEED: &[u8] = b"metadata";
+
+    pub const USER_VOLUME_ACCUMULATOR_SEED: &[u8] = b"user_volume_accumulator";
+    pub const GLOBAL_VOLUME_ACCUMULATOR_SEED: &[u8] = b"global_volume_accumulator";
 }
 
 /// Constants related to program accounts and authorities
@@ -31,8 +34,6 @@ pub mod accounts {
 
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
-
-    pub const FEE_RECIPIENT_ATA: Pubkey = pubkey!("94qWNrtmfn42h3ZjUZwWvK1MEo9uVmmrBPd2hpNjYDjb");
 
     /// Public key for the global PDA
     pub const GLOBAL_ACCOUNT: Pubkey = pubkey!("ADyA8hdefvWN2dbGGWFotbzWxrAvLW83WG6QCVXvJKqw");
@@ -60,6 +61,11 @@ pub mod accounts {
     pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
 
     pub const AMM_PROGRAM: Pubkey = pubkey!("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
+
+    pub const LP_FEE_BASIS_POINTS: u64 = 20;
+    pub const PROTOCOL_FEE_BASIS_POINTS: u64 = 5;
+    pub const COIN_CREATOR_FEE_BASIS_POINTS: u64 = 5;
+    
 }
 
 pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];

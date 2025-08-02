@@ -99,10 +99,38 @@ impl ProtocolParams for PumpFunParams {
     }
 }
 
-/// PumpSwap协议特定参数
+/// PumpSwap Protocol Specific Parameters
+///
+/// Parameters for configuring PumpSwap trading protocol, including liquidity pool information,
+/// token configuration, and transaction amounts.
+///
+/// **Performance Note**: If these parameters are not provided, the system will attempt to
+/// retrieve the relevant information from RPC, which will increase transaction time.
+/// For optimal performance, it is recommended to provide all necessary parameters in advance.
 #[derive(Clone)]
 pub struct PumpSwapParams {
+    /// Liquidity pool address
+    /// If None, it will be queried via RPC, which adds latency
     pub pool: Option<Pubkey>,
+
+    /// Base token mint address
+    /// The mint account address of the base token in the trading pair
+    /// If None, it will be queried via RPC, which adds latency
+    pub base_mint: Option<Pubkey>,
+
+    /// Quote token mint address
+    /// The mint account address of the quote token in the trading pair, usually SOL or USDC
+    /// If None, it will be queried via RPC, which adds latency
+    pub quote_mint: Option<Pubkey>,
+
+    /// Base token reserves in the pool
+    pub pool_base_token_reserves: Option<u64>,
+
+    /// Quote token reserves in the pool
+    pub pool_quote_token_reserves: Option<u64>,
+
+    /// Automatically handle WSOL wrapping
+    /// When true, automatically handles wrapping and unwrapping operations between SOL and WSOL
     pub auto_handle_wsol: bool,
 }
 
@@ -110,6 +138,10 @@ impl PumpSwapParams {
     pub fn default() -> Self {
         Self {
             pool: None,
+            base_mint: None,
+            quote_mint: None,
+            pool_base_token_reserves: None,
+            pool_quote_token_reserves: None,
             auto_handle_wsol: true,
         }
     }

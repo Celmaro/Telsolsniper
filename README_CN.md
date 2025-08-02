@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.10" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.11" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.2.10"
+sol-trade-sdk = "0.2.11"
 ```
 
 ## 使用示例
@@ -368,40 +368,47 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
 ### 4. PumpSwap 交易操作
 
 ```rust
+use sol_trade_sdk::trading::core::params::PumpSwapParams;
+
 async fn test_pumpswap() -> AnyResult<()> {
     println!("Testing PumpSwap trading...");
 
-    let trade_client = test_create_solana_trade_client().await?;
-
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?; 
-    let creator = Pubkey::from_str("xxxxxx")?; 
-    let buy_sol_amount = 100_000; 
+    let client = test_create_solana_trade_client().await?;
+    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
+    let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
+    let buy_sol_cost = 100_000;
     let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
     let pool_address = Pubkey::from_str("xxxxxxx")?;
+    let base_mint = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
+    let quote_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
+    let pool_base_token_reserves = 0; // 输入正确的值
+    let pool_quote_token_reserves = 0; // 输入正确的值
 
+    // 买入代币
     println!("Buying tokens from PumpSwap...");
-    // buy
-    trade_client.buy(
+    client.buy(
         DexType::PumpSwap,
         mint_pubkey,
         Some(creator),
-        buy_sol_amount,
+        buy_sol_cost,
         slippage_basis_points,
         recent_blockhash,
         None,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
+            base_mint: Some(base_mint),
+            quote_mint: Some(quote_mint),
+            pool_base_token_reserves: Some(pool_base_token_reserves),
+            pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
-    )
-    .await?;
-    
-    // sell
-    println!("Selling tokens from PumpSwap...");
+    ).await?;
 
-    let amount_token = 100_000; 
-    trade_client.sell(
+    // 卖出代币
+    println!("Selling tokens from PumpSwap...");
+    let amount_token = 0;
+    client.sell(
         DexType::PumpSwap,
         mint_pubkey,
         Some(creator),
@@ -412,10 +419,13 @@ async fn test_pumpswap() -> AnyResult<()> {
         false,
         Some(Box::new(PumpSwapParams {
             pool: Some(pool_address),
+            base_mint: Some(base_mint),
+            quote_mint: Some(quote_mint),
+            pool_base_token_reserves: Some(pool_base_token_reserves),
+            pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
-    )
-    .await?;
+    ).await?;
 
     Ok(())
 }

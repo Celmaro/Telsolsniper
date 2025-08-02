@@ -14,8 +14,6 @@ pub async fn get_token_balance(
     payer: &Pubkey,
     mint: &Pubkey,
 ) -> Result<u64, anyhow::Error> {
-    println!("payer: {:?}", payer);
-    println!("mint: {:?}", mint);
     let ata = get_associated_token_address(payer, mint);
     let balance = rpc.get_token_account_balance(&ata).await?;
     let balance_u64 = balance
