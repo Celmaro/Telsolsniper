@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
+use solana_system_interface::instruction::transfer;
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 use spl_token::instruction::close_account;
 
@@ -19,7 +20,9 @@ use crate::{
         pumpswap::{
             self,
             common::{
-                coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata, find_pool, get_global_volume_accumulator_pda, get_token_amount, get_user_volume_accumulator_pda, get_wsol_amount
+                coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata, find_pool,
+                get_global_volume_accumulator_pda, get_token_amount,
+                get_user_volume_accumulator_pda, get_wsol_amount,
             },
         },
     },
@@ -273,7 +276,7 @@ impl PumpSwapInstructionBuilder {
             );
             instructions.push(
                 // Transfer SOL to wSOL ATA account
-                solana_sdk::system_instruction::transfer(
+                transfer(
                     &params.payer.pubkey(),
                     if quote_mint_is_wsol {
                         &user_quote_token_account
@@ -302,11 +305,7 @@ impl PumpSwapInstructionBuilder {
         instructions.push(create_associated_token_account_idempotent(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
-            if quote_mint_is_wsol {
-                &base_mint
-            } else {
-                &quote_mint
-            },
+            if quote_mint_is_wsol { &base_mint } else { &quote_mint },
             &accounts::TOKEN_PROGRAM,
         ));
 
@@ -362,11 +361,7 @@ impl PumpSwapInstructionBuilder {
             data.extend_from_slice(&token_amount.to_le_bytes());
         }
 
-        instructions.push(Instruction {
-            program_id: accounts::AMM_PROGRAM,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::AMM_PROGRAM, accounts, data });
         if auto_handle_wsol {
             // Close wSOL ATA account, reclaim rent
             instructions.push(
@@ -465,11 +460,7 @@ impl PumpSwapInstructionBuilder {
         instructions.push(create_associated_token_account_idempotent(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
-            if quote_mint_is_wsol {
-                &base_mint
-            } else {
-                &quote_mint
-            },
+            if quote_mint_is_wsol { &base_mint } else { &quote_mint },
             &accounts::TOKEN_PROGRAM,
         ));
 
@@ -521,11 +512,7 @@ impl PumpSwapInstructionBuilder {
             data.extend_from_slice(&token_amount.to_le_bytes());
         }
 
-        instructions.push(Instruction {
-            program_id: accounts::AMM_PROGRAM,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::AMM_PROGRAM, accounts, data });
 
         if auto_handle_wsol {
             instructions.push(

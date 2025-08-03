@@ -2,13 +2,13 @@ use solana_hash::Hash;
 use solana_sdk::{
     instruction::Instruction,
     message::{v0, VersionedMessage},
-    native_token::sol_to_lamports,
+    native_token::sol_str_to_lamports,
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
-    system_instruction,
     transaction::VersionedTransaction,
 };
+use solana_system_interface::instruction::transfer;
 use std::sync::Arc;
 
 use super::{
@@ -54,13 +54,7 @@ pub async fn build_rpc_transaction(
     let address_lookup_table_accounts = get_address_lookup_table_accounts(lookup_table_key).await;
 
     // 构建交易
-    build_versioned_transaction(
-        payer,
-        instructions,
-        address_lookup_table_accounts,
-        blockhash,
-    )
-    .await
+    build_versioned_transaction(payer, instructions, address_lookup_table_accounts, blockhash).await
 }
 
 /// 构建带小费的交易
@@ -88,10 +82,10 @@ pub async fn build_tip_transaction(
     instructions.extend(business_instructions);
 
     // 添加小费转账指令
-    instructions.push(system_instruction::transfer(
+    instructions.push(transfer(
         &payer.pubkey(),
         tip_account,
-        sol_to_lamports(tip_amount),
+        sol_str_to_lamports(tip_amount.to_string().as_str()).unwrap_or(0),
     ));
 
     // 获取交易使用的blockhash
@@ -101,13 +95,7 @@ pub async fn build_tip_transaction(
     let address_lookup_table_accounts = get_address_lookup_table_accounts(lookup_table_key).await;
 
     // 构建交易
-    build_versioned_transaction(
-        payer,
-        instructions,
-        address_lookup_table_accounts,
-        blockhash,
-    )
-    .await
+    build_versioned_transaction(payer, instructions, address_lookup_table_accounts, blockhash).await
 }
 
 /// 构建版本化交易的底层函数
@@ -200,10 +188,10 @@ pub async fn build_sell_tip_transaction(
     instructions.extend(business_instructions);
 
     // 添加小费转账指令
-    instructions.push(system_instruction::transfer(
+    instructions.push(transfer(
         &payer.pubkey(),
         tip_account,
-        sol_to_lamports(tip_amount),
+        sol_str_to_lamports(tip_amount.to_string().as_str()).unwrap_or(0),
     ));
 
     // 获取地址查找表账户

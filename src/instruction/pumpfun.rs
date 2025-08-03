@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, native_token::sol_to_lamports};
+use solana_sdk::{instruction::Instruction, native_token::sol_str_to_lamports};
 use spl_associated_token_account::{
     get_associated_token_address, instruction::create_associated_token_account,
 };
@@ -8,7 +8,7 @@ use spl_token::instruction::close_account;
 use crate::{
     constants,
     trading::pumpfun::common::{
-        get_bonding_curve_pda, get_global_pda, get_global_volume_accumulator_pda, get_metadata_pda, get_mint_authority_pda, get_user_volume_accumulator_pda
+        get_bonding_curve_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
     },
 };
 
@@ -57,7 +57,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let mut buy_token_amount =
             get_buy_token_amount_from_sol_amount(&bonding_curve, params.sol_amount);
         if buy_token_amount <= 100 * 1_000_000_u64 {
-            buy_token_amount = if max_sol_cost > sol_to_lamports(0.01) {
+            buy_token_amount = if max_sol_cost > sol_str_to_lamports("0.01").unwrap_or(0) {
                 25547619 * 1_000_000_u64
             } else {
                 255476 * 1_000_000_u64

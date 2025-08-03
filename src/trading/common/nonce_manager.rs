@@ -1,11 +1,7 @@
 use anyhow::anyhow;
-use solana_sdk::{
-    instruction::Instruction,
-    signature::Keypair,
-    signer::Signer,
-    system_instruction,
-};
 use solana_hash::Hash;
+use solana_sdk::{instruction::Instruction, signature::Keypair, signer::Signer};
+use solana_system_interface::instruction::advance_nonce_account;
 
 use crate::common::nonce_cache::NonceCache;
 
@@ -15,8 +11,8 @@ use crate::common::nonce_cache::NonceCache;
 /// 如果nonce被锁定、已使用或未准备好，将返回错误
 /// 成功时会锁定并标记nonce为已使用
 pub fn add_nonce_instruction(
-    instructions: &mut Vec<Instruction>, 
-    payer: &Keypair
+    instructions: &mut Vec<Instruction>,
+    payer: &Keypair,
 ) -> Result<(), anyhow::Error> {
     let nonce_cache = NonceCache::get_instance();
     let nonce_info = nonce_cache.get_nonce_info();
@@ -40,10 +36,7 @@ pub fn add_nonce_instruction(
         // nonce_cache.lock();
 
         // 创建Solana系统nonce推进指令 - 使用系统程序ID
-        let nonce_advance_ix = system_instruction::advance_nonce_account(
-            &nonce_pubkey,
-            &payer.pubkey(),
-        );
+        let nonce_advance_ix = advance_nonce_account(&nonce_pubkey, &payer.pubkey());
 
         instructions.push(nonce_advance_ix);
     }
@@ -69,4 +62,4 @@ pub fn is_using_nonce() -> bool {
     let nonce_cache = NonceCache::get_instance();
     let nonce_info = nonce_cache.get_nonce_info();
     nonce_info.nonce_account.is_some()
-} 
+}

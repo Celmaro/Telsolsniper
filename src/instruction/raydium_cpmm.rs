@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{instruction::Instruction, signer::Signer};
+use solana_system_interface::instruction::transfer;
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 use spl_token::instruction::close_account;
 
@@ -49,9 +50,8 @@ impl RaydiumCpmmInstructionBuilder {
         let pool_state = if protocol_params.pool_state.is_some() {
             protocol_params.pool_state.unwrap()
         } else {
-            let mint_token_in_pool_state_index = protocol_params
-                .mint_token_in_pool_state_index
-                .unwrap_or(1);
+            let mint_token_in_pool_state_index =
+                protocol_params.mint_token_in_pool_state_index.unwrap_or(1);
             get_pool_pda(
                 &accounts::AMM_CONFIG,
                 if mint_token_in_pool_state_index == 1 {
@@ -116,11 +116,7 @@ impl RaydiumCpmmInstructionBuilder {
             );
             instructions.push(
                 // 将SOL转入wSOL ATA账户
-                solana_sdk::system_instruction::transfer(
-                    &params.payer.pubkey(),
-                    &wsol_token_account,
-                    amount_in,
-                ),
+                transfer(&params.payer.pubkey(), &wsol_token_account, amount_in),
             );
 
             // 同步wSOL余额
@@ -135,9 +131,7 @@ impl RaydiumCpmmInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &protocol_params
-                .mint_token_program
-                .unwrap_or(accounts::TOKEN_PROGRAM),
+            &protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM),
         ));
 
         // 创建买入指令
@@ -152,9 +146,7 @@ impl RaydiumCpmmInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Output Vault Account
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Input Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params
-                    .mint_token_program
-                    .unwrap_or(accounts::TOKEN_PROGRAM),
+                protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM),
                 false,
             ), // Output Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Input token mint (readonly)
@@ -167,11 +159,7 @@ impl RaydiumCpmmInstructionBuilder {
         data.extend_from_slice(&amount_in.to_le_bytes());
         data.extend_from_slice(&minimum_amount_out.to_le_bytes());
 
-        instructions.push(Instruction {
-            program_id: accounts::RAYDIUM_CPMM,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::RAYDIUM_CPMM, accounts, data });
 
         if protocol_params.auto_handle_wsol {
             // 关闭wSOL ATA账户，回收租金
@@ -239,9 +227,8 @@ impl RaydiumCpmmInstructionBuilder {
         let pool_state = if protocol_params.pool_state.is_some() {
             protocol_params.pool_state.unwrap()
         } else {
-            let mint_token_in_pool_state_index = protocol_params
-                .mint_token_in_pool_state_index
-                .unwrap_or(1);
+            let mint_token_in_pool_state_index =
+                protocol_params.mint_token_in_pool_state_index.unwrap_or(1);
             get_pool_pda(
                 &accounts::AMM_CONFIG,
                 if mint_token_in_pool_state_index == 1 {
@@ -297,9 +284,7 @@ impl RaydiumCpmmInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Output Vault Account
             solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params
-                    .mint_token_program
-                    .unwrap_or(accounts::TOKEN_PROGRAM),
+                protocol_params.mint_token_program.unwrap_or(accounts::TOKEN_PROGRAM),
                 false,
             ), // Input Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Output Token Program (readonly)
@@ -313,11 +298,7 @@ impl RaydiumCpmmInstructionBuilder {
         data.extend_from_slice(&amount.to_le_bytes());
         data.extend_from_slice(&minimum_amount_out.to_le_bytes());
 
-        instructions.push(Instruction {
-            program_id: accounts::RAYDIUM_CPMM,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::RAYDIUM_CPMM, accounts, data });
 
         if protocol_params.auto_handle_wsol {
             instructions.push(

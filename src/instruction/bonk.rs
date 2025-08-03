@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{instruction::Instruction, signer::Signer};
+use solana_system_interface::instruction::transfer;
 use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
 use spl_token::instruction::close_account;
 
@@ -105,11 +106,7 @@ impl BonkInstructionBuilder {
             );
             instructions.push(
                 // 将SOL转入wSOL ATA账户
-                solana_sdk::system_instruction::transfer(
-                    &params.payer.pubkey(),
-                    &user_quote_token_account,
-                    amount_in,
-                ),
+                transfer(&params.payer.pubkey(), &user_quote_token_account, amount_in),
             );
 
             // 同步wSOL余额
@@ -155,11 +152,7 @@ impl BonkInstructionBuilder {
         data.extend_from_slice(&minimum_amount_out.to_le_bytes());
         data.extend_from_slice(&share_fee_rate.to_le_bytes());
 
-        instructions.push(Instruction {
-            program_id: accounts::BONK,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::BONK, accounts, data });
 
         if protocol_params.auto_handle_wsol {
             // 关闭wSOL ATA账户，回收租金
@@ -262,11 +255,7 @@ impl BonkInstructionBuilder {
         data.extend_from_slice(&minimum_amount_out.to_le_bytes());
         data.extend_from_slice(&share_fee_rate.to_le_bytes());
 
-        instructions.push(Instruction {
-            program_id: accounts::BONK,
-            accounts,
-            data,
-        });
+        instructions.push(Instruction { program_id: accounts::BONK, accounts, data });
 
         let protocol_params = params
             .protocol_params
