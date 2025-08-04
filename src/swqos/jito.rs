@@ -78,10 +78,11 @@ impl JitoClient {
             ]
         }))?;
 
-        let endpoint = format!("{}/api/v1/transactions", self.endpoint);
+        let endpoint = format!("{}/api/v1/transactions?uuid={}", self.endpoint, self.auth_token);
         let response_text = self.http_client.post(&endpoint)
             .body(request_body)
             .header("Content-Type", "application/json")
+            .header("x-jito-auth", &self.auth_token)
             .send()
             .await?
             .text()
@@ -119,10 +120,11 @@ impl JitoClient {
             "id": 1,
         });
 
-        let endpoint = format!("{}/api/v1/bundles", self.endpoint);
+        let endpoint = format!("{}/api/v1/bundles?uuid={}", self.endpoint, self.auth_token);
         let response_text = self.http_client.post(&endpoint)
             .body(body.to_string())
             .header("Content-Type", "application/json")
+            .header("x-jito-auth", &self.auth_token)
             .send()
             .await?
             .text()

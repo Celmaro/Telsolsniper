@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.12" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.13" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.2.12"
+sol-trade-sdk = "0.2.13"
 ```
 
 ## 使用示例
@@ -233,7 +233,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // 配置各种 SWQOS 服务
     let swqos_configs = vec![
-        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),

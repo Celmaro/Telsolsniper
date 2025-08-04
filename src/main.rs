@@ -55,7 +55,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
 fn create_swqos_configs(rpc_url: &str) -> Vec<SwqosConfig> {
     vec![
-        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt), 
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),

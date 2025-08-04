@@ -31,14 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.12" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.2.13" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.2.12"
+sol-trade-sdk = "0.2.13"
 ```
 
 ## Usage Examples
@@ -233,7 +233,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // Configure various SWQOS services
     let swqos_configs = vec![
-        SwqosConfig::Jito(SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
