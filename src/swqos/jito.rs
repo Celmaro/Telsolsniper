@@ -78,11 +78,20 @@ impl JitoClient {
             ]
         }))?;
 
-        let endpoint = format!("{}/api/v1/transactions?uuid={}", self.endpoint, self.auth_token);
-        let response_text = self.http_client.post(&endpoint)
+        let endpoint = if self.auth_token.is_empty() {
+            format!("{}/api/v1/transactions", self.endpoint)
+        } else {
+            format!("{}/api/v1/transactions?uuid={}", self.endpoint, self.auth_token)
+        };
+        let response = if self.auth_token.is_empty() {
+            self.http_client.post(&endpoint)
+        } else {
+            self.http_client.post(&endpoint)
+                .header("x-jito-auth", &self.auth_token)
+        };
+        let response_text = response
             .body(request_body)
             .header("Content-Type", "application/json")
-            .header("x-jito-auth", &self.auth_token)
             .send()
             .await?
             .text()
@@ -120,11 +129,20 @@ impl JitoClient {
             "id": 1,
         });
 
-        let endpoint = format!("{}/api/v1/bundles?uuid={}", self.endpoint, self.auth_token);
-        let response_text = self.http_client.post(&endpoint)
+        let endpoint = if self.auth_token.is_empty() {
+            format!("{}/api/v1/bundles", self.endpoint)
+        } else {
+            format!("{}/api/v1/bundles?uuid={}", self.endpoint, self.auth_token)
+        };
+        let response = if self.auth_token.is_empty() {
+            self.http_client.post(&endpoint)
+        } else {
+            self.http_client.post(&endpoint)
+                .header("x-jito-auth", &self.auth_token)
+        };
+        let response_text = response
             .body(body.to_string())
             .header("Content-Type", "application/json")
-            .header("x-jito-auth", &self.auth_token)
             .send()
             .await?
             .text()
