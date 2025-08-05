@@ -21,7 +21,7 @@ use crate::protos::{
 
 /// Converts a Solana packet to a protobuf packet
 /// NOTE: the packet.data() function will filter packets marked for discard
-pub fn packet_to_proto_packet(p: &Packet) -> Option<ProtoPacket> {
+pub fn packet_to_proto_packet(p: &solana_perf::packet::PacketRef<'_>) -> Option<ProtoPacket> {
     Some(ProtoPacket {
         data: p.data(..)?.to_vec(),
         meta: Some(ProtoMeta {
@@ -46,8 +46,8 @@ pub fn packet_batches_to_proto_packets(
 ) -> impl Iterator<Item = ProtoPacket> + '_ {
     batches
         .iter()
-        .flat_map(|b| b.iter().filter_map(packet_to_proto_packet))
-}
+        .flat_map(|b| b.iter().filter_map(|p| packet_to_proto_packet(&p)))
+    }
 
 /// converts from a protobuf packet to packet
 pub fn proto_packet_to_packet(p: &ProtoPacket) -> Packet {
