@@ -2,7 +2,7 @@ use solana_hash::Hash;
 use solana_sdk::{
     instruction::Instruction,
     message::{v0, VersionedMessage},
-    native_token::sol_str_to_lamports,
+    native_token::sol_to_lamports,
     pubkey::Pubkey,
     signature::Keypair,
     signer::Signer,
@@ -85,7 +85,7 @@ pub async fn build_tip_transaction(
     instructions.push(transfer(
         &payer.pubkey(),
         tip_account,
-        sol_str_to_lamports(tip_amount.to_string().as_str()).unwrap_or(0),
+        sol_to_lamports(tip_amount),
     ));
 
     // 获取交易使用的blockhash
@@ -191,7 +191,7 @@ pub async fn build_sell_tip_transaction(
     instructions.push(transfer(
         &payer.pubkey(),
         tip_account,
-        sol_str_to_lamports(tip_amount.to_string().as_str()).unwrap_or(0),
+        sol_to_lamports(tip_amount),
     ));
 
     // 获取地址查找表账户
