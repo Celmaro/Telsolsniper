@@ -215,6 +215,16 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 
 ### 2. 初始化 SolanaTrade 实例
 
+#### 2.1 SWQOS 服务配置说明
+
+在配置 SWQOS 服务时，需要注意不同服务的参数要求：
+
+- **Jito**: 第一个参数是 UUID，如果没有 UUID 则传空字符串 `""`
+- **NextBlock**: 第一个参数是 API Token
+- **Bloxroute**: 第一个参数是 API Token  
+- **ZeroSlot**: 第一个参数是 API Token
+- **Temporal**: 第一个参数是 API Token
+
 ```rust
 use std::{str::FromStr, sync::Arc};
 use sol_trade_sdk::{
@@ -233,7 +243,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // 配置各种 SWQOS 服务
     let swqos_configs = vec![
-        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), // 第一个参数是 uuid，如果没有 uuid 则传空字符串
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
