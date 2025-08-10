@@ -215,6 +215,16 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 
 ### 2. Initialize SolanaTrade Instance
 
+#### 2.1 SWQOS Service Configuration
+
+When configuring SWQOS services, note the different parameter requirements for each service:
+
+- **Jito**: The first parameter is UUID, if you don't have a UUID, pass an empty string `""`
+- **NextBlock**: The first parameter is API Token
+- **Bloxroute**: The first parameter is API Token  
+- **ZeroSlot**: The first parameter is API Token
+- **Temporal**: The first parameter is API Token
+
 ```rust
 use std::{str::FromStr, sync::Arc};
 use sol_trade_sdk::{
@@ -233,7 +243,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // Configure various SWQOS services
     let swqos_configs = vec![
-        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), // First parameter is UUID, pass empty string if no UUID
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
