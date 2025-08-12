@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey
 };
-use pumpfun_program::accounts::BondingCurveAccount as PumpfunBondingCurveAccount;
+use crate::trading::pumpfun::bonding_curve::PumpfunBondingCurveAccount;
 use crate::{
     common::{
         bonding_curve::BondingCurveAccount, global::GlobalAccount, PriorityFee, SolanaRpcClient
