@@ -24,7 +24,7 @@ use sol_trade_sdk::solana_streamer_sdk::{
     },
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
-use solana_streamer_sdk::streaming::event_parser::protocols::{bonk::parser::BONK_PROGRAM_ID, pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID};
+use solana_streamer_sdk::streaming::{event_parser::protocols::{bonk::parser::BONK_PROGRAM_ID, pumpfun::parser::PUMPFUN_PROGRAM_ID, pumpswap::parser::PUMPSWAP_PROGRAM_ID, raydium_amm_v4::parser::RAYDIUM_AMM_V4_PROGRAM_ID, raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID}, yellowstone_grpc::{AccountFilter, TransactionFilter}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -431,18 +431,28 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
         BONK_PROGRAM_ID.to_string(),         // Listen to bonk program ID
         RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Listen to raydium_cpmm program ID
         RAYDIUM_CLMM_PROGRAM_ID.to_string(), // Listen to raydium_clmm program ID
+        RAYDIUM_AMM_V4_PROGRAM_ID.to_string(), // Listen to raydium_amm_v4 program ID
         "xxxxxxxx".to_string(),              // Listen to xxxxx account
     ];
     let account_exclude = vec![];
     let account_required = vec![];
 
-    println!("开始监听事件，按 Ctrl+C 停止...");
-    grpc.subscribe_events_v2(
-        protocols,
-        None,
-        account_include,
+     // 监听交易数据
+     let transaction_filter = TransactionFilter {
+        account_include: account_include.clone(),
         account_exclude,
         account_required,
+    };
+
+    // 监听属于owner程序的账号数据 -> 账号事件监听
+    let account_filter = AccountFilter { account: vec![], owner: account_include.clone() };
+
+    println!("开始监听事件，按 Ctrl+C 停止...");
+    grpc.subscribe_events_immediate(
+        protocols,
+        None,
+        transaction_filter,
+        account_filter,
         None,
         callback,
     )
@@ -497,6 +507,8 @@ fn create_event_callback() -> impl Fn(Box<dyn UnifiedEvent>) {
             RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
                 println!("RaydiumCpmmSwapEvent: {:?}", e);
             },
+            // ..... 
+            // 更多的事件和说明请参考 https://github.com/0xfnzero/solana-streamer
         });
     }
 }

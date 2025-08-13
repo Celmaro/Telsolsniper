@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.4" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.3.3"
+sol-trade-sdk = "0.3.4"
 ```
 
 ## 使用示例
@@ -74,9 +74,19 @@ use sol_trade_sdk::solana_streamer_sdk::{
             },
             Protocol, UnifiedEvent,
         },
+        yellowstone_grpc::{AccountFilter, TransactionFilter},
         YellowstoneGrpc,
     },
     match_event,
+};
+
+use solana_streamer_sdk::streaming::event_parser::protocols::{
+    bonk::parser::BONK_PROGRAM_ID, 
+    pumpfun::parser::PUMPFUN_PROGRAM_ID, 
+    pumpswap::parser::PUMPSWAP_PROGRAM_ID, 
+    raydium_amm_v4::parser::RAYDIUM_AMM_V4_PROGRAM_ID, 
+    raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, 
+    raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID
 };
 
 async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
@@ -121,6 +131,8 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
             RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
                 println!("Raydium CPMM Swap event: {:?}", e);
             },
+            // ..... 
+            // 更多的事件和说明请参考 https://github.com/0xfnzero/solana-streamer
         });
     };
 
@@ -128,24 +140,37 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
     println!("开始监听事件，按 Ctrl+C 停止...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     
-    // Filter accounts
+    // 过滤账户
     let account_include = vec![
-        PUMPFUN_PROGRAM_ID.to_string(),      // Listen to pumpfun program ID
-        PUMPSWAP_PROGRAM_ID.to_string(),     // Listen to pumpswap program ID
-        BONK_PROGRAM_ID.to_string(),         // Listen to bonk program ID
-        RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Listen to raydium_cpmm program ID
-        RAYDIUM_CLMM_PROGRAM_ID.to_string(), // Listen to raydium_clmm program ID
-        "xxxxxxxx".to_string(),              // Listen to xxxxx account
+        PUMPFUN_PROGRAM_ID.to_string(),      // 监听 pumpfun 程序 ID
+        PUMPSWAP_PROGRAM_ID.to_string(),     // 监听 pumpswap 程序 ID
+        BONK_PROGRAM_ID.to_string(),         // 监听 bonk 程序 ID
+        RAYDIUM_CPMM_PROGRAM_ID.to_string(), // 监听 raydium_cpmm 程序 ID
+        RAYDIUM_CLMM_PROGRAM_ID.to_string(), // 监听 raydium_clmm 程序 ID
+        RAYDIUM_AMM_V4_PROGRAM_ID.to_string(), // 监听 raydium_amm_v4 程序 ID
+        "xxxxxxxx".to_string(),              // 监听特定账户
     ];
     let account_exclude = vec![];
     let account_required = vec![];
 
-    grpc.subscribe_events_v2(
-        protocols,
-        None,
-        account_include,
+    // 监听交易数据
+    let transaction_filter = TransactionFilter {
+        account_include: account_include.clone(),
         account_exclude,
         account_required,
+    };
+
+    // 监听属于owner程序的账号数据 -> 账号事件监听
+    let account_filter = AccountFilter { 
+        account: vec![], 
+        owner: account_include.clone() 
+    };
+
+    grpc.subscribe_events_immediate(
+        protocols,
+        None,
+        transaction_filter,
+        account_filter,
         None,
         callback,
     )
@@ -199,6 +224,8 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
             RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
                 println!("Raydium CPMM Swap event: {:?}", e);
             },
+            // ..... 
+            // 更多的事件和说明请参考 https://github.com/0xfnzero/solana-streamer
         });
     };
 

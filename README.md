@@ -31,14 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.4" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.3.3"
+sol-trade-sdk = "0.3.4"
 ```
 
 ## Usage Examples
@@ -74,9 +74,19 @@ use sol_trade_sdk::solana_streamer_sdk::{
             },
             Protocol, UnifiedEvent,
         },
+        yellowstone_grpc::{AccountFilter, TransactionFilter},
         YellowstoneGrpc,
     },
     match_event,
+};
+
+use solana_streamer_sdk::streaming::event_parser::protocols::{
+    bonk::parser::BONK_PROGRAM_ID, 
+    pumpfun::parser::PUMPFUN_PROGRAM_ID, 
+    pumpswap::parser::PUMPSWAP_PROGRAM_ID, 
+    raydium_amm_v4::parser::RAYDIUM_AMM_V4_PROGRAM_ID, 
+    raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, 
+    raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID
 };
 
 async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
@@ -121,6 +131,8 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
             RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
                 println!("Raydium CPMM Swap event: {:?}", e);
             },
+            // ..... 
+            // For more events and documentation, please refer to https://github.com/0xfnzero/solana-streamer
         });
     };
 
@@ -135,17 +147,30 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
         BONK_PROGRAM_ID.to_string(),         // Listen to bonk program ID
         RAYDIUM_CPMM_PROGRAM_ID.to_string(), // Listen to raydium_cpmm program ID
         RAYDIUM_CLMM_PROGRAM_ID.to_string(), // Listen to raydium_clmm program ID
+        RAYDIUM_AMM_V4_PROGRAM_ID.to_string(), // Listen to raydium_amm_v4 program ID
         "xxxxxxxx".to_string(),              // Listen to xxxxx account
     ];
     let account_exclude = vec![];
     let account_required = vec![];
 
-    grpc.subscribe_events_v2(
-        protocols,
-        None,
-        account_include,
+    // Transaction filter for monitoring transaction data
+    let transaction_filter = TransactionFilter {
+        account_include: account_include.clone(),
         account_exclude,
         account_required,
+    };
+
+    // Account filter for monitoring account data owned by programs
+    let account_filter = AccountFilter { 
+        account: vec![], 
+        owner: account_include.clone() 
+    };
+
+    grpc.subscribe_events_immediate(
+        protocols,
+        None,
+        transaction_filter,
+        account_filter,
         None,
         callback,
     )
@@ -199,6 +224,8 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
             RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
                 println!("Raydium CPMM Swap event: {:?}", e);
             },
+            // ..... 
+            // For more events and documentation, please refer to https://github.com/0xfnzero/solana-streamer
         });
     };
 
