@@ -98,6 +98,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     ).await?;
 
     // Sell tokens  
@@ -112,6 +113,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -152,6 +154,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     ).await?;
 
     // Sell tokens
@@ -166,6 +169,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -205,6 +209,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     // Sell tokens
@@ -227,6 +232,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     Ok(())
@@ -254,6 +260,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_trade(trade_info))),
+        None,
     ).await?;
 
     // Sell tokens
@@ -268,6 +275,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -298,6 +306,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+        None,
     ).await?;
 
     // Sell tokens
@@ -312,6 +321,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -339,6 +349,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         None,
+        None,
     ).await?;
 
     // Sell tokens
@@ -353,6 +364,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -387,6 +399,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(buy_amount_out), // 如果不传、默认为0
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     // Sell tokens
@@ -409,6 +422,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(sell_sol_amount), // 如果不传、默认为0
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     Ok(())

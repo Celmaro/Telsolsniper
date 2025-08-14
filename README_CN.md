@@ -55,6 +55,20 @@ sol-trade-sdk = "0.3.4"
   - 卖出时：自动将获得的 wSOL 解包装为 SOL
   - 默认值为 `true`
 
+#### lookup_table_key 参数
+
+`lookup_table_key` 参数是一个可选的 `Pubkey`，用于指定地址查找表以优化交易：
+
+- **用途**：地址查找表可以通过存储常用地址来减少交易大小并提高执行速度
+- **使用方法**：
+  - 可以在 `TradeConfig` 中全局设置，用于所有交易
+  - 可以在 `buy()` 和 `sell()` 方法中按交易覆盖
+  - 如果不提供，默认为 `None`
+- **优势**：
+  - 通过从查找表引用地址来减少交易大小
+  - 提高交易成功率和速度
+  - 特别适用于具有许多账户引用的复杂交易
+
 ### 1. 事件订阅 - 监听代币交易
 
 #### 1.1 使用 Yellowstone gRPC 订阅事件
@@ -344,6 +358,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     )
     .await?;
 
@@ -379,6 +394,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     )
     .await?;
 
@@ -395,6 +411,8 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
         amount_token,
         slippage_basis_points,
         recent_blockhash,
+        None,
+        false,
         None,
         None,
     )
@@ -440,6 +458,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     // 卖出代币
@@ -462,6 +481,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     Ok(())
@@ -511,6 +531,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(buy_amount_out), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),
+        None,
     ).await?;
 
     println!("Selling tokens from Raydium CPMM...");
@@ -533,6 +554,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(sell_sol_amount), // 如果不传，默认为0
             auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
         })),
+        None,
     ).await?;
 
     Ok(())
@@ -569,6 +591,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+        None,
     ).await?;
 
     println!("Selling tokens from letsbonk.fun...");
@@ -582,6 +605,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -610,6 +634,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_trade(trade_info))),
+        None,
     ).await?;
 
     println!("Selling tokens from letsbonk.fun...");
@@ -623,6 +648,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -651,6 +677,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         None,
+        None,
     )
     .await?;
     
@@ -666,6 +693,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
+        None,
         None,
     )
     .await?;
