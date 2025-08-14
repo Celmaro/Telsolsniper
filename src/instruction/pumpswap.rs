@@ -20,9 +20,7 @@ use crate::{
         pumpswap::{
             self,
             common::{
-                coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata, find_pool,
-                get_global_volume_accumulator_pda, get_token_amount,
-                get_user_volume_accumulator_pda, get_wsol_amount,
+                coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata, fetch_pool, find_pool, get_global_volume_accumulator_pda, get_token_amount, get_user_volume_accumulator_pda, get_wsol_amount
             },
         },
     },
@@ -138,7 +136,7 @@ impl PumpSwapInstructionBuilder {
         let rpc = params.rpc.as_ref().unwrap().clone();
         // Find pool
         let pool = find_pool(rpc.as_ref(), &params.mint).await?;
-        let pool_data = pumpswap::pool::Pool::fetch(rpc.as_ref(), &pool).await?;
+        let pool_data = fetch_pool(rpc.as_ref(), &pool).await?;
         let pool_base_token_reserves =
             get_token_balance(rpc.as_ref(), &pool, &pool_data.base_mint).await?;
         let pool_quote_token_reserves =
@@ -169,7 +167,7 @@ impl PumpSwapInstructionBuilder {
         let rpc = params.rpc.as_ref().unwrap().clone();
         // Find pool
         let pool = find_pool(rpc.as_ref(), &params.mint).await?;
-        let pool_data = pumpswap::pool::Pool::fetch(rpc.as_ref(), &pool).await?;
+        let pool_data = fetch_pool(rpc.as_ref(), &pool).await?;
         let pool_base_token_reserves =
             get_token_balance(rpc.as_ref(), &pool, &pool_data.base_mint).await?;
         let pool_quote_token_reserves =

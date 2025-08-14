@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.4" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.5" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.3.4"
+sol-trade-sdk = "0.3.5"
 ```
 
 ## 使用示例
@@ -735,6 +735,10 @@ let trade_config = TradeConfig {
 - **协议抽象**: 支持多个协议的交易操作
 - **并发执行**: 支持同时向多个 MEV 服务发送交易
 
+## 价格计算工具
+
+SDK 包含所有支持协议的价格计算工具，位于 `src/utils/price/` 目录。
+
 ## 项目结构
 
 ```
@@ -751,6 +755,15 @@ src/
 │   ├── pumpswap/     # PumpSwap交易实现
 │   ├── raydium_cpmm/ # Raydium CPMM交易实现
 │   └── factory.rs    # 交易工厂
+├── utils/            # 工具函数
+│   └── price/        # 价格计算工具
+│       ├── common.rs       # 通用价格函数
+│       ├── bonk.rs         # Bonk 价格计算
+│       ├── pumpfun.rs      # PumpFun 价格计算
+│       ├── pumpswap.rs     # PumpSwap 价格计算
+│       ├── raydium_cpmm.rs # Raydium CPMM 价格计算
+│       ├── raydium_clmm.rs # Raydium CLMM 价格计算
+│       └── raydium_amm_v4.rs # Raydium AMM V4 价格计算
 ├── lib.rs            # 主库文件
 └── main.rs           # 示例程序
 ```

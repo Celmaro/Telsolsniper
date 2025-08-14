@@ -4,7 +4,6 @@ use std::{collections::HashMap, sync::Arc};
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey
 };
-use crate::trading::pumpfun::bonding_curve::PumpfunBondingCurveAccount;
 use crate::{
     common::{
         bonding_curve::BondingCurveAccount, global::GlobalAccount, PriorityFee, SolanaRpcClient
@@ -122,11 +121,11 @@ pub async fn get_bonding_curve_account(
 }
 
 #[inline]
-pub async fn get_bonding_curve_account_v2(
+pub async fn fetch_bonding_curve_account(
     rpc: &SolanaRpcClient,
     mint: &Pubkey,
-) -> Result<(Arc<PumpfunBondingCurveAccount>, Pubkey), anyhow::Error> {
-    let bonding_curve_pda = get_bonding_curve_pda(mint)
+) -> Result<(Arc<crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::types::BondingCurve>, Pubkey), anyhow::Error> {
+    let bonding_curve_pda: Pubkey = get_bonding_curve_pda(mint)
         .ok_or(anyhow!("Bonding curve not found"))?;
 
     let account = rpc.get_account(&bonding_curve_pda).await?;
@@ -134,7 +133,7 @@ pub async fn get_bonding_curve_account_v2(
         return Err(anyhow!("Bonding curve not found"));
     }
 
-    let bonding_curve = solana_sdk::borsh1::try_from_slice_unchecked::<PumpfunBondingCurveAccount>(&account.data)
+    let bonding_curve = solana_sdk::borsh1::try_from_slice_unchecked::<crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::types::BondingCurve>(&account.data[8..])
         .map_err(|e| anyhow::anyhow!("Failed to deserialize bonding curve account: {}", e))?;
 
     Ok((Arc::new(bonding_curve), bonding_curve_pda))
@@ -213,13 +212,6 @@ pub async fn init_bonding_curve_account(
 pub fn get_buy_amount_with_slippage(amount_sol: u64, slippage_basis_points: Option<u64>) -> u64 {
     let slippage = slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE);
     amount_sol + (amount_sol * slippage / 10000)
-}
-
-#[inline]
-pub fn get_token_price(virtual_sol_reserves: u64, virtual_token_reserves: u64) -> f64 {
-    let v_sol = virtual_sol_reserves as f64 / 100_000_000.0;
-    let v_tokens = virtual_token_reserves as f64 / 100_000.0;
-    v_sol / v_tokens
 }
 
 #[inline]

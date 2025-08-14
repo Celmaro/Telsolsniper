@@ -1,10 +1,28 @@
 use crate::{
     common::SolanaRpcClient,
-    constants::{self, raydium_cpmm::accounts::WSOL_TOKEN_ACCOUNT},
-    trading::raydium_cpmm::pool::Pool,
+    constants::{
+        self,
+        raydium_cpmm::accounts::{self, WSOL_TOKEN_ACCOUNT},
+    },
 };
 use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
+use solana_streamer_sdk::streaming::event_parser::protocols::raydium_cpmm::types::{
+    pool_state_decode, PoolState,
+};
+
+pub async fn fetch_pool_state(
+    rpc: &SolanaRpcClient,
+    pool_address: &Pubkey,
+) -> Result<PoolState, anyhow::Error> {
+    let account = rpc.get_account(pool_address).await?;
+    if account.owner != accounts::RAYDIUM_CPMM {
+        return Err(anyhow!("Account is not owned by Raydium Cpmm program"));
+    }
+    let pool_state = pool_state_decode(&account.data[8..])
+        .ok_or_else(|| anyhow!("Failed to decode pool state"))?;
+    Ok(pool_state)
+}
 
 pub fn get_pool_pda(amm_config: &Pubkey, mint1: &Pubkey, mint2: &Pubkey) -> Option<Pubkey> {
     let seeds: &[&[u8]; 4] = &[
@@ -19,21 +37,16 @@ pub fn get_pool_pda(amm_config: &Pubkey, mint1: &Pubkey, mint2: &Pubkey) -> Opti
 }
 
 pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] = &[
-        constants::raydium_cpmm::seeds::POOL_VAULT_SEED,
-        pool_state.as_ref(),
-        mint.as_ref(),
-    ];
+    let seeds: &[&[u8]; 3] =
+        &[constants::raydium_cpmm::seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
     let program_id: &Pubkey = &constants::raydium_cpmm::accounts::RAYDIUM_CPMM;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_observation_state_pda(pool_state: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[
-        constants::raydium_cpmm::seeds::OBSERVATION_STATE_SEED,
-        pool_state.as_ref(),
-    ];
+    let seeds: &[&[u8]; 2] =
+        &[constants::raydium_cpmm::seeds::OBSERVATION_STATE_SEED, pool_state.as_ref()];
     let program_id: &Pubkey = &constants::raydium_cpmm::accounts::RAYDIUM_CPMM;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
@@ -44,12 +57,8 @@ pub async fn get_buy_token_amount(
     pool_state: &Pubkey,
     sol_amount: u64,
 ) -> Result<u64, anyhow::Error> {
-    let pool = Pool::fetch(rpc, pool_state).await?;
-    let is_token0_input = if pool.token0_mint == WSOL_TOKEN_ACCOUNT {
-        true
-    } else {
-        false
-    };
+    let pool = fetch_pool_state(rpc, pool_state).await?;
+    let is_token0_input = if pool.token0_mint == WSOL_TOKEN_ACCOUNT { true } else { false };
     let (token0_balance, token1_balance) =
         get_pool_token_balances(rpc, pool_state, &pool.token0_mint, &pool.token1_mint).await?;
 
@@ -93,12 +102,8 @@ pub async fn get_sell_sol_amount(
     pool_state: &Pubkey,
     token_amount: u64,
 ) -> Result<u64, anyhow::Error> {
-    let pool = Pool::fetch(rpc, pool_state).await?;
-    let is_token0_sol = if pool.token0_mint == WSOL_TOKEN_ACCOUNT {
-        true
-    } else {
-        false
-    };
+    let pool = fetch_pool_state(rpc, pool_state).await?;
+    let is_token0_sol = if pool.token0_mint == WSOL_TOKEN_ACCOUNT { true } else { false };
     let (token0_balance, token1_balance) =
         get_pool_token_balances(rpc, pool_state, &pool.token0_mint, &pool.token1_mint).await?;
 
@@ -151,15 +156,11 @@ pub async fn get_pool_token_balances(
     let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
 
     // 解析余额字符串为 u64
-    let token0_amount = token0_balance
-        .amount
-        .parse::<u64>()
-        .map_err(|e| anyhow!("解析 token0 余额失败: {}", e))?;
+    let token0_amount =
+        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("解析 token0 余额失败: {}", e))?;
 
-    let token1_amount = token1_balance
-        .amount
-        .parse::<u64>()
-        .map_err(|e| anyhow!("解析 token1 余额失败: {}", e))?;
+    let token1_amount =
+        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("解析 token1 余额失败: {}", e))?;
 
     Ok((token0_amount, token1_amount))
 }

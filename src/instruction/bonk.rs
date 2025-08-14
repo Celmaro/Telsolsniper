@@ -5,16 +5,17 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::bonk::{accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR},
-    constants::trade::trade::DEFAULT_SLIPPAGE,
-    trading::bonk::{
-        common::{get_amount_out, get_pool_pda, get_vault_pda},
-        pool::Pool,
+    constants::{
+        bonk::{accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR},
+        trade::trade::DEFAULT_SLIPPAGE,
     },
-    trading::common::utils::get_token_balance,
-    trading::core::{
-        params::{BonkParams, BuyParams, SellParams},
-        traits::InstructionBuilder,
+    trading::{
+        bonk::common::{fetch_pool_state, get_amount_out, get_pool_pda, get_vault_pda},
+        common::utils::get_token_balance,
+        core::{
+            params::{BonkParams, BuyParams, SellParams},
+            traits::InstructionBuilder,
+        },
     },
 };
 
@@ -70,7 +71,7 @@ impl BonkInstructionBuilder {
         let mut real_quote = protocol_params.real_quote.unwrap_or(0);
 
         if virtual_base == 0 || virtual_quote == 0 || real_base == 0 || real_quote == 0 {
-            let pool = Pool::fetch(params.rpc.as_ref().unwrap(), &pool_state).await?;
+            let pool = fetch_pool_state(params.rpc.as_ref().unwrap(), &pool_state).await?;
             virtual_base = pool.virtual_base as u128;
             virtual_quote = pool.virtual_quote as u128;
             real_base = pool.real_base as u128;

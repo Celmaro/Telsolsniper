@@ -1,5 +1,25 @@
-use crate::constants;
+use crate::{
+    common::SolanaRpcClient,
+    constants::{self, bonk::accounts},
+};
+use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
+use solana_streamer_sdk::streaming::event_parser::protocols::bonk::{
+    pool_state_decode, types::PoolState,
+};
+
+pub async fn fetch_pool_state(
+    rpc: &SolanaRpcClient,
+    pool_address: &Pubkey,
+) -> Result<PoolState, anyhow::Error> {
+    let account = rpc.get_account(pool_address).await?;
+    if account.owner != accounts::BONK {
+        return Err(anyhow!("Account is not owned by Bonk program"));
+    }
+    let pool_state = pool_state_decode(&account.data[8..])
+        .ok_or_else(|| anyhow!("Failed to decode pool state"))?;
+    Ok(pool_state)
+}
 
 pub fn get_amount_in_net(
     amount_in: u64,
@@ -41,9 +61,7 @@ pub fn get_amount_in(
 
     // 根据 AMM 公式反推: amount_in_net = (amount_out * input_reserve) / (output_reserve - amount_out)
     let numerator = amount_out_with_slippage.checked_mul(input_reserve).unwrap();
-    let denominator = output_reserve
-        .checked_sub(amount_out_with_slippage)
-        .unwrap();
+    let denominator = output_reserve.checked_sub(amount_out_with_slippage).unwrap();
     let amount_in_net = numerator.checked_div(denominator).unwrap();
 
     // 计算总费用率
@@ -87,51 +105,19 @@ pub fn get_amount_out(
 }
 
 pub fn get_pool_pda(base_mint: &Pubkey, quote_mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] = &[
-        constants::bonk::seeds::POOL_SEED,
-        base_mint.as_ref(),
-        quote_mint.as_ref(),
-    ];
+    let seeds: &[&[u8]; 3] =
+        &[constants::bonk::seeds::POOL_SEED, base_mint.as_ref(), quote_mint.as_ref()];
     let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] = &[
-        constants::bonk::seeds::POOL_VAULT_SEED,
-        pool_state.as_ref(),
-        mint.as_ref(),
-    ];
+    let seeds: &[&[u8]; 3] =
+        &[constants::bonk::seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
     let program_id: &Pubkey = &constants::bonk::accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
-}
-
-pub fn get_token_price(
-    virtual_base: u128,
-    virtual_quote: u128,
-    real_base: u128,
-    real_quote: u128,
-    decimal_base: u64,
-    decimal_quote: u64,
-) -> f64 {
-    // 计算小数位数差异
-    let decimal_diff = decimal_quote as i32 - decimal_base as i32;
-    let decimal_factor = if decimal_diff >= 0 {
-        10_f64.powi(decimal_diff)
-    } else {
-        1.0 / 10_f64.powi(-decimal_diff)
-    };
-
-    // 计算价格前的状态
-    let quote_reserves = virtual_quote.checked_add(real_quote).unwrap();
-    let base_reserves = virtual_base.checked_sub(real_base).unwrap();
-
-    // 使用浮点数计算价格，避免整数除法的精度丢失
-    let price = (quote_reserves as f64) / (base_reserves as f64) / decimal_factor;
-
-    price
 }
 
 #[cfg(test)]

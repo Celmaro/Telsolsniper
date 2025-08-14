@@ -4,6 +4,7 @@ pub mod pumpswap;
 pub mod swqos;
 pub mod trade;
 pub mod raydium_cpmm;
+pub mod decimals;
 
 pub mod trade_platform {
     pub const PUMPFUN: &'static str = "pumpfun";

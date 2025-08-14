@@ -31,14 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.4" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.5" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.3.4"
+sol-trade-sdk = "0.3.5"
 ```
 
 ## Usage Examples
@@ -737,6 +737,10 @@ let trade_config = TradeConfig {
 - **Protocol Abstraction**: Supports trading operations across multiple protocols
 - **Concurrent Execution**: Supports sending transactions to multiple MEV services simultaneously
 
+## Price Calculation Utilities
+
+The SDK includes price calculation utilities for all supported protocols in `src/utils/price/`.
+
 ## Project Structure
 
 ```
@@ -753,6 +757,15 @@ src/
 │   ├── pumpswap/     # PumpSwap trading implementation
 │   ├── raydium_cpmm/ # Raydium CPMM trading implementation
 │   └── factory.rs    # Trading factory
+├── utils/            # Utility functions
+│   └── price/        # Price calculation utilities
+│       ├── common.rs       # Common price functions
+│       ├── bonk.rs         # Bonk price calculations
+│       ├── pumpfun.rs      # PumpFun price calculations
+│       ├── pumpswap.rs     # PumpSwap price calculations
+│       ├── raydium_cpmm.rs # Raydium CPMM price calculations
+│       ├── raydium_clmm.rs # Raydium CLMM price calculations
+│       └── raydium_amm_v4.rs # Raydium AMM V4 price calculations
 ├── lib.rs            # Main library file
 └── main.rs           # Example program
 ```
