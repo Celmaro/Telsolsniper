@@ -55,6 +55,20 @@ In PumpSwap, Bonk, and Raydium CPMM trading, the `auto_handle_wsol` parameter is
   - When selling: automatically unwraps the received wSOL to SOL
   - Default value is `true`
 
+#### lookup_table_key Parameter
+
+The `lookup_table_key` parameter is an optional `Pubkey` that specifies an address lookup table for transaction optimization:
+
+- **Purpose**: Address lookup tables can reduce transaction size and improve execution speed by storing frequently used addresses
+- **Usage**: 
+  - Can be set globally in `TradeConfig` for all transactions
+  - Can be overridden per transaction in `buy()` and `sell()` methods
+  - If not provided, defaults to `None`
+- **Benefits**:
+  - Reduces transaction size by referencing addresses from lookup tables
+  - Improves transaction success rate and speed
+  - Particularly useful for complex transactions with many account references
+
 ### 1. Event Subscription - Monitor Token Trading
 
 #### 1.1 Subscribe to Events Using Yellowstone gRPC
@@ -344,6 +358,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     )
     .await?;
 
@@ -380,6 +395,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         Some(Box::new(PumpFunParams {
             bonding_curve: Some(Arc::new(bonding_curve.clone())),
         })),
+        None,
     )
     .await?;
 
@@ -398,6 +414,7 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
         recent_blockhash,
         None,
         false,
+        None,
         None,
     )
     .await?;
@@ -442,6 +459,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     // Sell tokens
@@ -464,6 +482,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             pool_quote_token_reserves: Some(pool_quote_token_reserves),
             auto_handle_wsol: true,
         })),
+        None,
     ).await?;
 
     Ok(())
@@ -513,6 +532,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(buy_amount_out), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),
+        None,
     ).await?;
 
     println!("Selling tokens from Raydium CPMM...");
@@ -535,6 +555,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             minimum_amount_out: Some(sell_sol_amount), // If not provided, defaults to 0
             auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
         })),
+        None,
     ).await?;
 
     Ok(())
@@ -571,6 +592,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+        None,
     ).await?;
 
     println!("Selling tokens from letsbonk.fun...");
@@ -584,6 +606,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -612,6 +635,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         Some(Box::new(BonkParams::from_trade(trade_info))),
+        None,
     ).await?;
 
     println!("Selling tokens from letsbonk.fun...");
@@ -625,6 +649,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         false,
+        None,
         None,
     ).await?;
 
@@ -653,6 +678,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         None,
+        None,
     )
     .await?;
     
@@ -668,6 +694,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
+        None,
         None,
     )
     .await?;

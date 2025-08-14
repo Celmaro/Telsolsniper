@@ -128,6 +128,7 @@ impl SolanaTrade {
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
     ///
     /// # Returns
     ///
@@ -162,6 +163,7 @@ impl SolanaTrade {
     ///     recent_blockhash,
     ///     None,
     ///     None,
+    ///     Some(lookup_table_pubkey),
     /// ).await?;
     /// ```
     pub async fn buy(
@@ -174,6 +176,7 @@ impl SolanaTrade {
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
         extension_params: Option<Box<dyn ProtocolParams>>,
+        lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = if let Some(params) = extension_params {
@@ -188,6 +191,9 @@ impl SolanaTrade {
                 }
             }
         };
+        
+        let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
+        
         let buy_params = BuyParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
@@ -196,7 +202,7 @@ impl SolanaTrade {
             sol_amount: sol_amount,
             slippage_basis_points: slippage_basis_points,
             priority_fee: self.trade_config.priority_fee.clone(),
-            lookup_table_key: self.trade_config.lookup_table_key,
+            lookup_table_key: final_lookup_table_key,
             recent_blockhash,
             data_size_limit: 0,
             protocol_params: protocol_params.clone(),
@@ -252,6 +258,7 @@ impl SolanaTrade {
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
     /// * `with_tip` - Optional boolean to indicate if the transaction should be sent with tip
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
     ///
     /// # Returns
     ///
@@ -288,6 +295,7 @@ impl SolanaTrade {
     ///     None,
     ///     false,
     ///     None,
+    ///     Some(lookup_table_pubkey),
     /// ).await?;
     /// ```
     pub async fn sell(
@@ -301,6 +309,7 @@ impl SolanaTrade {
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
+        lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = if let Some(params) = extension_params {
@@ -315,6 +324,9 @@ impl SolanaTrade {
                 }
             }
         };
+        
+        let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
+        
         let sell_params = SellParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
@@ -323,7 +335,7 @@ impl SolanaTrade {
             token_amount: Some(token_amount),
             slippage_basis_points: slippage_basis_points,
             priority_fee: self.trade_config.priority_fee.clone(),
-            lookup_table_key: self.trade_config.lookup_table_key,
+            lookup_table_key: final_lookup_table_key,
             recent_blockhash,
             protocol_params: protocol_params.clone(),
         };
@@ -385,7 +397,9 @@ impl SolanaTrade {
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
+    /// * `with_tip` - Whether to use tip for priority processing
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
+    /// * `lookup_table_key` - Optional lookup table key for address lookup optimization
     ///
     /// # Returns
     ///
@@ -424,6 +438,8 @@ impl SolanaTrade {
     ///     slippage,
     ///     recent_blockhash,
     ///     None,
+    ///     false,
+    ///     None,
     ///     None,
     /// ).await?;
     /// ```
@@ -439,6 +455,7 @@ impl SolanaTrade {
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
         extension_params: Option<Box<dyn ProtocolParams>>,
+        lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
@@ -454,6 +471,7 @@ impl SolanaTrade {
             custom_buy_tip_fee,
             with_tip,
             extension_params,
+            lookup_table_key,
         )
         .await
     }
