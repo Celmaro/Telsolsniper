@@ -31,14 +31,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.5" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.0" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.3.5"
+sol-trade-sdk = "0.4.0"
 ```
 
 ## Usage Examples
@@ -186,6 +186,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
         transaction_filter,
         account_filter,
         None,
+        None,
         callback,
     )
     .await?;
@@ -247,7 +248,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting to listen for events, press Ctrl+C to stop...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     shred_stream
-        .shredstream_subscribe(protocols, None, callback)
+        .shredstream_subscribe(protocols, None, None, callback)
         .await?;
 
     Ok(())
@@ -337,14 +338,6 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
     
     println!("Buying tokens from PumpFun...");
     
-    // By not using RPC to fetch the bonding curve, transaction time can be saved.
-    let bonding_curve = BondingCurveAccount::from_dev_trade(
-        &mint_pubkey,
-        dev_token_amount,
-        dev_sol_amount,
-        creator,
-    );
-
     // my trade cost sol amount
     let buy_sol_amount = 100_000;
     trade_client.buy(
@@ -355,9 +348,13 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpFunParams {
-            bonding_curve: Some(Arc::new(bonding_curve.clone())),
-        })),
+        Box::new(PumpFunParams::from_dev_trade(
+            &mint_pubkey,
+            dev_token_amount,
+            dev_sol_amount,
+            creator,
+            None,
+        )),
         None,
     )
     .await?;
@@ -381,9 +378,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
     // my trade cost sol amount
     let buy_sol_amount = 100_000;
 
-    // By not using RPC to fetch the bonding curve, transaction time can be saved.
-    let bonding_curve = BondingCurveAccount::from_trade(&trade_info);
-
     trade_client.buy(
         DexType::PumpFun,
         mint_pubkey,
@@ -392,9 +386,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpFunParams {
-            bonding_curve: Some(Arc::new(bonding_curve.clone())),
-        })),
+        Box::new(PumpFunParams::from_trade(&trade_info, None)),
         None,
     )
     .await?;
@@ -451,14 +443,8 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpSwapParams {
-            pool: Some(pool_address),
-            base_mint: Some(base_mint),
-            quote_mint: Some(quote_mint),
-            pool_base_token_reserves: Some(pool_base_token_reserves),
-            pool_quote_token_reserves: Some(pool_quote_token_reserves),
-            auto_handle_wsol: true,
-        })),
+        // Through RPC call, adds latency. Can optimize by using from_buy_trade or manually initializing PumpSwapParams
+        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
         None,
     ).await?;
 
@@ -474,14 +460,8 @@ async fn test_pumpswap() -> AnyResult<()> {
         recent_blockhash,
         None,
         false,
-        Some(Box::new(PumpSwapParams {
-            pool: Some(pool_address),
-            base_mint: Some(base_mint),
-            quote_mint: Some(quote_mint),
-            pool_base_token_reserves: Some(pool_base_token_reserves),
-            pool_quote_token_reserves: Some(pool_quote_token_reserves),
-            auto_handle_wsol: true,
-        })),
+        // Through RPC call, adds latency. Can optimize by using from_sell_trade or manually initializing PumpSwapParams
+        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
         None,
     ).await?;
 
@@ -525,13 +505,10 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // If not provided, will auto-calculate
-            mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
-            mint_token_in_pool_state_index: Some(1), // Index of mint_token in pool_state, default is at index 1
-            minimum_amount_out: Some(buy_amount_out), // If not provided, defaults to 0
-            auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
-        })),
+        // Through RPC call, adds latency, or manually initialize RaydiumCpmmParams
+        Box::new(
+            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
+        ),
         None,
     ).await?;
 
@@ -548,13 +525,10 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
-        Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // If not provided, will auto-calculate
-            mint_token_program: Some(spl_token::ID), // Support spl_token or spl_token_2022::ID
-            mint_token_in_pool_state_index: Some(1), // Index of mint_token in pool_state, default is at index 1
-            minimum_amount_out: Some(sell_sol_amount), // If not provided, defaults to 0
-            auto_handle_wsol: true, // Automatically handle wSOL wrapping/unwrapping
-        })),
+        // Through RPC call, adds latency, or manually initialize RaydiumCpmmParams
+        Box::new(
+            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
+        ),
         None,
     ).await?;
 
@@ -591,7 +565,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+        Box::new(BonkParams::from_dev_trade(trade_info.clone())),
         None,
     ).await?;
 
@@ -606,7 +580,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         false,
-        None,
+        Box::new(BonkParams::from_dev_trade(trade_info)),
         None,
     ).await?;
 
@@ -634,7 +608,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(BonkParams::from_trade(trade_info))),
+        Box::new(BonkParams::from_trade(trade_info.clone())),
         None,
     ).await?;
 
@@ -649,7 +623,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         false,
-        None,
+        Box::new(BonkParams::from_trade(trade_info)),
         None,
     ).await?;
 
@@ -677,7 +651,8 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
+        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
         None,
     )
     .await?;
@@ -694,7 +669,8 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
-        None,
+        // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
+        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
         None,
     )
     .await?;

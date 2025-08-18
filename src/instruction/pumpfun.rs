@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, native_token::sol_str_to_lamports};
+use solana_sdk::instruction::Instruction;
 use spl_associated_token_account::{
     get_associated_token_address, instruction::create_associated_token_account,
 };
@@ -10,6 +10,10 @@ use crate::{
     trading::pumpfun::common::{
         get_bonding_curve_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
     },
+    utils::calc::{
+        common::{calculate_with_slippage_buy, calculate_with_slippage_sell},
+        pumpfun::{get_buy_token_amount_from_sol_amount, get_sell_sol_amount_from_token_amount},
+    },
 };
 
 use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer};
@@ -17,21 +21,20 @@ use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, s
 use crate::{
     constants::pumpfun::global_constants::FEE_RECIPIENT,
     constants::trade::trade::DEFAULT_SLIPPAGE,
-    trading::common::utils::calculate_with_slippage_buy,
     trading::core::{
         params::{BuyParams, PumpFunParams, SellParams},
         traits::InstructionBuilder,
     },
-    trading::pumpfun::common::{get_buy_token_amount_from_sol_amount, get_creator_vault_pda},
+    trading::pumpfun::common::get_creator_vault_pda,
 };
 
-/// PumpFun协议的指令构建器
+/// Instruction builder for PumpFun protocol
 pub struct PumpFunInstructionBuilder;
 
 #[async_trait::async_trait]
 impl InstructionBuilder for PumpFunInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
-        // 获取PumpFun特定参数
+        // Get PumpFun specific parameters
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -42,11 +45,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        let bonding_curve = if protocol_params.bonding_curve.is_some() {
-            protocol_params.bonding_curve.clone().unwrap()
-        } else {
-            return Err(anyhow!("Bonding curve not found"));
-        };
+        let bonding_curve = protocol_params.bonding_curve.clone();
 
         let max_sol_cost = calculate_with_slippage_buy(
             params.sol_amount,
@@ -54,19 +53,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         );
         let creator_vault_pda = bonding_curve.get_creator_vault_pda();
 
-        let mut buy_token_amount =
-            get_buy_token_amount_from_sol_amount(&bonding_curve, params.sol_amount);
-        if buy_token_amount <= 100 * 1_000_000_u64 {
-            buy_token_amount = if max_sol_cost > sol_str_to_lamports("0.01").unwrap_or(0) {
-                25547619 * 1_000_000_u64
-            } else {
-                255476 * 1_000_000_u64
-            };
-        }
+        let buy_token_amount = get_buy_token_amount_from_sol_amount(
+            bonding_curve.virtual_token_reserves as u128,
+            bonding_curve.virtual_sol_reserves as u128,
+            bonding_curve.real_token_reserves as u128,
+            bonding_curve.creator,
+            params.sol_amount,
+        );
 
         let mut instructions = vec![];
 
-        // 创建关联代币账户
+        // Create associated token account
         instructions.push(create_associated_token_account(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
@@ -74,23 +71,29 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &constants::pumpfun::accounts::TOKEN_PROGRAM,
         ));
 
-        // 创建买入指令
+        // Create buy instruction
         instructions.push(buy(
             params.payer.as_ref(),
             &params.mint,
             &bonding_curve.account,
             &creator_vault_pda,
             &FEE_RECIPIENT,
-            Buy {
-                _amount: buy_token_amount,
-                _max_sol_cost: max_sol_cost,
-            },
+            Buy { _amount: buy_token_amount, _max_sol_cost: max_sol_cost },
         ));
 
         Ok(instructions)
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        // Get PumpFun specific parameters
+        let protocol_params = params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpFunParams>()
+            .ok_or_else(|| anyhow!("Invalid protocol params for PumpFun"))?;
+
+        let bonding_curve = protocol_params.bonding_curve.clone();
+
         let token_amount = if let Some(amount) = params.token_amount {
             if amount == 0 {
                 return Err(anyhow!("Amount cannot be zero"));
@@ -102,35 +105,27 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let creator_vault_pda = get_creator_vault_pda(&params.creator).unwrap();
         let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
 
-        // 获取代币余额
-        let balance_u64 = if let Some(rpc) = &params.rpc {
-            let balance = rpc.get_token_account_balance(&ata).await?;
-            balance
-                .amount
-                .parse::<u64>()
-                .map_err(|_| anyhow!("Failed to parse token balance"))?
-        } else {
-            return Err(anyhow!("RPC client is required to get token balance"));
-        };
-
-        let mut token_amount = token_amount;
-        if token_amount > balance_u64 {
-            token_amount = balance_u64;
-        }
+        let sol_amount = get_sell_sol_amount_from_token_amount(
+            bonding_curve.virtual_token_reserves as u128,
+            bonding_curve.virtual_sol_reserves as u128,
+            bonding_curve.creator,
+            token_amount,
+        );
+        let min_sol_output = calculate_with_slippage_sell(
+            sol_amount,
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+        );
 
         let mut instructions = vec![sell(
             params.payer.as_ref(),
             &params.mint,
             &creator_vault_pda,
             &FEE_RECIPIENT,
-            Sell {
-                _amount: token_amount,
-                _min_sol_output: 1,
-            },
+            Sell { _amount: token_amount, _min_sol_output: min_sol_output },
         )];
 
-        // 如果卖出全部代币，关闭账户
-        if token_amount >= balance_u64 {
+        // If selling all tokens, close the account
+        if protocol_params.close_token_account_when_sell.unwrap_or(false) {
             instructions.push(close_account(
                 &spl_token::ID,
                 &ata,

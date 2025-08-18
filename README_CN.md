@@ -31,14 +31,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.3.5" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.0" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.3.5"
+sol-trade-sdk = "0.4.0"
 ```
 
 ## 使用示例
@@ -186,6 +186,7 @@ async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
         transaction_filter,
         account_filter,
         None,
+        None,
         callback,
     )
     .await?;
@@ -247,7 +248,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
     println!("开始监听事件，按 Ctrl+C 停止...");
     let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
     shred_stream
-        .shredstream_subscribe(protocols, None, callback)
+        .shredstream_subscribe(protocols, None, None, callback)
         .await?;
 
     Ok(())
@@ -312,10 +313,11 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
 ```rust
 use sol_trade_sdk::{
-    common::bonding_curve::BondingCurveAccount,
+    common::{bonding_curve::BondingCurveAccount, AnyResult},
     constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY,
     trading::{core::params::PumpFunParams, factory::DexType},
 };
+use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 
 // pumpfun 狙击者交易
 async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
@@ -337,14 +339,6 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
     
     println!("Buying tokens from PumpFun...");
     
-    // 不使用rpc调用获取bonding_curve，可以节约交易时间
-    let bonding_curve = BondingCurveAccount::from_dev_trade(
-        &mint_pubkey,
-        dev_token_amount,
-        dev_sol_amount,
-        creator,
-    );
-
     // 我本次交易所花的的sol金额
     let buy_sol_amount = 100_000;
     trade_client.buy(
@@ -355,9 +349,13 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpFunParams {
-            bonding_curve: Some(Arc::new(bonding_curve.clone())),
-        })),
+        Box::new(PumpFunParams::from_dev_trade(
+            &mint_pubkey,
+            dev_token_amount,
+            dev_sol_amount,
+            creator,
+            None,
+        )),
         None,
     )
     .await?;
@@ -381,8 +379,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
     // 我本次交易所花的的sol金额
     let buy_sol_amount = 100_000;
 
-    // 不使用rpc调用获取bonding_curve，可以节约交易时间
-    let bonding_curve = BondingCurveAccount::from_trade(&trade_info);
     trade_client.buy(
         DexType::PumpFun,
         mint_pubkey,
@@ -391,9 +387,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpFunParams {
-            bonding_curve: Some(Arc::new(bonding_curve.clone())),
-        })),
+        Box::new(PumpFunParams::from_trade(&trade_info, None)),
         None,
     )
     .await?;
@@ -402,7 +396,13 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
 }
 
 // pumpfun 卖出token
-async fn test_pumpfun_sell() -> AnyResult<()> {
+async fn test_pumpfun_sell(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+    let trade_client = test_create_solana_trade_client().await?;
+    let mint_pubkey = trade_info.mint;
+    let creator = trade_info.creator;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    
     let amount_token = 100_000_000; 
     trade_client.sell(
         DexType::PumpFun,
@@ -413,17 +413,23 @@ async fn test_pumpfun_sell() -> AnyResult<()> {
         recent_blockhash,
         None,
         false,
-        None,
+        Box::new(PumpFunParams::from_trade(&trade_info, None)),
         None,
     )
     .await?;
+
+    Ok(())
 }
 ```
 
 ### 4. PumpSwap 交易操作
 
 ```rust
-use sol_trade_sdk::trading::core::params::PumpSwapParams;
+use sol_trade_sdk::{
+    common::AnyResult,
+    trading::{core::params::PumpSwapParams, factory::DexType},
+};
+use solana_sdk::{pubkey::Pubkey, str::FromStr};
 
 async fn test_pumpswap() -> AnyResult<()> {
     println!("Testing PumpSwap trading...");
@@ -450,14 +456,8 @@ async fn test_pumpswap() -> AnyResult<()> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(PumpSwapParams {
-            pool: Some(pool_address),
-            base_mint: Some(base_mint),
-            quote_mint: Some(quote_mint),
-            pool_base_token_reserves: Some(pool_base_token_reserves),
-            pool_quote_token_reserves: Some(pool_quote_token_reserves),
-            auto_handle_wsol: true,
-        })),
+        // 通过 RPC 调用，会增加延迟。可以通过使用 from_buy_trade 或手动初始化 PumpSwapParams 来优化
+        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
         None,
     ).await?;
 
@@ -473,14 +473,8 @@ async fn test_pumpswap() -> AnyResult<()> {
         recent_blockhash,
         None,
         false,
-        Some(Box::new(PumpSwapParams {
-            pool: Some(pool_address),
-            base_mint: Some(base_mint),
-            quote_mint: Some(quote_mint),
-            pool_base_token_reserves: Some(pool_base_token_reserves),
-            pool_quote_token_reserves: Some(pool_quote_token_reserves),
-            auto_handle_wsol: true,
-        })),
+        // 通过 RPC 调用，会增加延迟。可以通过使用 from_sell_trade 或手动初始化 PumpSwapParams 来优化
+        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
         None,
     ).await?;
 
@@ -498,6 +492,7 @@ use sol_trade_sdk::{
         raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
     },
 };
+use solana_sdk::{pubkey::Pubkey, str::FromStr};
 use spl_token; // 用于标准 SPL Token
 // use spl_token_2022; // 用于 Token 2022 标准（如果需要）
 
@@ -524,13 +519,10 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // 如果不传，会自动计算
-            mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
-            mint_token_in_pool_state_index: Some(1), // mint_token 在 pool_state 中的索引,默认在索引1
-            minimum_amount_out: Some(buy_amount_out), // 如果不传，默认为0
-            auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
-        })),
+        // 通过 RPC 调用，会增加延迟，或手动初始化 RaydiumCpmmParams
+        Box::new(
+            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
+        ),
         None,
     ).await?;
 
@@ -547,13 +539,10 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
-        Some(Box::new(RaydiumCpmmParams {
-            pool_state: Some(pool_state), // 如果不传，会自动计算
-            mint_token_program: Some(spl_token::ID), // 支持 spl_token 或 spl_token_2022::ID
-            mint_token_in_pool_state_index: Some(1), // mint_token 在 pool_state 中的索引,默认在索引1
-            minimum_amount_out: Some(sell_sol_amount), // 如果不传，默认为0
-            auto_handle_wsol: true, // 自动处理 wSOL 包装/解包装
-        })),
+        // 通过 RPC 调用，会增加延迟，或手动初始化 RaydiumCpmmParams
+        Box::new(
+            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
+        ),
         None,
     ).await?;
 
@@ -564,6 +553,12 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
 ### 6. Bonk 交易操作
 
 ```rust
+use sol_trade_sdk::{
+    common::AnyResult,
+    trading::{core::params::BonkParams, factory::DexType},
+};
+use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
+use solana_sdk::{pubkey::Pubkey, str::FromStr};
 
 // bonk 狙击者交易
 async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<()> {
@@ -590,7 +585,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(BonkParams::from_dev_trade(trade_info))),
+        Box::new(BonkParams::from_dev_trade(trade_info.clone())),
         None,
     ).await?;
 
@@ -605,7 +600,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         recent_blockhash,
         None,
         false,
-        None,
+        Box::new(BonkParams::from_dev_trade(trade_info)),
         None,
     ).await?;
 
@@ -633,7 +628,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         slippage_basis_points,
         recent_blockhash,
         None,
-        Some(Box::new(BonkParams::from_trade(trade_info))),
+        Box::new(BonkParams::from_trade(trade_info.clone())),
         None,
     ).await?;
 
@@ -648,7 +643,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         recent_blockhash,
         None,
         false,
-        None,
+        Box::new(BonkParams::from_trade(trade_info)),
         None,
     ).await?;
 
@@ -676,7 +671,8 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         slippage_basis_points,
         recent_blockhash,
         None,
-        None,
+        // 通过 RPC 调用，会增加延迟。可以通过使用 from_trade 或手动初始化 BonkParams 来优化
+        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
         None,
     )
     .await?;
@@ -693,7 +689,8 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         recent_blockhash,
         None,
         false,
-        None,
+        // 通过 RPC 调用，会增加延迟。可以通过使用 from_trade 或手动初始化 BonkParams 来优化
+        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
         None,
     )
     .await?;
