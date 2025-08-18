@@ -219,7 +219,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             slippage_basis_points,
             recent_blockhash,
             None,
-            // 经过 rpc，增加耗时，可以通过from_buy_trade或者自行初始化PumpSwapParams参数来优化耗时
+            // Through RPC call, adds latency. Can optimize by using from_buy_trade or manually initializing PumpSwapParams
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
         )
@@ -238,7 +238,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             recent_blockhash,
             None,
             false,
-            // 经过 rpc，增加耗时，可以通过from_sell_trade或者自行初始化PumpSwapParams参数来优化耗时
+            // Through RPC call, adds latency. Can optimize by using from_sell_trade or manually initializing PumpSwapParams
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
         )
@@ -363,7 +363,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             slippage_basis_points,
             recent_blockhash,
             None,
-            // 经过 rpc，增加耗时，可以通过from_trade或者自行初始化BonkParams参数来优化耗时
+            // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
         )
@@ -382,7 +382,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             recent_blockhash,
             None,
             false,
-            // 经过 rpc，增加耗时，可以通过from_trade或者自行初始化BonkParams参数来优化耗时
+            // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
         )
@@ -411,7 +411,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             slippage_basis_points,
             recent_blockhash,
             None,
-            // 经过 rpc，增加耗时，或者自行初始化RaydiumCpmmParams参数
+            // Through RPC call, adds latency, or manually initialize RaydiumCpmmParams
             Box::new(
                 RaydiumCpmmParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?,
             ),
@@ -432,7 +432,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             recent_blockhash,
             None,
             false,
-            // 经过 rpc，增加耗时，或者自行初始化RaydiumCpmmParams参数
+            // Through RPC call, adds latency, or manually initialize RaydiumCpmmParams
             Box::new(
                 RaydiumCpmmParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?,
             ),

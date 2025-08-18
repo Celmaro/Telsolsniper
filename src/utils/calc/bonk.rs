@@ -83,7 +83,7 @@ pub fn get_sell_sol_amount_from_token_amount(
     let amount_in_u128 = amount_in as u128;
 
     // For sell operation, input_reserve is token reserves, output_reserve is SOL reserves
-    let input_reserve = virtual_base.checked_add(real_base).unwrap();
+    let input_reserve = virtual_base.checked_sub(real_base).unwrap();
     let output_reserve = virtual_quote.checked_add(real_quote).unwrap();
 
     // Use constant product formula to calculate SOL amount received from selling tokens
