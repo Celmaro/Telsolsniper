@@ -1,4 +1,5 @@
 pub mod price;
+pub mod calc;
 
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 use crate::trading;

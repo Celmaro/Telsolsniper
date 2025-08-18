@@ -25,6 +25,12 @@ pub mod accounts {
     pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
     pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
     pub const RAYDIUM_CPMM: Pubkey = pubkey!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
+
+    pub const FEE_RATE_DENOMINATOR_VALUE: u128 = 1_000_000;
+    pub const TRADE_FEE_RATE: u64 = 2500;
+    pub const CREATOR_FEE_RATE: u64 = 0;
+    pub const PROTOCOL_FEE_RATE: u64 = 120000;
+    pub const FUND_FEE_RATE: u64 = 40000;
 }
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[143, 190, 90, 218, 196, 30, 51, 222];

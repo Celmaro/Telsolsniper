@@ -175,22 +175,11 @@ impl SolanaTrade {
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
-        extension_params: Option<Box<dyn ProtocolParams>>,
+        extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
-        let protocol_params = if let Some(params) = extension_params {
-            params
-        } else {
-            match dex_type {
-                DexType::PumpFun => Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>,
-                DexType::PumpSwap => Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>,
-                DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
-                DexType::RaydiumCpmm => {
-                    Box::new(RaydiumCpmmParams::default()) as Box<dyn ProtocolParams>
-                }
-            }
-        };
+        let protocol_params = extension_params;
         
         let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
         
@@ -308,22 +297,11 @@ impl SolanaTrade {
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
-        extension_params: Option<Box<dyn ProtocolParams>>,
+        extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
-        let protocol_params = if let Some(params) = extension_params {
-            params
-        } else {
-            match dex_type {
-                DexType::PumpFun => Box::new(PumpFunParams::default()) as Box<dyn ProtocolParams>,
-                DexType::PumpSwap => Box::new(PumpSwapParams::default()) as Box<dyn ProtocolParams>,
-                DexType::Bonk => Box::new(BonkParams::default()) as Box<dyn ProtocolParams>,
-                DexType::RaydiumCpmm => {
-                    Box::new(RaydiumCpmmParams::default()) as Box<dyn ProtocolParams>
-                }
-            }
-        };
+        let protocol_params = extension_params;
         
         let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
         
@@ -454,7 +432,7 @@ impl SolanaTrade {
         recent_blockhash: Hash,
         custom_buy_tip_fee: Option<f64>,
         with_tip: bool,
-        extension_params: Option<Box<dyn ProtocolParams>>,
+        extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {

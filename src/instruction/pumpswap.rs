@@ -10,20 +10,16 @@ use crate::{
         trade::trade::DEFAULT_SLIPPAGE,
     },
     trading::{
-        common::utils::{
-            calculate_with_slippage_buy, calculate_with_slippage_sell, get_token_balance,
-        },
         core::{
             params::{BuyParams, PumpSwapParams, SellParams},
             traits::InstructionBuilder,
         },
-        pumpswap::{
-            self,
-            common::{
-                coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata, fetch_pool, find_pool, get_global_volume_accumulator_pda, get_token_amount, get_user_volume_accumulator_pda, get_wsol_amount
-            },
+        pumpswap::common::{
+            coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata,
+            get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
         },
     },
+    utils::calc::pumpswap::{buy_quote_input_internal, sell_base_input_internal},
 };
 
 /// Instruction builder for PumpSwap protocol
@@ -44,40 +40,21 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         }
 
         // Build instructions based on whether account information is provided
-        match (&protocol_params.pool,) {
-            (Some(pool),) => {
-                let mut base_mint = params.mint;
-                let mut quote_mint = accounts::WSOL_TOKEN_ACCOUNT;
-                let mut pool_base_token_reserves = 0;
-                let mut pool_quote_token_reserves = 0;
+        let base_mint = protocol_params.base_mint;
+        let quote_mint = protocol_params.quote_mint;
+        let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
+        let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
 
-                if let Some(p_base_mint) = protocol_params.base_mint {
-                    base_mint = p_base_mint;
-                }
-                if let Some(p_quote_mint) = protocol_params.quote_mint {
-                    quote_mint = p_quote_mint;
-                }
-                if let Some(p_pool_base_token_reserves) = protocol_params.pool_base_token_reserves {
-                    pool_base_token_reserves = p_pool_base_token_reserves;
-                }
-                if let Some(p_pool_quote_token_reserves) = protocol_params.pool_quote_token_reserves
-                {
-                    pool_quote_token_reserves = p_pool_quote_token_reserves;
-                }
-
-                self.build_buy_instructions_with_accounts(
-                    params,
-                    *pool,
-                    base_mint,
-                    quote_mint,
-                    pool_base_token_reserves,
-                    pool_quote_token_reserves,
-                    protocol_params.auto_handle_wsol,
-                )
-                .await
-            }
-            _ => self.build_buy_instructions_auto_discover(params).await,
-        }
+        self.build_buy_instructions_with_accounts(
+            params,
+            protocol_params.pool,
+            base_mint,
+            quote_mint,
+            pool_base_token_reserves,
+            pool_quote_token_reserves,
+            protocol_params.auto_handle_wsol,
+        )
+        .await
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
@@ -88,104 +65,25 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             .downcast_ref::<PumpSwapParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
         // Build instructions based on whether account information is provided
-        match (&protocol_params.pool,) {
-            (Some(pool),) => {
-                let mut base_mint = params.mint;
-                let mut quote_mint = accounts::WSOL_TOKEN_ACCOUNT;
-                let mut pool_base_token_reserves = 0;
-                let mut pool_quote_token_reserves = 0;
-                if let Some(p_base_mint) = protocol_params.base_mint {
-                    base_mint = p_base_mint;
-                }
-                if let Some(p_quote_mint) = protocol_params.quote_mint {
-                    quote_mint = p_quote_mint;
-                }
-                if let Some(p_pool_base_token_reserves) = protocol_params.pool_base_token_reserves {
-                    pool_base_token_reserves = p_pool_base_token_reserves;
-                }
-                if let Some(p_pool_quote_token_reserves) = protocol_params.pool_quote_token_reserves
-                {
-                    pool_quote_token_reserves = p_pool_quote_token_reserves;
-                }
-                self.build_sell_instructions_with_accounts(
-                    params,
-                    *pool,
-                    base_mint,
-                    quote_mint,
-                    pool_base_token_reserves,
-                    pool_quote_token_reserves,
-                    protocol_params.auto_handle_wsol,
-                )
-                .await
-            }
-            _ => self.build_sell_instructions_auto_discover(params).await,
-        }
+        let base_mint = protocol_params.base_mint;
+        let quote_mint = protocol_params.quote_mint;
+        let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
+        let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
+
+        self.build_sell_instructions_with_accounts(
+            params,
+            protocol_params.pool,
+            base_mint,
+            quote_mint,
+            pool_base_token_reserves,
+            pool_quote_token_reserves,
+            protocol_params.auto_handle_wsol,
+        )
+        .await
     }
 }
 
 impl PumpSwapInstructionBuilder {
-    /// Auto-discover pool and account information and build buy instructions
-    async fn build_buy_instructions_auto_discover(
-        &self,
-        params: &BuyParams,
-    ) -> Result<Vec<Instruction>> {
-        if params.rpc.is_none() {
-            return Err(anyhow!("RPC is not set"));
-        }
-        println!("❗️Going through RPC request, increasing instruction building time");
-        let rpc = params.rpc.as_ref().unwrap().clone();
-        // Find pool
-        let pool = find_pool(rpc.as_ref(), &params.mint).await?;
-        let pool_data = fetch_pool(rpc.as_ref(), &pool).await?;
-        let pool_base_token_reserves =
-            get_token_balance(rpc.as_ref(), &pool, &pool_data.base_mint).await?;
-        let pool_quote_token_reserves =
-            get_token_balance(rpc.as_ref(), &pool, &pool_data.quote_mint).await?;
-        let mut params = params.clone();
-        params.creator = pool_data.coin_creator;
-        self.build_buy_instructions_with_accounts(
-            &params,
-            pool,
-            pool_data.base_mint,
-            pool_data.quote_mint,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            true,
-        )
-        .await
-    }
-
-    /// Auto-discover pool and account information and build sell instructions
-    async fn build_sell_instructions_auto_discover(
-        &self,
-        params: &SellParams,
-    ) -> Result<Vec<Instruction>> {
-        if params.rpc.is_none() {
-            return Err(anyhow!("RPC is not set"));
-        }
-        println!("❗️Going through RPC request, increasing instruction building time");
-        let rpc = params.rpc.as_ref().unwrap().clone();
-        // Find pool
-        let pool = find_pool(rpc.as_ref(), &params.mint).await?;
-        let pool_data = fetch_pool(rpc.as_ref(), &pool).await?;
-        let pool_base_token_reserves =
-            get_token_balance(rpc.as_ref(), &pool, &pool_data.base_mint).await?;
-        let pool_quote_token_reserves =
-            get_token_balance(rpc.as_ref(), &pool, &pool_data.quote_mint).await?;
-        let mut params = params.clone();
-        params.creator = pool_data.coin_creator;
-        self.build_sell_instructions_with_accounts(
-            &params,
-            pool,
-            pool_data.base_mint,
-            pool_data.quote_mint,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            true,
-        )
-        .await
-    }
-
     /// Build buy instructions with provided account information
     async fn build_buy_instructions_with_accounts(
         &self,
@@ -201,38 +99,36 @@ impl PumpSwapInstructionBuilder {
             return Err(anyhow!("RPC is not set"));
         }
         let quote_mint_is_wsol = quote_mint == accounts::WSOL_TOKEN_ACCOUNT;
-        // Calculate token amount
-        let mut token_amount = get_token_amount(
-            quote_mint_is_wsol,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            params.sol_amount,
-            accounts::LP_FEE_BASIS_POINTS,
-            accounts::PROTOCOL_FEE_BASIS_POINTS,
-            if params.creator == Pubkey::default() {
-                0
-            } else {
-                accounts::COIN_CREATOR_FEE_BASIS_POINTS
-            },
-        )
-        .await?;
-        if !quote_mint_is_wsol {
-            // min_quote_amount_out
-            token_amount = calculate_with_slippage_sell(
-                token_amount,
-                params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
-            );
-        }
-        let sol_amount = if quote_mint_is_wsol {
-            // max_quote_amount_in
-            calculate_with_slippage_buy(
+
+        let mut token_amount = 0;
+        let mut sol_amount = 0;
+        if quote_mint_is_wsol {
+            let result = buy_quote_input_internal(
                 params.sol_amount,
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+                pool_base_token_reserves,
+                pool_quote_token_reserves,
+                &params.creator,
             )
+            .unwrap();
+            // base_amount_out
+            token_amount = result.base;
+            // max_quote_amount_in
+            sol_amount = result.max_quote;
         } else {
+            let result = sell_base_input_internal(
+                params.sol_amount,
+                params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+                pool_base_token_reserves,
+                pool_quote_token_reserves,
+                &params.creator,
+            )
+            .unwrap();
+            // min_quote_amount_out
+            token_amount = result.min_quote;
             // base_amount_in
-            params.sol_amount
-        };
+            sol_amount = params.sol_amount;
+        }
 
         // Create user token accounts
         let user_base_token_account = spl_associated_token_account::get_associated_token_address(
@@ -351,11 +247,15 @@ impl PumpSwapInstructionBuilder {
         let mut data = vec![];
         if quote_mint_is_wsol {
             data.extend_from_slice(&BUY_DISCRIMINATOR);
+            // base_amount_out
             data.extend_from_slice(&token_amount.to_le_bytes());
+            // max_quote_amount_in
             data.extend_from_slice(&sol_amount.to_le_bytes());
         } else {
             data.extend_from_slice(&SELL_DISCRIMINATOR);
+            // base_amount_in
             data.extend_from_slice(&sol_amount.to_le_bytes());
+            // min_quote_amount_out
             data.extend_from_slice(&token_amount.to_le_bytes());
         }
 
@@ -394,27 +294,42 @@ impl PumpSwapInstructionBuilder {
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
+        if params.token_amount.is_none() {
+            return Err(anyhow!("Token amount is not set"));
+        }
 
         let quote_mint_is_wsol = quote_mint == accounts::WSOL_TOKEN_ACCOUNT;
-        let mut sol_amount = get_wsol_amount(
-            quote_mint_is_wsol,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            params.token_amount.unwrap_or(0),
-            accounts::LP_FEE_BASIS_POINTS,
-            accounts::PROTOCOL_FEE_BASIS_POINTS,
-            if params.creator == Pubkey::default() {
-                0
-            } else {
-                accounts::COIN_CREATOR_FEE_BASIS_POINTS
-            },
-        )
-        .await?;
-        sol_amount = calculate_with_slippage_sell(
-            sol_amount,
-            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
-        );
-        let token_amount = params.token_amount.unwrap_or(0);
+
+        let mut token_amount = 0;
+        let mut sol_amount = 0;
+
+        if quote_mint_is_wsol {
+            let result = sell_base_input_internal(
+                params.token_amount.unwrap(),
+                params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+                pool_base_token_reserves,
+                pool_quote_token_reserves,
+                &params.creator,
+            )
+            .unwrap();
+            // base_amount_in
+            token_amount = params.token_amount.unwrap();
+            // min_quote_amount_out
+            sol_amount = result.min_quote;
+        } else {
+            let result = buy_quote_input_internal(
+                params.token_amount.unwrap(),
+                params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+                pool_base_token_reserves,
+                pool_quote_token_reserves,
+                &params.creator,
+            )
+            .unwrap();
+            // max_quote_amount_in
+            token_amount = result.max_quote;
+            // base_amount_out
+            sol_amount = result.base;
+        }
 
         let coin_creator_vault_ata = coin_creator_vault_ata(params.creator, quote_mint);
         let coin_creator_vault_authority = coin_creator_vault_authority(params.creator);
@@ -502,11 +417,15 @@ impl PumpSwapInstructionBuilder {
         let mut data = vec![];
         if quote_mint_is_wsol {
             data.extend_from_slice(&SELL_DISCRIMINATOR);
+            // base_amount_in
             data.extend_from_slice(&token_amount.to_le_bytes());
+            // min_quote_amount_out
             data.extend_from_slice(&sol_amount.to_le_bytes());
         } else {
             data.extend_from_slice(&BUY_DISCRIMINATOR);
+            // base_amount_out
             data.extend_from_slice(&sol_amount.to_le_bytes());
+            // max_quote_amount_in
             data.extend_from_slice(&token_amount.to_le_bytes());
         }
 
