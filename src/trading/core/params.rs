@@ -4,6 +4,8 @@ use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTra
 use solana_streamer_sdk::streaming::event_parser::protocols::pumpswap::{
     PumpSwapBuyEvent, PumpSwapSellEvent,
 };
+use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::types::AmmInfo;
+use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::RaydiumAmmV4SwapEvent;
 use std::sync::Arc;
 
 use super::traits::ProtocolParams;
@@ -16,6 +18,7 @@ use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
 use crate::swqos::SwqosClient;
 use crate::trading::bonk::common::{get_amount_in, get_amount_in_net, get_amount_out};
+use crate::trading::common::get_multi_token_balances;
 use crate::trading::pumpswap::common::get_token_balances;
 use crate::trading::raydium_cpmm::common::get_pool_token_balances;
 
@@ -358,6 +361,76 @@ impl RaydiumCpmmParams {
 }
 
 impl ProtocolParams for RaydiumCpmmParams {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolParams> {
+        Box::new(self.clone())
+    }
+}
+
+/// RaydiumCpmm protocol specific parameters
+/// Configuration parameters specific to Raydium CPMM trading protocol
+#[derive(Clone)]
+pub struct RaydiumAmmV4Params {
+    /// AMM pool address
+    pub amm: Pubkey,
+    /// Base token (coin) mint address
+    pub coin_mint: Pubkey,
+    /// Quote token (pc) mint address  
+    pub pc_mint: Pubkey,
+    /// Pool's coin token account address
+    pub token_coin: Pubkey,
+    /// Pool's pc token account address
+    pub token_pc: Pubkey,
+    /// Current coin reserve amount in the pool
+    pub coin_reserve: u64,
+    /// Current pc reserve amount in the pool
+    pub pc_reserve: u64,
+    /// Whether to automatically handle wSOL wrapping and unwrapping
+    pub auto_handle_wsol: bool,
+}
+
+impl RaydiumAmmV4Params {
+    pub fn from_amm_info_and_reserves(
+        amm: Pubkey,
+        amm_info: AmmInfo,
+        coin_reserve: u64,
+        pc_reserve: u64,
+    ) -> Self {
+        Self {
+            amm,
+            coin_mint: amm_info.coin_mint,
+            pc_mint: amm_info.pc_mint,
+            token_coin: amm_info.token_coin,
+            token_pc: amm_info.token_pc,
+            coin_reserve,
+            pc_reserve,
+            auto_handle_wsol: true,
+        }
+    }
+    pub async fn from_amm_address_by_rpc(
+        rpc: &SolanaRpcClient,
+        amm: Pubkey,
+    ) -> Result<Self, anyhow::Error> {
+        let amm_info = crate::trading::raydium_amm_v4::common::fetch_amm_info(rpc, amm).await?;
+        let (coin_reserve, pc_reserve) =
+            get_multi_token_balances(rpc, &amm_info.token_coin, &amm_info.token_pc).await?;
+        Ok(Self {
+            amm,
+            coin_mint: amm_info.coin_mint,
+            pc_mint: amm_info.pc_mint,
+            token_coin: amm_info.token_coin,
+            token_pc: amm_info.token_pc,
+            coin_reserve,
+            pc_reserve,
+            auto_handle_wsol: true,
+        })
+    }
+}
+
+impl ProtocolParams for RaydiumAmmV4Params {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

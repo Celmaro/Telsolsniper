@@ -20,8 +20,9 @@ use super::{
 };
 use crate::{
     common::PriorityFee,
-    trading::common::{
-        add_sell_compute_budget_instructions, add_sell_tip_compute_budget_instructions,
+    trading::{
+        common::{add_sell_compute_budget_instructions, add_sell_tip_compute_budget_instructions},
+        MiddlewareManager,
     },
 };
 
@@ -33,6 +34,9 @@ pub async fn build_rpc_transaction(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
     data_size_limit: u32,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let mut instructions = vec![];
 
@@ -54,7 +58,16 @@ pub async fn build_rpc_transaction(
     let address_lookup_table_accounts = get_address_lookup_table_accounts(lookup_table_key).await;
 
     // 构建交易
-    build_versioned_transaction(payer, instructions, address_lookup_table_accounts, blockhash).await
+    build_versioned_transaction(
+        payer,
+        instructions,
+        address_lookup_table_accounts,
+        blockhash,
+        middleware_manager,
+        protocol_name,
+        is_buy,
+    )
+    .await
 }
 
 /// 构建带小费的交易
@@ -67,6 +80,9 @@ pub async fn build_tip_transaction(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
     data_size_limit: u32,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let mut instructions = vec![];
 
@@ -95,7 +111,16 @@ pub async fn build_tip_transaction(
     let address_lookup_table_accounts = get_address_lookup_table_accounts(lookup_table_key).await;
 
     // 构建交易
-    build_versioned_transaction(payer, instructions, address_lookup_table_accounts, blockhash).await
+    build_versioned_transaction(
+        payer,
+        instructions,
+        address_lookup_table_accounts,
+        blockhash,
+        middleware_manager,
+        protocol_name,
+        is_buy,
+    )
+    .await
 }
 
 /// 构建版本化交易的底层函数
@@ -104,10 +129,18 @@ async fn build_versioned_transaction(
     instructions: Vec<Instruction>,
     address_lookup_table_accounts: Vec<solana_sdk::message::AddressLookupTableAccount>,
     blockhash: Hash,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
+    let full_instructions = match middleware_manager {
+        Some(middleware_manager) => middleware_manager
+            .apply_middlewares_process_full_instructions(instructions, protocol_name, is_buy)?,
+        None => instructions,
+    };
     let v0_message: v0::Message = v0::Message::try_compile(
         &payer.pubkey(),
-        &instructions,
+        &full_instructions,
         &address_lookup_table_accounts,
         blockhash,
     )?;
@@ -127,6 +160,9 @@ pub async fn build_tip_transaction_with_priority_fee(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
     data_size_limit: u32,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     build_tip_transaction(
         payer,
@@ -137,6 +173,9 @@ pub async fn build_tip_transaction_with_priority_fee(
         lookup_table_key,
         recent_blockhash,
         data_size_limit,
+        middleware_manager,
+        protocol_name,
+        is_buy,
     )
     .await
 }
@@ -148,6 +187,9 @@ pub async fn build_sell_transaction(
     business_instructions: Vec<Instruction>,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let mut instructions = vec![];
 
@@ -166,6 +208,9 @@ pub async fn build_sell_transaction(
         instructions,
         address_lookup_table_accounts,
         recent_blockhash,
+        middleware_manager,
+        protocol_name,
+        is_buy,
     )
     .await
 }
@@ -178,6 +223,9 @@ pub async fn build_sell_tip_transaction(
     tip_amount: f64,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let mut instructions = vec![];
 
@@ -203,6 +251,9 @@ pub async fn build_sell_tip_transaction(
         instructions,
         address_lookup_table_accounts,
         recent_blockhash,
+        middleware_manager,
+        protocol_name,
+        is_buy,
     )
     .await
 }
@@ -214,6 +265,9 @@ pub async fn build_sell_tip_transaction_with_priority_fee(
     tip_account: &Pubkey,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     build_sell_tip_transaction(
         payer,
@@ -223,6 +277,9 @@ pub async fn build_sell_tip_transaction_with_priority_fee(
         priority_fee.sell_tip_fee,
         lookup_table_key,
         recent_blockhash,
+        middleware_manager,
+        protocol_name,
+        is_buy,
     )
     .await
 }

@@ -9,12 +9,14 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
 3. **Bonk Trading**: Support for Bonk trading operations
 4. **Raydium CPMM Trading**: Support for Raydium CPMM (Concentrated Pool Market Maker) trading operations
-5. **Event Subscription**: Subscribe to PumpFun, PumpSwap, Bonk, and Raydium CPMM program trading events
-6. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
-7. **ShredStream Support**: Subscribe to program events using ShredStream
-8. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
-9. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
-10. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
+5. **Raydium AMM V4 Trading**: Support for Raydium AMM V4 (Automated Market Maker) trading operations
+6. **Event Subscription**: Subscribe to PumpFun, PumpSwap, Bonk, Raydium CPMM, and Raydium AMM V4 program trading events
+7. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
+8. **ShredStream Support**: Subscribe to program events using ShredStream
+9. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
+10. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
+11. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
+12. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
 
 ## Installation
 
@@ -31,14 +33,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.0" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.1" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.4.0"
+sol-trade-sdk = "0.4.1"
 ```
 
 ## Usage Examples
@@ -536,7 +538,62 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 6. Bonk Trading Operations
+### 6. Raydium AMM V4 Trading Operations
+
+```rust
+use sol_trade_sdk::trading::core::params::RaydiumAmmV4Params;
+
+async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Raydium AMM V4 trading...");
+
+    let trade_client = test_create_solana_trade_client().await?;
+
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?; // Token address
+    let buy_sol_cost = 100_000; // 0.0001 SOL (in lamports)
+    let slippage_basis_points = Some(100); // 1% slippage
+    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+    let amm_address = Pubkey::from_str("xxxxxx")?; // AMM pool address
+
+    println!("Buying tokens from Raydium AMM V4...");
+    trade_client.buy(
+        DexType::RaydiumAmmV4,
+        mint_pubkey,
+        None,
+        buy_sol_cost,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
+        Box::new(
+            RaydiumAmmV4Params::from_amm_address_by_rpc(&trade_client.rpc, amm_address).await?,
+        ),
+        None,
+    ).await?;
+
+    println!("Selling tokens from Raydium AMM V4...");
+    let amount_token = 100_000_000; // Token amount to sell
+    
+    trade_client.sell(
+        DexType::RaydiumAmmV4,
+        mint_pubkey,
+        None,
+        amount_token,
+        slippage_basis_points,
+        recent_blockhash,
+        None,
+        false,
+        // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
+        Box::new(
+            RaydiumAmmV4Params::from_amm_address_by_rpc(&trade_client.rpc, amm_address).await?,
+        ),
+        None,
+    ).await?;
+
+    Ok(())
+}
+```
+
+### 7. Bonk Trading Operations
 
 ```rust
 
@@ -679,7 +736,138 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### 7. Custom Priority Fee Configuration
+### 8. Middleware System
+
+The SDK provides a powerful middleware system that allows you to modify, add, or remove instructions before transaction execution. This gives you tremendous flexibility to customize trading behavior.
+
+#### 8.1 Using Built-in Logging Middleware
+
+```rust
+use sol_trade_sdk::{
+    trading::{
+        factory::DexType,
+        middleware::builtin::LoggingMiddleware,
+        MiddlewareManager,
+    },
+};
+
+async fn test_middleware() -> AnyResult<()> {
+    let mut client = test_create_solana_trade_client().await?;
+    
+    // SDK example middleware that prints instruction information
+    // You can reference LoggingMiddleware to implement the InstructionMiddleware trait for your own middleware
+    let middleware_manager = MiddlewareManager::new()
+        .add_middleware(Box::new(LoggingMiddleware));
+    
+    client = client.with_middleware_manager(middleware_manager);
+    
+    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
+    let mint_pubkey = Pubkey::from_str("xxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let pool_address = Pubkey::from_str("xxxx")?;
+    
+    // Buy tokens
+    println!("Buying tokens from PumpSwap...");
+    client
+        .buy(
+            DexType::PumpSwap,
+            mint_pubkey,
+            Some(creator),
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
+            None,
+        )
+        .await?;
+    Ok(())
+}
+```
+
+#### 8.2 Creating Custom Middleware
+
+You can create custom middleware by implementing the `InstructionMiddleware` trait:
+
+```rust
+use sol_trade_sdk::trading::middleware::traits::InstructionMiddleware;
+use anyhow::Result;
+use solana_sdk::instruction::Instruction;
+
+/// Custom middleware example - Add additional instructions
+#[derive(Clone)]
+pub struct CustomMiddleware;
+
+impl InstructionMiddleware for CustomMiddleware {
+    fn name(&self) -> &'static str {
+        "CustomMiddleware"
+    }
+
+    fn process_protocol_instructions(
+        &self,
+        protocol_instructions: Vec<Instruction>,
+        protocol_name: String,
+        is_buy: bool,
+    ) -> Result<Vec<Instruction>> {
+        println!("Custom middleware processing, protocol: {}", protocol_name);
+        
+        // Here you can:
+        // 1. Modify existing instructions
+        // 2. Add new instructions
+        // 3. Remove specific instructions
+        
+        // Example: Add a custom instruction at the beginning
+        // let custom_instruction = create_your_custom_instruction();
+        // instructions.insert(0, custom_instruction);
+        
+        Ok(protocol_instructions)
+    }
+
+    fn process_full_instructions(
+        &self,
+        full_instructions: Vec<Instruction>,
+        protocol_name: String,
+        is_buy: bool,
+    ) -> Result<Vec<Instruction>> {
+        println!("Custom middleware processing, instruction count: {}", full_instructions.len());
+        Ok(full_instructions)
+    }
+
+    fn clone_box(&self) -> Box<dyn InstructionMiddleware> {
+        Box::new(self.clone())
+    }
+}
+
+// Using custom middleware
+async fn test_custom_middleware() -> AnyResult<()> {
+    let mut client = test_create_solana_trade_client().await?;
+    
+    let middleware_manager = MiddlewareManager::new()
+        .add_middleware(Box::new(LoggingMiddleware))           // Logging middleware
+        .add_middleware(Box::new(CustomMiddleware));
+    
+    client = client.with_middleware_manager(middleware_manager);
+    
+    // Now all transactions will be processed through your middleware
+    // ...
+    Ok(())
+}
+```
+
+#### 8.3 Middleware Execution Order
+
+Middleware executes in the order they are added:
+
+```rust
+let middleware_manager = MiddlewareManager::new()
+    .add_middleware(Box::new(FirstMiddleware))   // Executes first
+    .add_middleware(Box::new(SecondMiddleware))  // Executes second
+    .add_middleware(Box::new(ThirdMiddleware));  // Executes last
+```
+
+### 9. Custom Priority Fee Configuration
 
 ```rust
 use sol_trade_sdk::common::PriorityFee;
@@ -711,6 +899,7 @@ let trade_config = TradeConfig {
 - **PumpSwap**: PumpFun's swap protocol
 - **Bonk**: Token launch platform (letsbonk.fun)
 - **Raydium CPMM**: Raydium's Concentrated Pool Market Maker protocol
+- **Raydium AMM V4**: Raydium's Automated Market Maker V4 protocol
 
 ## MEV Protection Services
 
@@ -724,9 +913,9 @@ let trade_config = TradeConfig {
 
 ### Unified Trading Interface
 
-- **TradingProtocol Enum**: Use unified protocol enums (PumpFun, PumpSwap, Bonk, RaydiumCpmm)
+- **TradingProtocol Enum**: Use unified protocol enums (PumpFun, PumpSwap, Bonk, RaydiumCpmm, RaydiumAmmV4)
 - **Unified buy/sell Methods**: All protocols use the same trading method signatures
-- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, RaydiumCpmmParams, etc.)
+- **Protocol-specific Parameters**: Each protocol has its own parameter structure (PumpFunParams, RaydiumCpmmParams, RaydiumAmmV4Params, etc.)
 
 ### Event Parsing System
 
@@ -744,6 +933,24 @@ let trade_config = TradeConfig {
 
 The SDK includes price calculation utilities for all supported protocols in `src/utils/price/`.
 
+## Amount Calculation Utilities
+
+The SDK provides trading amount calculation functionality for various protocols, located in `src/utils/calc/`:
+
+- **Common Calculation Functions**: Provides general fee calculation and division utilities
+- **Protocol-Specific Calculations**: Specialized calculation logic for each protocol
+  - **PumpFun**: Token buy/sell amount calculations based on bonding curves
+  - **PumpSwap**: Amount calculations for multiple trading pairs
+  - **Raydium AMM V4**: Amount and fee calculations for automated market maker pools
+  - **Raydium CPMM**: Amount calculations for constant product market makers
+  - **Bonk**: Specialized calculation logic for Bonk tokens
+
+Key features include:
+- Calculate output amounts based on input amounts
+- Fee calculation and distribution
+- Slippage protection calculations
+- Liquidity pool state calculations
+
 ## Project Structure
 
 ```
@@ -755,20 +962,32 @@ src/
 ├── trading/          # Unified trading engine
 │   ├── common/       # Common trading tools
 │   ├── core/         # Core trading engine
+│   ├── middleware/   # Middleware system
+│   │   ├── builtin.rs    # Built-in middleware implementations
+│   │   ├── traits.rs     # Middleware trait definitions
+│   │   └── mod.rs        # Middleware module
 │   ├── bonk/         # Bonk trading implementation
 │   ├── pumpfun/      # PumpFun trading implementation
 │   ├── pumpswap/     # PumpSwap trading implementation
 │   ├── raydium_cpmm/ # Raydium CPMM trading implementation
+│   ├── raydium_amm_v4/ # Raydium AMM V4 trading implementation
 │   └── factory.rs    # Trading factory
 ├── utils/            # Utility functions
-│   └── price/        # Price calculation utilities
-│       ├── common.rs       # Common price functions
-│       ├── bonk.rs         # Bonk price calculations
-│       ├── pumpfun.rs      # PumpFun price calculations
-│       ├── pumpswap.rs     # PumpSwap price calculations
-│       ├── raydium_cpmm.rs # Raydium CPMM price calculations
-│       ├── raydium_clmm.rs # Raydium CLMM price calculations
-│       └── raydium_amm_v4.rs # Raydium AMM V4 price calculations
+│   ├── price/        # Price calculation utilities
+│   │   ├── common.rs       # Common price functions
+│   │   ├── bonk.rs         # Bonk price calculations
+│   │   ├── pumpfun.rs      # PumpFun price calculations
+│   │   ├── pumpswap.rs     # PumpSwap price calculations
+│   │   ├── raydium_cpmm.rs # Raydium CPMM price calculations
+│   │   ├── raydium_clmm.rs # Raydium CLMM price calculations
+│   │   └── raydium_amm_v4.rs # Raydium AMM V4 price calculations
+│   └── calc/         # Amount calculation utilities
+│       ├── common.rs       # Common calculation functions
+│       ├── bonk.rs         # Bonk amount calculations
+│       ├── pumpfun.rs      # PumpFun amount calculations
+│       ├── pumpswap.rs     # PumpSwap amount calculations
+│       ├── raydium_cpmm.rs # Raydium CPMM amount calculations
+│       └── raydium_amm_v4.rs # Raydium AMM V4 amount calculations
 ├── lib.rs            # Main library file
 └── main.rs           # Example program
 ```

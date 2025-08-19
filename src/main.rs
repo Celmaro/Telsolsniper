@@ -1,31 +1,36 @@
 use std::{str::FromStr, sync::Arc};
 
-use sol_trade_sdk::solana_streamer_sdk::{
-    match_event,
-    streaming::{
-        event_parser::{
-            protocols::{
-                bonk::{BonkPoolCreateEvent, BonkTradeEvent},
-                pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
-                pumpswap::{
-                    PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
-                    PumpSwapSellEvent, PumpSwapWithdrawEvent,
-                },
-                raydium_cpmm::RaydiumCpmmSwapEvent,
-            },
-            Protocol, UnifiedEvent,
-        },
-        ShredStreamGrpc, YellowstoneGrpc,
-    },
-};
 use sol_trade_sdk::{
     common::{AnyResult, PriorityFee, TradeConfig},
     swqos::{SwqosConfig, SwqosRegion},
     trading::{
         core::params::{BonkParams, PumpFunParams, PumpSwapParams, RaydiumCpmmParams},
         factory::DexType,
+        middleware::builtin::LoggingMiddleware,
+        MiddlewareManager,
     },
     SolanaTrade,
+};
+use sol_trade_sdk::{
+    solana_streamer_sdk::{
+        match_event,
+        streaming::{
+            event_parser::{
+                protocols::{
+                    bonk::{BonkPoolCreateEvent, BonkTradeEvent},
+                    pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
+                    pumpswap::{
+                        PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
+                        PumpSwapSellEvent, PumpSwapWithdrawEvent,
+                    },
+                    raydium_cpmm::RaydiumCpmmSwapEvent,
+                },
+                Protocol, UnifiedEvent,
+            },
+            ShredStreamGrpc, YellowstoneGrpc,
+        },
+    },
+    trading::core::params::RaydiumAmmV4Params,
 };
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
 use solana_streamer_sdk::streaming::{
@@ -41,9 +46,11 @@ use solana_streamer_sdk::streaming::{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_create_solana_trade_client().await?;
+    test_middleware().await?;
     test_pumpswap().await?;
     test_bonk().await?;
     test_raydium_cpmm().await?;
+    test_raydium_amm_v4().await?;
     test_grpc().await?;
     test_shreds().await?;
     Ok(())
@@ -85,6 +92,36 @@ fn create_trade_config(rpc_url: String, swqos_configs: Vec<SwqosConfig>) -> Trad
         swqos_configs,
         lookup_table_key: None,
     }
+}
+async fn test_middleware() -> AnyResult<()> {
+    let mut client = test_create_solana_trade_client().await?;
+    // SDK example middleware that prints instruction information
+    // You can reference LoggingMiddleware to implement the InstructionMiddleware trait for your own middleware
+    let middleware_manager = MiddlewareManager::new().add_middleware(Box::new(LoggingMiddleware));
+    client = client.with_middleware_manager(middleware_manager);
+    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
+    let mint_pubkey = Pubkey::from_str("xxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let pool_address = Pubkey::from_str("xxxx")?;
+    // Buy tokens
+    println!("Buying tokens from PumpSwap...");
+    client
+        .buy(
+            DexType::PumpSwap,
+            mint_pubkey,
+            Some(creator),
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            // Through RPC call, adds latency. Can optimize by using from_buy_trade or manually initializing PumpSwapParams
+            Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
+            None,
+        )
+        .await?;
+    Ok(())
 }
 
 async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
@@ -436,6 +473,54 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(
                 RaydiumCpmmParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?,
             ),
+            None,
+        )
+        .await?;
+
+    Ok(())
+}
+
+async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Raydium Amm V4 trading...");
+
+    let client = test_create_solana_trade_client().await?;
+    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
+    let buy_sol_cost = 100_000;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let amm_address = Pubkey::from_str("xxxxxx")?;
+    // Buy tokens
+    println!("Buying tokens from Raydium Amm V4...");
+    client
+        .buy(
+            DexType::RaydiumAmmV4,
+            mint_pubkey,
+            None,
+            buy_sol_cost,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
+            Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
+            None,
+        )
+        .await?;
+
+    // Sell tokens
+    println!("Selling tokens from Raydium Amm V4...");
+    let amount_token = 0;
+    client
+        .sell(
+            DexType::RaydiumAmmV4,
+            mint_pubkey,
+            None,
+            amount_token,
+            slippage_basis_points,
+            recent_blockhash,
+            None,
+            false,
+            // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
+            Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
             None,
         )
         .await?;

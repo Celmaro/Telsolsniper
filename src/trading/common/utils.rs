@@ -6,6 +6,25 @@ use spl_token::instruction::close_account;
 use crate::common::SolanaRpcClient;
 use anyhow::anyhow;
 
+/// Get the balances of two tokens in the pool
+///
+/// # Returns
+/// Returns token0_balance, token1_balance
+pub async fn get_multi_token_balances(
+    rpc: &SolanaRpcClient,
+    token0_vault: &Pubkey,
+    token1_vault: &Pubkey,
+) -> Result<(u64, u64), anyhow::Error> {
+    let token0_balance = rpc.get_token_account_balance(&token0_vault).await?;
+    let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
+    // Parse balance string to u64
+    let token0_amount =
+        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
+    let token1_amount =
+        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
+    Ok((token0_amount, token1_amount))
+}
+
 #[inline]
 pub async fn get_token_balance(
     rpc: &SolanaRpcClient,

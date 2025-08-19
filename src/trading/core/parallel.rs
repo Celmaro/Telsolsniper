@@ -6,11 +6,14 @@ use tokio::task::JoinHandle;
 
 use crate::{
     common::PriorityFee,
-    swqos::{SwqosType, SwqosClient, TradeType},
-    trading::core::timer::TradeTimer,
-    trading::common::{
-        build_rpc_transaction, build_sell_tip_transaction_with_priority_fee,
-        build_sell_transaction, build_tip_transaction_with_priority_fee,
+    swqos::{SwqosClient, SwqosType, TradeType},
+    trading::{
+        common::{
+            build_rpc_transaction, build_sell_tip_transaction_with_priority_fee,
+            build_sell_transaction, build_tip_transaction_with_priority_fee,
+        },
+        core::timer::TradeTimer,
+        MiddlewareManager,
     },
 };
 
@@ -24,6 +27,9 @@ pub async fn parallel_execute_with_tips(
     recent_blockhash: Hash,
     data_size_limit: u32,
     trade_type: TradeType,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: String,
+    is_buy: bool,
 ) -> Result<()> {
     let cores = core_affinity::get_core_ids().unwrap();
     let mut handles: Vec<JoinHandle<Result<()>>> = vec![];
@@ -35,10 +41,14 @@ pub async fn parallel_execute_with_tips(
         let mut priority_fee = priority_fee.clone();
         let core_id = cores[i % cores.len()];
 
+        let middleware_manager = middleware_manager.clone();
+        let protocol_name = protocol_name.clone();
+
         let handle = tokio::spawn(async move {
             core_affinity::set_for_current(core_id);
 
-            let mut timer = TradeTimer::new(format!("构建交易指令: {:?}", swqos_client.get_swqos_type()));
+            let mut timer =
+                TradeTimer::new(format!("构建交易指令: {:?}", swqos_client.get_swqos_type()));
 
             let transaction = if matches!(trade_type, TradeType::Sell)
                 && swqos_client.get_swqos_type() == SwqosType::Default
@@ -49,6 +59,9 @@ pub async fn parallel_execute_with_tips(
                     instructions,
                     lookup_table_key,
                     recent_blockhash,
+                    middleware_manager,
+                    protocol_name,
+                    is_buy,
                 )
                 .await?
             } else if matches!(trade_type, TradeType::Sell)
@@ -63,6 +76,9 @@ pub async fn parallel_execute_with_tips(
                     &tip_account,
                     lookup_table_key,
                     recent_blockhash,
+                    middleware_manager,
+                    protocol_name,
+                    is_buy,
                 )
                 .await?
             } else if swqos_client.get_swqos_type() == SwqosType::Default {
@@ -73,6 +89,9 @@ pub async fn parallel_execute_with_tips(
                     lookup_table_key,
                     recent_blockhash,
                     data_size_limit,
+                    middleware_manager,
+                    protocol_name,
+                    is_buy,
                 )
                 .await?
             } else {
@@ -88,15 +107,16 @@ pub async fn parallel_execute_with_tips(
                     lookup_table_key,
                     recent_blockhash,
                     data_size_limit,
+                    middleware_manager,
+                    protocol_name,
+                    is_buy,
                 )
                 .await?
             };
 
             timer.stage(format!("提交交易指令: {:?}", swqos_client.get_swqos_type()));
 
-            swqos_client
-                .send_transaction(trade_type, &transaction)
-                .await?;
+            swqos_client.send_transaction(trade_type, &transaction).await?;
 
             timer.finish();
             Ok::<(), anyhow::Error>(())
