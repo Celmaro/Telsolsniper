@@ -80,7 +80,7 @@ pub const NODE1_TIP_ACCOUNTS: &[Pubkey] = &[
 pub const SWQOS_ENDPOINTS_JITO: [&str; 8] = [
     "https://ny.mainnet.block-engine.jito.wtf", 
     "https://frankfurt.mainnet.block-engine.jito.wtf",
-    "https://ams.block-engine.jito.wtf",
+    "https://amsterdam.mainnet.block-engine.jito.wtf",
     "https://slc.mainnet.block-engine.jito.wtf",
     "https://tokyo.mainnet.block-engine.jito.wtf",
     "https://london.mainnet.block-engine.jito.wtf",
