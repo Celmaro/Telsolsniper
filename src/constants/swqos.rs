@@ -59,6 +59,15 @@ pub const BLOX_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("FogxVNs6Mm2w9rnGL1vkARSwJxvLE8mujTv3LK8RnUhF"),
 ];
 
+pub const NODE1_TIP_ACCOUNTS: &[Pubkey] = &[
+    pubkey!("node1PqAa3BWWzUnTHVbw8NJHC874zn9ngAkXjgWEej"),
+    pubkey!("node1UzzTxAAeBTpfZkQPJXBAqixsbdth11ba1NXLBG"),
+    pubkey!("node1Qm1bV4fwYnCurP8otJ9s5yrkPq7SPZ5uhj3Tsv"),
+    pubkey!("node1PUber6SFmSQgvf2ECmXsHP5o3boRSGhvJyPMX1"),
+    pubkey!("node1AyMbeqiVN6eoQzEAwCA6Pk826hrdqdAHR7cdJ3"),
+    pubkey!("node1YtWCoTwwVYTFLfS19zquRQzYX332hs1HEuRBjC"),
+];
+
 // NewYork,
 // Frankfurt,
 // Amsterdam,
@@ -121,5 +130,16 @@ pub const SWQOS_ENDPOINTS_BLOX: [&str; 8] = [
     "https://uk.solana.dex.blxrbdn.com",
     "https://la.solana.dex.blxrbdn.com",
     "https://germany.solana.dex.blxrbdn.com",
+];
+
+pub const SWQOS_ENDPOINTS_NODE1: [&str; 8] = [
+    "https://ny.node1.me",
+    "http://ny.node1.me",
+    "https://ams.node1.me",
+    "http://ams.node1.me",
+    "https://fra.node1.me",
+    "http://fra.node1.me",
+    "https://fra.node1.me",
+    "http://fra.node1.me",
 ];
 

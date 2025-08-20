@@ -13,7 +13,7 @@
 6. **事件订阅**: 订阅 PumpFun、PumpSwap、Bonk、Raydium CPMM 和 Raydium AMM V4 程序的交易事件
 7. **Yellowstone gRPC**: 使用 Yellowstone gRPC 订阅程序事件
 8. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
-9. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute 等服务
+9. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、Node1 等服务
 10. **并发交易**: 同时使用多个 MEV 服务发送交易，最快的成功，其他失败
 11. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
 12. **中间件系统**: 支持自定义指令中间件，可在交易执行前对指令进行修改、添加或移除
@@ -33,14 +33,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.2" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.3" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.4.2"
+sol-trade-sdk = "0.4.3"
 ```
 
 ## 使用示例
@@ -268,6 +268,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 - **Bloxroute**: 第一个参数是 API Token  
 - **ZeroSlot**: 第一个参数是 API Token
 - **Temporal**: 第一个参数是 API Token
+- **Node1**: 第一个参数是 API Token
 
 ```rust
 use std::{str::FromStr, sync::Arc};
@@ -292,6 +293,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
     ];
 
@@ -928,6 +930,7 @@ let trade_config = TradeConfig {
 - **ZeroSlot**: 零延迟交易
 - **Temporal**: 时间敏感交易
 - **Bloxroute**: 区块链网络加速
+- **Node1**: 高速交易执行，支持 API 密钥认证
 
 ## 新架构特性
 

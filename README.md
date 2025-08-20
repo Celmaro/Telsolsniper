@@ -13,7 +13,7 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 6. **Event Subscription**: Subscribe to PumpFun, PumpSwap, Bonk, Raydium CPMM, and Raydium AMM V4 program trading events
 7. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
 8. **ShredStream Support**: Subscribe to program events using ShredStream
-9. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, and other services
+9. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, Node1, and other services
 10. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
 11. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
 12. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
@@ -33,14 +33,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.2" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.4.3" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.4.2"
+sol-trade-sdk = "0.4.3"
 ```
 
 ## Usage Examples
@@ -268,6 +268,7 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **Bloxroute**: The first parameter is API Token  
 - **ZeroSlot**: The first parameter is API Token
 - **Temporal**: The first parameter is API Token
+- **Node1**: The first parameter is API Token
 
 ```rust
 use std::{str::FromStr, sync::Arc};
@@ -292,6 +293,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
     ];
 
@@ -908,6 +910,7 @@ let trade_config = TradeConfig {
 - **ZeroSlot**: Zero-latency transactions
 - **Temporal**: Time-sensitive transactions
 - **Bloxroute**: Blockchain network acceleration
+- **Node1**: High-speed transaction execution with API key authentication
 
 ## New Architecture Features
 
