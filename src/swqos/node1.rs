@@ -14,6 +14,8 @@ use crate::swqos::SwqosClientTrait;
 
 use crate::{common::SolanaRpcClient, constants::swqos::NODE1_TIP_ACCOUNTS};
 
+use tokio::task::JoinHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone)]
 pub struct Node1Client {
@@ -21,6 +23,8 @@ pub struct Node1Client {
     pub auth_token: String,
     pub rpc_client: Arc<SolanaRpcClient>,
     pub http_client: Client,
+    pub ping_handle: Arc<Option<JoinHandle<()>>>,
+    pub stop_ping: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -47,15 +51,95 @@ impl Node1Client {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()
-            .pool_idle_timeout(Duration::from_secs(60))
-            .pool_max_idle_per_host(64)
-            .tcp_keepalive(Some(Duration::from_secs(1200)))
-            .http2_keep_alive_interval(Duration::from_secs(15))
-            .timeout(Duration::from_secs(10))
+            // 由于有 ping 机制，可以延长连接池空闲超时
+            .pool_idle_timeout(Duration::from_secs(300)) // 5分钟，比 ping 间隔更长
+            .pool_max_idle_per_host(32) // 减少连接数，因为连接会更稳定
+            // TCP keepalive 可以设置得更长，因为 ping 会主动保持连接
+            .tcp_keepalive(Some(Duration::from_secs(300))) // 5分钟
+            // HTTP/2 keepalive 间隔可以更长
+            .http2_keep_alive_interval(Duration::from_secs(30)) // 30秒
+            // 请求超时可以适当延长，因为连接更稳定
+            .timeout(Duration::from_secs(15)) // 15秒
             .connect_timeout(Duration::from_secs(5))
             .build()
             .unwrap();
-        Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
+        
+        let client = Self { 
+            rpc_client: Arc::new(rpc_client), 
+            endpoint, 
+            auth_token, 
+            http_client,
+            ping_handle: Arc::new(None),
+            stop_ping: Arc::new(AtomicBool::new(false)),
+        };
+        
+        // 启动 ping 任务
+        client.start_ping_task();
+        
+        client
+    }
+
+    /// 启动定期 ping 任务以保持连接活跃
+    fn start_ping_task(&self) {
+        let endpoint = self.endpoint.clone();
+        let auth_token = self.auth_token.clone();
+        let http_client = self.http_client.clone();
+        let stop_ping = self.stop_ping.clone();
+        
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60)); // 每60秒ping一次
+            
+            loop {
+                interval.tick().await;
+                
+                if stop_ping.load(Ordering::Relaxed) {
+                    break;
+                }
+                
+                // 发送 ping 请求
+                if let Err(e) = Self::send_ping_request(&http_client, &endpoint, &auth_token).await {
+                    eprintln!("Node1 ping 请求失败: {}", e);
+                }
+            }
+        });
+        
+        // 更新 ping_handle
+        if let Some(old_handle) = self.ping_handle.as_ref() {
+            old_handle.abort();
+        }
+        *Arc::get_mut(&mut self.ping_handle.clone()).unwrap() = Some(handle);
+    }
+
+    /// 发送 ping 请求到 /ping 端点
+    async fn send_ping_request(http_client: &Client, endpoint: &str, _auth_token: &str) -> Result<()> {
+        // 构建 ping URL
+        let ping_url = if endpoint.ends_with('/') {
+            format!("{}ping", endpoint)
+        } else {
+            format!("{}/ping", endpoint)
+        };
+        
+        // 发送 GET 请求到 /ping 端点（不需要 api-key）
+        let response = http_client.get(&ping_url)
+            .send()
+            .await?;
+        
+        if response.status().is_success() {
+            // ping 成功，连接保持活跃
+            // 可以选择性地记录日志，但为了减少噪音，这里不打印
+        } else {
+            eprintln!("Node1 ping 请求返回非成功状态: {}", response.status());
+        }
+        
+        Ok(())
+    }
+
+    /// 停止 ping 任务
+    pub fn stop_ping_task(&self) {
+        self.stop_ping.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.ping_handle.as_ref() {
+            handle.abort();
+        }
     }
 
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
@@ -108,5 +192,12 @@ impl Node1Client {
             self.send_transaction(trade_type, transaction).await?;
         }
         Ok(())
+    }
+}
+
+impl Drop for Node1Client {
+    fn drop(&mut self) {
+        // 确保在客户端被销毁时停止 ping 任务
+        self.stop_ping_task();
     }
 }
