@@ -293,6 +293,7 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        // Add tg official customer https://t.me/node1_me to get free Node1 key
         SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
     ];
