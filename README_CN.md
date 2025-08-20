@@ -268,7 +268,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 - **Bloxroute**: 第一个参数是 API Token  
 - **ZeroSlot**: 第一个参数是 API Token
 - **Temporal**: 第一个参数是 API Token
-- **Node1**: 第一个参数是 API Token
+- **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！
 
 ```rust
 use std::{str::FromStr, sync::Arc};

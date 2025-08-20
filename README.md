@@ -268,7 +268,8 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **Bloxroute**: The first parameter is API Token  
 - **ZeroSlot**: The first parameter is API Token
 - **Temporal**: The first parameter is API Token
-- **Node1**: The first parameter is API Token
+- **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me
+ to get a free key and instantly accelerate your trades!
 
 ```rust
 use std::{str::FromStr, sync::Arc};
