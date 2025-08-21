@@ -268,8 +268,9 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **Bloxroute**: The first parameter is API Token  
 - **ZeroSlot**: The first parameter is API Token
 - **Temporal**: The first parameter is API Token
+- **FlashBlock**: The first parameter is API Token, Add the official TG support at https://t.me/FlashBlock_Official to get a free key and instantly accelerate your trades! Official docs: https://doc.flashblock.trade/
 - **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me
- to get a free key and instantly accelerate your trades!
+ to get a free key and instantly accelerate your trades! Official docs: https://node1.me/docs.html
 
 ```rust
 use std::{str::FromStr, sync::Arc};
@@ -294,6 +295,8 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        // Add tg official customer https://t.me/FlashBlock_Official to get free FlashBlock key
+        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         // Add tg official customer https://t.me/node1_me to get free Node1 key
         SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
@@ -912,7 +915,8 @@ let trade_config = TradeConfig {
 - **ZeroSlot**: Zero-latency transactions
 - **Temporal**: Time-sensitive transactions
 - **Bloxroute**: Blockchain network acceleration
-- **Node1**: High-speed transaction execution with API key authentication
+- **FlashBlock**: High-speed transaction execution with API key authentication - [Official Docs](https://doc.flashblock.trade/)
+- **Node1**: High-speed transaction execution with API key authentication - [Official Docs](https://node1.me/docs.html)
 
 ## New Architecture Features
 

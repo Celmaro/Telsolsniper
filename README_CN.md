@@ -268,7 +268,8 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 - **Bloxroute**: 第一个参数是 API Token  
 - **ZeroSlot**: 第一个参数是 API Token
 - **Temporal**: 第一个参数是 API Token
-- **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！
+- **FlashBlock**: 第一个参数是 API Token, 添加tg官方客服https://t.me/FlashBlock_Official 获取免费key立即加速你的交易！官方文档: https://doc.flashblock.trade/
+- **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！官方文档: https://node1.me/docs.html
 
 ```rust
 use std::{str::FromStr, sync::Arc};
@@ -293,6 +294,8 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        // 添加tg官方客服 https://t.me/FlashBlock_Official 获取免费 FlashBlock key
+        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         // 添加tg官方客服 https://t.me/node1_me 获取免费 Node1 key
         SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.clone()),
@@ -931,7 +934,8 @@ let trade_config = TradeConfig {
 - **ZeroSlot**: 零延迟交易
 - **Temporal**: 时间敏感交易
 - **Bloxroute**: 区块链网络加速
-- **Node1**: 高速交易执行，支持 API 密钥认证
+- **FlashBlock**: 高速交易执行，支持 API 密钥认证 - [官方文档](https://doc.flashblock.trade/)
+- **Node1**: 高速交易执行，支持 API 密钥认证 - [官方文档](https://node1.me/docs.html)
 
 ## 新架构特性
 

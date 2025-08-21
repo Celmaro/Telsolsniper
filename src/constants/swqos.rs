@@ -68,6 +68,19 @@ pub const NODE1_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("node1YtWCoTwwVYTFLfS19zquRQzYX332hs1HEuRBjC"),
 ];
 
+pub const FLASHBLOCK_TIP_ACCOUNTS: &[Pubkey] = &[
+    pubkey!("FLaShB3iXXTWE1vu9wQsChUKq3HFtpMAhb8kAh1pf1wi"),
+    pubkey!("FLashhsorBmM9dLpuq6qATawcpqk1Y2aqaZfkd48iT3W"),
+    pubkey!("FLaSHJNm5dWYzEgnHJWWJP5ccu128Mu61NJLxUf7mUXU"),
+    pubkey!("FLaSHR4Vv7sttd6TyDF4yR1bJyAxRwWKbohDytEMu3wL"),
+    pubkey!("FLASHRzANfcAKDuQ3RXv9hbkBy4WVEKDzoAgxJ56DiE4"),
+    pubkey!("FLasHstqx11M8W56zrSEqkCyhMCCpr6ze6Mjdvqope5s"),
+    pubkey!("FLAShWTjcweNT4NSotpjpxAkwxUr2we3eXQGhpTVzRwy"),
+    pubkey!("FLasHXTqrbNvpWFB6grN47HGZfK6pze9HLNTgbukfPSk"),
+    pubkey!("FLAshyAyBcKb39KPxSzXcepiS8iDYUhDGwJcJDPX4g2B"),
+    pubkey!("FLAsHZTRcf3Dy1APaz6j74ebdMC6Xx4g6i9YxjyrDybR"),
+];
+
 // NewYork,
 // Frankfurt,
 // Amsterdam,
@@ -141,5 +154,16 @@ pub const SWQOS_ENDPOINTS_NODE1: [&str; 8] = [
     "http://ams.node1.me",
     "http://ny.node1.me",
     "http://fra.node1.me",
+];
+
+pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 8] = [
+    "http://ny.flashblock.trade",
+    "http://fra.flashblock.trade",
+    "http://ams.flashblock.trade",
+    "http://slc.flashblock.trade",
+    "http://singapore.flashblock.trade",
+    "http://london.flashblock.trade",
+    "http://ny.flashblock.trade",
+    "http://ny.flashblock.trade",
 ];
 
