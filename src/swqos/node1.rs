@@ -23,7 +23,7 @@ pub struct Node1Client {
     pub auth_token: String,
     pub rpc_client: Arc<SolanaRpcClient>,
     pub http_client: Client,
-    pub ping_handle: Arc<Option<JoinHandle<()>>>,
+    pub ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
     pub stop_ping: Arc<AtomicBool>,
 }
 
@@ -69,18 +69,21 @@ impl Node1Client {
             endpoint, 
             auth_token, 
             http_client,
-            ping_handle: Arc::new(None),
+            ping_handle: Arc::new(tokio::sync::Mutex::new(None)),
             stop_ping: Arc::new(AtomicBool::new(false)),
         };
         
         // 启动 ping 任务
-        client.start_ping_task();
+        let client_clone = client.clone();
+        tokio::spawn(async move {
+            client_clone.start_ping_task().await;
+        });
         
         client
     }
 
     /// 启动定期 ping 任务以保持连接活跃
-    fn start_ping_task(&self) {
+    async fn start_ping_task(&self) {
         let endpoint = self.endpoint.clone();
         let auth_token = self.auth_token.clone();
         let http_client = self.http_client.clone();
@@ -103,11 +106,14 @@ impl Node1Client {
             }
         });
         
-        // 更新 ping_handle
-        if let Some(old_handle) = self.ping_handle.as_ref() {
-            old_handle.abort();
+        // 更新 ping_handle - 使用 Mutex 来安全地更新
+        {
+            let mut ping_guard = self.ping_handle.lock().await;
+            if let Some(old_handle) = ping_guard.as_ref() {
+                old_handle.abort();
+            }
+            *ping_guard = Some(handle);
         }
-        *Arc::get_mut(&mut self.ping_handle.clone()).unwrap() = Some(handle);
     }
 
     /// 发送 ping 请求到 /ping 端点
@@ -118,7 +124,7 @@ impl Node1Client {
         } else {
             format!("{}/ping", endpoint)
         };
-        
+
         // 发送 GET 请求到 /ping 端点（不需要 api-key）
         let response = http_client.get(&ping_url)
             .send()
@@ -132,14 +138,6 @@ impl Node1Client {
         }
         
         Ok(())
-    }
-
-    /// 停止 ping 任务
-    pub fn stop_ping_task(&self) {
-        self.stop_ping.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.ping_handle.as_ref() {
-            handle.abort();
-        }
     }
 
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
@@ -198,6 +196,17 @@ impl Node1Client {
 impl Drop for Node1Client {
     fn drop(&mut self) {
         // 确保在客户端被销毁时停止 ping 任务
-        self.stop_ping_task();
+        self.stop_ping.store(true, Ordering::Relaxed);
+        
+        // 尝试立即停止 ping 任务
+        // 使用 tokio::spawn 来避免阻塞 Drop
+        let ping_handle = self.ping_handle.clone();
+        tokio::spawn(async move {
+            let mut ping_guard = ping_handle.lock().await;
+            if let Some(handle) = ping_guard.as_ref() {
+                handle.abort();
+            }
+            *ping_guard = None;
+        });
     }
 }
