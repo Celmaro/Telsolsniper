@@ -136,6 +136,7 @@ impl SolanaTrade {
     /// * `custom_buy_tip_fee` - Optional custom tip fee for priority processing (in SOL)
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
+    /// * `wait_transaction_confirmed` - Whether to wait for the transaction to be confirmed
     ///
     /// # Returns
     ///
@@ -184,13 +185,14 @@ impl SolanaTrade {
         custom_buy_tip_fee: Option<f64>,
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
+        wait_transaction_confirmed: bool,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
         let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
 
-        let buy_params = BuyParams {
+        let mut buy_params = BuyParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
@@ -201,13 +203,17 @@ impl SolanaTrade {
             lookup_table_key: final_lookup_table_key,
             recent_blockhash,
             data_size_limit: 0,
+            wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
         };
-        let mut priority_fee = buy_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
-            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees =
-                priority_fee.buy_tip_fees.iter().map(|_| custom_buy_tip_fee.unwrap()).collect();
+            buy_params.priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            buy_params.priority_fee.buy_tip_fees = buy_params
+                .priority_fee
+                .buy_tip_fees
+                .iter()
+                .map(|_| custom_buy_tip_fee.unwrap())
+                .collect();
         }
         let buy_with_tip_params = buy_params.clone().with_tip(self.swqos_clients.clone());
 
@@ -247,6 +253,7 @@ impl SolanaTrade {
     /// * `with_tip` - Optional boolean to indicate if the transaction should be sent with tip
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
+    /// * `wait_transaction_confirmed` - Whether to wait for the transaction to be confirmed
     ///
     /// # Returns
     ///
@@ -298,13 +305,14 @@ impl SolanaTrade {
         with_tip: bool,
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
+        wait_transaction_confirmed: bool,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
         let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
 
-        let sell_params = SellParams {
+        let mut sell_params = SellParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
@@ -314,13 +322,17 @@ impl SolanaTrade {
             priority_fee: self.trade_config.priority_fee.clone(),
             lookup_table_key: final_lookup_table_key,
             recent_blockhash,
+            wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
         };
-        let mut priority_fee = sell_params.priority_fee.clone();
         if custom_buy_tip_fee.is_some() {
-            priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
-            priority_fee.buy_tip_fees =
-                priority_fee.buy_tip_fees.iter().map(|_| custom_buy_tip_fee.unwrap()).collect();
+            sell_params.priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
+            sell_params.priority_fee.buy_tip_fees = sell_params
+                .priority_fee
+                .buy_tip_fees
+                .iter()
+                .map(|_| custom_buy_tip_fee.unwrap())
+                .collect();
         }
         let sell_with_tip_params = sell_params.clone().with_tip(self.swqos_clients.clone());
 
@@ -369,6 +381,7 @@ impl SolanaTrade {
     /// * `with_tip` - Whether to use tip for priority processing
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     /// * `lookup_table_key` - Optional lookup table key for address lookup optimization
+    /// * `wait_transaction_confirmed` - Whether to wait for the transaction to be confirmed
     ///
     /// # Returns
     ///
@@ -425,6 +438,7 @@ impl SolanaTrade {
         with_tip: bool,
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
+        wait_transaction_confirmed: bool,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
@@ -441,6 +455,7 @@ impl SolanaTrade {
             with_tip,
             extension_params,
             lookup_table_key,
+            wait_transaction_confirmed,
         )
         .await
     }

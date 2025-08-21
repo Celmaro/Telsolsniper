@@ -36,6 +36,7 @@ pub struct BuyParams {
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
     pub data_size_limit: u32,
+    pub wait_transaction_confirmed: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
@@ -54,6 +55,7 @@ pub struct BuyWithTipParams {
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
     pub data_size_limit: u32,
+    pub wait_transaction_confirmed: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
@@ -70,6 +72,7 @@ pub struct SellParams {
     pub priority_fee: PriorityFee,
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
+    pub wait_transaction_confirmed: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
@@ -87,6 +90,7 @@ pub struct SellWithTipParams {
     pub priority_fee: PriorityFee,
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
+    pub wait_transaction_confirmed: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
@@ -456,6 +460,7 @@ impl BuyParams {
             lookup_table_key: self.lookup_table_key,
             recent_blockhash: self.recent_blockhash,
             data_size_limit: self.data_size_limit,
+            wait_transaction_confirmed: self.wait_transaction_confirmed,
             protocol_params: self.protocol_params,
         }
     }
@@ -476,6 +481,7 @@ impl SellParams {
             priority_fee: self.priority_fee,
             lookup_table_key: self.lookup_table_key,
             recent_blockhash: self.recent_blockhash,
+            wait_transaction_confirmed: self.wait_transaction_confirmed,
             protocol_params: self.protocol_params,
         }
     }

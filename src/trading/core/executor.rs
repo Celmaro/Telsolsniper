@@ -76,7 +76,12 @@ impl TradeExecutor for GenericTradeExecutor {
         timer.stage("rpc提交确认");
 
         // 发送交易
-        rpc.send_and_confirm_transaction(&transaction).await?;
+        if params.wait_transaction_confirmed {
+            rpc.send_and_confirm_transaction(&transaction).await?;
+        } else {
+            // 异步发送交易
+            rpc.send_transaction(&transaction).await?;
+        }
         timer.finish();
 
         Ok(())
@@ -104,6 +109,7 @@ impl TradeExecutor for GenericTradeExecutor {
             lookup_table_key: params.lookup_table_key,
             recent_blockhash: params.recent_blockhash,
             data_size_limit: params.data_size_limit,
+            wait_transaction_confirmed: params.wait_transaction_confirmed,
             protocol_params: params.protocol_params.clone(),
         };
 
@@ -134,6 +140,7 @@ impl TradeExecutor for GenericTradeExecutor {
             middleware_manager,
             self.protocol_name.to_string(),
             true,
+            params.wait_transaction_confirmed,
         )
         .await?;
 
@@ -179,7 +186,11 @@ impl TradeExecutor for GenericTradeExecutor {
         timer.stage("卖出交易签名");
 
         // 发送交易
-        rpc.send_and_confirm_transaction(&transaction).await?;
+        if params.wait_transaction_confirmed {
+            rpc.send_and_confirm_transaction(&transaction).await?;
+        } else {
+            rpc.send_transaction(&transaction).await?;
+        }
         timer.finish();
 
         Ok(())
@@ -203,6 +214,7 @@ impl TradeExecutor for GenericTradeExecutor {
             priority_fee: params.priority_fee.clone(),
             lookup_table_key: params.lookup_table_key,
             recent_blockhash: params.recent_blockhash,
+            wait_transaction_confirmed: params.wait_transaction_confirmed,
             protocol_params: params.protocol_params.clone(),
         };
 
@@ -233,6 +245,7 @@ impl TradeExecutor for GenericTradeExecutor {
             middleware_manager,
             self.protocol_name.to_string(),
             false,
+            params.wait_transaction_confirmed,
         )
         .await?;
 

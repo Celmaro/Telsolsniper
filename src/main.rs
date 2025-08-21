@@ -120,6 +120,7 @@ async fn test_middleware() -> AnyResult<()> {
             // Through RPC call, adds latency. Can optimize by using from_buy_trade or manually initializing PumpSwapParams
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
+            true,
         )
         .await?;
     Ok(())
@@ -148,6 +149,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
             None,
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
+            true,
         )
         .await?;
 
@@ -166,6 +168,7 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
             false,
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
+            true,
         )
         .await?;
 
@@ -205,6 +208,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
                 None,
             )),
             None,
+            true,
         )
         .await?;
 
@@ -229,6 +233,7 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
                 None,
             )),
             None,
+            true,
         )
         .await?;
 
@@ -260,6 +265,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             // Through RPC call, adds latency. Can optimize by using from_buy_trade or manually initializing PumpSwapParams
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
+            true,
         )
         .await?;
 
@@ -279,6 +285,7 @@ async fn test_pumpswap() -> AnyResult<()> {
             // Through RPC call, adds latency. Can optimize by using from_sell_trade or manually initializing PumpSwapParams
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
+            true,
         )
         .await?;
 
@@ -307,6 +314,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
             None,
             Box::new(BonkParams::from_trade(trade_info.clone())),
             None,
+            true,
         )
         .await?;
 
@@ -325,6 +333,7 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
             false,
             Box::new(BonkParams::from_trade(trade_info)),
             None,
+            true,
         )
         .await?;
 
@@ -357,6 +366,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
             None,
             Box::new(BonkParams::from_dev_trade(trade_info.clone())),
             None,
+            true,
         )
         .await?;
 
@@ -375,6 +385,7 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
             false,
             Box::new(BonkParams::from_dev_trade(trade_info)),
             None,
+            true,
         )
         .await?;
 
@@ -404,6 +415,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
+            true,
         )
         .await?;
 
@@ -423,6 +435,7 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             // Through RPC call, adds latency. Can optimize by using from_trade or manually initializing BonkParams
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
+            true,
         )
         .await?;
 
@@ -454,6 +467,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
                 RaydiumCpmmParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?,
             ),
             None,
+            true,
         )
         .await?;
 
@@ -475,6 +489,7 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
                 RaydiumCpmmParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?,
             ),
             None,
+            true,
         )
         .await?;
 
@@ -504,6 +519,7 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
             // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
             Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
             None,
+            true,
         )
         .await?;
 
@@ -523,6 +539,7 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
             // Through RPC call, adds latency, or from_amm_info_and_reserves or manually initialize RaydiumAmmV4Params
             Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
             None,
+            true,
         )
         .await?;
 
