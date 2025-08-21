@@ -104,6 +104,13 @@ pub struct PumpFunParams {
 }
 
 impl PumpFunParams {
+    pub fn immediate_sell(close_token_account_when_sell: bool) -> Self {
+        Self {
+            bonding_curve: Arc::new(BondingCurveAccount { ..Default::default() }),
+            close_token_account_when_sell: Some(close_token_account_when_sell),
+        }
+    }
+
     pub fn from_dev_trade(
         mint: &Pubkey,
         dev_token_amount: u64,
@@ -221,7 +228,7 @@ impl ProtocolParams for PumpSwapParams {
 
 /// Bonk protocol specific parameters
 /// Configuration parameters specific to Bonk trading protocol
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct BonkParams {
     pub virtual_base: u128,
     pub virtual_quote: u128,
@@ -234,6 +241,9 @@ pub struct BonkParams {
 }
 
 impl BonkParams {
+    pub fn immediate_sell() -> Self {
+        Self { auto_handle_wsol: true, ..Default::default() }
+    }
     pub fn from_trade(trade_info: BonkTradeEvent) -> Self {
         Self {
             virtual_base: trade_info.virtual_base as u128,

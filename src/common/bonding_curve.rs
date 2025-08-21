@@ -32,7 +32,7 @@ use crate::{constants::pumpfun::global_constants::{INITIAL_REAL_TOKEN_RESERVES, 
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 
 /// Represents the global configuration account for token pricing and fees
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BondingCurveAccount {
     /// Unique identifier for the bonding curve
     pub discriminator: u64,
