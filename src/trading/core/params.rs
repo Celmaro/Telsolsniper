@@ -17,7 +17,10 @@ use crate::constants::bonk::accounts::{
 use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
 use crate::swqos::SwqosClient;
-use crate::trading::bonk::common::{get_amount_in, get_amount_in_net, get_amount_out};
+use crate::trading::bonk::common::{
+    get_amount_in, get_amount_in_net, get_amount_out, get_creator_associated_account,
+    get_platform_associated_account,
+};
 use crate::trading::common::get_multi_token_balances;
 use crate::trading::pumpswap::common::get_token_balances;
 use crate::trading::raydium_cpmm::common::get_pool_token_balances;
@@ -237,6 +240,9 @@ pub struct BonkParams {
     /// Token program ID
     /// Specifies the program used by the token, usually spl_token::ID or spl_token_2022::ID
     pub mint_token_program: Pubkey,
+    pub platform_onfig: Pubkey,
+    pub platform_associated_account: Pubkey,
+    pub creator_associated_account: Pubkey,
     pub auto_handle_wsol: bool,
 }
 
@@ -251,6 +257,9 @@ impl BonkParams {
             real_base: trade_info.real_base_after as u128,
             real_quote: trade_info.real_quote_after as u128,
             mint_token_program: trade_info.base_token_program,
+            platform_onfig: trade_info.platform_config,
+            platform_associated_account: trade_info.platform_associated_account,
+            creator_associated_account: trade_info.creator_associated_account,
             auto_handle_wsol: true,
         }
     }
@@ -298,6 +307,9 @@ impl BonkParams {
             real_base: real_base,
             real_quote: real_quote,
             mint_token_program: trade_info.base_token_program,
+            platform_onfig: trade_info.platform_config,
+            platform_associated_account: trade_info.platform_associated_account,
+            creator_associated_account: trade_info.creator_associated_account,
             auto_handle_wsol: true,
         }
     }
@@ -311,12 +323,20 @@ impl BonkParams {
                 .unwrap();
         let pool_data = crate::trading::bonk::common::fetch_pool_state(rpc, &pool_address).await?;
         let token_account = rpc.get_account(&pool_data.base_mint).await?;
+        let platform_associated_account =
+            get_platform_associated_account(&pool_data.platform_config);
+        let creator_associated_account = get_creator_associated_account(&pool_data.creator);
+        let platform_associated_account = platform_associated_account.unwrap();
+        let creator_associated_account = creator_associated_account.unwrap();
         Ok(Self {
             virtual_base: pool_data.virtual_base as u128,
             virtual_quote: pool_data.virtual_quote as u128,
             real_base: pool_data.real_base as u128,
             real_quote: pool_data.real_quote as u128,
             mint_token_program: token_account.owner,
+            platform_onfig: pool_data.platform_config,
+            platform_associated_account,
+            creator_associated_account,
             auto_handle_wsol: true,
         })
     }

@@ -120,6 +120,20 @@ pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
     pda.map(|pubkey| pubkey.0)
 }
 
+pub fn get_platform_associated_account(platform_config: &Pubkey) -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[platform_config.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
+    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
+}
+
+pub fn get_creator_associated_account(creator: &Pubkey) -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[creator.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
+    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::constants::bonk::accounts::{PLATFORM_FEE_RATE, PROTOCOL_FEE_RATE, SHARE_FEE_RATE};
