@@ -264,7 +264,7 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 When configuring SWQOS services, note the different parameter requirements for each service:
 
 - **Jito**: The first parameter is UUID, if you don't have a UUID, pass an empty string `""`
-- **NextBlock**: The first parameter is API Token
+- **NextBlock**: The first parameter is API Token, Click here https://nextblock.io/auth?refCode=fnzero to get a free key and accelerate your transactions instantly!
 - **Bloxroute**: The first parameter is API Token  
 - **ZeroSlot**: The first parameter is API Token
 - **Temporal**: The first parameter is API Token
@@ -290,7 +290,9 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // Configure various SWQOS services
     let swqos_configs = vec![
-        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), // First parameter is UUID, pass empty string if no UUID
+        // First parameter is UUID, pass empty string if no UUID
+        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), 
+        // Click here https://nextblock.io/auth?refCode=fnzero to get a free key and accelerate your transactions instantly!
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
