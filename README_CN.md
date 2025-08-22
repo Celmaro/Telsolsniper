@@ -289,7 +289,8 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
     // 配置各种 SWQOS 服务
     let swqos_configs = vec![
-        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), // 第一个参数是 uuid，如果没有 uuid 则传空字符串
+        // 第一个参数是 uuid，如果没有 uuid 则传空字符串
+        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), 
         SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
