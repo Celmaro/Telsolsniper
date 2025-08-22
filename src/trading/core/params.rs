@@ -107,9 +107,9 @@ pub struct PumpFunParams {
 }
 
 impl PumpFunParams {
-    pub fn immediate_sell(close_token_account_when_sell: bool) -> Self {
+    pub fn immediate_sell(creator: Pubkey, close_token_account_when_sell: bool) -> Self {
         Self {
-            bonding_curve: Arc::new(BondingCurveAccount { ..Default::default() }),
+            bonding_curve: Arc::new(BondingCurveAccount { creator, ..Default::default() }),
             close_token_account_when_sell: Some(close_token_account_when_sell),
         }
     }
@@ -247,8 +247,20 @@ pub struct BonkParams {
 }
 
 impl BonkParams {
-    pub fn immediate_sell() -> Self {
-        Self { auto_handle_wsol: true, ..Default::default() }
+    pub fn immediate_sell(
+        mint_token_program: Pubkey,
+        platform_onfig: Pubkey,
+        platform_associated_account: Pubkey,
+        creator_associated_account: Pubkey,
+    ) -> Self {
+        Self {
+            auto_handle_wsol: true,
+            mint_token_program,
+            platform_onfig,
+            platform_associated_account,
+            creator_associated_account,
+            ..Default::default()
+        }
     }
     pub fn from_trade(trade_info: BonkTradeEvent) -> Self {
         Self {
