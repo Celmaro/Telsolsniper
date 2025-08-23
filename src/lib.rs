@@ -129,7 +129,6 @@ impl SolanaTrade {
     ///
     /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to buy
-    /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
     /// * `sol_amount` - Amount of SOL to spend on the purchase (in lamports)
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
@@ -149,36 +148,10 @@ impl SolanaTrade {
     /// - The transaction fails to execute
     /// - Network or RPC errors occur
     /// - Insufficient SOL balance for the purchase
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use solana_sdk::pubkey::Pubkey;
-    /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::DexType;
-    ///
-    /// let mint = Pubkey::new_unique();
-    /// let sol_amount = 1_000_000_000; // 1 SOL in lamports
-    /// let slippage = Some(500); // 5% slippage
-    /// let recent_blockhash = Hash::default();
-    ///
-    /// solana_trade.buy(
-    ///     DexType::PumpFun,
-    ///     mint,
-    ///     None,
-    ///     sol_amount,
-    ///     slippage,
-    ///     recent_blockhash,
-    ///     None,
-    ///     None,
-    ///     Some(lookup_table_pubkey),
-    /// ).await?;
-    /// ```
     pub async fn buy(
         &self,
         dex_type: DexType,
         mint: Pubkey,
-        creator: Option<Pubkey>,
         sol_amount: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
@@ -196,7 +169,6 @@ impl SolanaTrade {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
-            creator: creator.unwrap_or(Pubkey::default()),
             sol_amount: sol_amount,
             slippage_basis_points: slippage_basis_points,
             priority_fee: self.trade_config.priority_fee.clone(),
@@ -245,7 +217,6 @@ impl SolanaTrade {
     ///
     /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to sell
-    /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
     /// * `token_amount` - Amount of tokens to sell (in smallest token units)
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
     /// * `recent_blockhash` - Recent blockhash for transaction validity
@@ -267,37 +238,10 @@ impl SolanaTrade {
     /// - Network or RPC errors occur
     /// - Insufficient token balance for the sale
     /// - Token account doesn't exist or is not properly initialized
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use solana_sdk::pubkey::Pubkey;
-    /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::DexType;
-    ///
-    /// let mint = Pubkey::new_unique();
-    /// let token_amount = 1_000_000; // Amount of tokens to sell
-    /// let slippage = Some(500); // 5% slippage
-    /// let recent_blockhash = Hash::default();
-    ///
-    /// solana_trade.sell(
-    ///     DexType::PumpFun,
-    ///     mint,
-    ///     None,
-    ///     token_amount,
-    ///     slippage,
-    ///     recent_blockhash,
-    ///     None,
-    ///     false,
-    ///     None,
-    ///     Some(lookup_table_pubkey),
-    /// ).await?;
-    /// ```
     pub async fn sell(
         &self,
         dex_type: DexType,
         mint: Pubkey,
-        creator: Option<Pubkey>,
         token_amount: u64,
         slippage_basis_points: Option<u64>,
         recent_blockhash: Hash,
@@ -316,7 +260,6 @@ impl SolanaTrade {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
-            creator: creator.unwrap_or(Pubkey::default()),
             token_amount: Some(token_amount),
             slippage_basis_points: slippage_basis_points,
             priority_fee: self.trade_config.priority_fee.clone(),
@@ -372,7 +315,6 @@ impl SolanaTrade {
     ///
     /// * `dex_type` - The trading protocol to use (PumpFun, PumpSwap, or Bonk)
     /// * `mint` - The public key of the token mint to sell
-    /// * `creator` - Optional creator public key for the token (defaults to Pubkey::default() if None)
     /// * `amount_token` - Total amount of tokens available (in smallest token units)
     /// * `percent` - Percentage of tokens to sell (1-100, where 100 = 100%)
     /// * `slippage_basis_points` - Optional slippage tolerance in basis points (e.g., 100 = 1%)
@@ -396,40 +338,10 @@ impl SolanaTrade {
     /// - Network or RPC errors occur
     /// - Insufficient token balance for the calculated sale amount
     /// - Token account doesn't exist or is not properly initialized
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use solana_sdk::pubkey::Pubkey;
-    /// use solana_sdk::hash::Hash;
-    /// use crate::trading::factory::DexType;
-    ///
-    /// let mint = Pubkey::new_unique();
-    /// let total_tokens = 10_000_000; // Total tokens available
-    /// let percent = 50; // Sell 50% of tokens
-    /// let slippage = Some(500); // 5% slippage
-    /// let recent_blockhash = Hash::default();
-    ///
-    /// // This will sell 5_000_000 tokens (50% of 10_000_000)
-    /// solana_trade.sell_by_percent(
-    ///     DexType::PumpFun,
-    ///     mint,
-    ///     None,
-    ///     total_tokens,
-    ///     percent,
-    ///     slippage,
-    ///     recent_blockhash,
-    ///     None,
-    ///     false,
-    ///     None,
-    ///     None,
-    /// ).await?;
-    /// ```
     pub async fn sell_by_percent(
         &self,
         dex_type: DexType,
         mint: Pubkey,
-        creator: Option<Pubkey>,
         amount_token: u64,
         percent: u64,
         slippage_basis_points: Option<u64>,
@@ -447,7 +359,6 @@ impl SolanaTrade {
         self.sell(
             dex_type,
             mint,
-            creator,
             amount,
             slippage_basis_points,
             recent_blockhash,

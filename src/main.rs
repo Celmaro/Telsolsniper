@@ -101,7 +101,6 @@ async fn test_middleware() -> AnyResult<()> {
     // You can reference LoggingMiddleware to implement the InstructionMiddleware trait for your own middleware
     let middleware_manager = MiddlewareManager::new().add_middleware(Box::new(LoggingMiddleware));
     client = client.with_middleware_manager(middleware_manager);
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
     let mint_pubkey = Pubkey::from_str("xxxxx")?;
     let buy_sol_cost = 100_000;
     let slippage_basis_points = Some(100);
@@ -113,7 +112,6 @@ async fn test_middleware() -> AnyResult<()> {
         .buy(
             DexType::PumpSwap,
             mint_pubkey,
-            Some(creator),
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -131,7 +129,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
     println!("Testing PumpFun trading...");
 
     let client = test_create_solana_trade_client().await?;
-    let creator = Pubkey::from_str("xxxxxx")?;
     let mint_pubkey = Pubkey::from_str("xxxxxx")?;
     let buy_sol_cost = 100_000;
     let slippage_basis_points = Some(100);
@@ -143,7 +140,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         .buy(
             DexType::PumpFun,
             mint_pubkey,
-            Some(creator),
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -161,7 +157,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
         .sell(
             DexType::PumpFun,
             mint_pubkey,
-            Some(creator),
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -185,7 +180,6 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
 
     let client = test_create_solana_trade_client().await?;
     let mint_pubkey = trade_info.mint;
-    let creator = trade_info.creator;
     let slippage_basis_points = Some(100);
     let recent_blockhash = client.rpc.get_latest_blockhash().await?;
 
@@ -196,18 +190,11 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         .buy(
             DexType::PumpFun,
             mint_pubkey,
-            Some(creator),
             buy_sol_amount,
             slippage_basis_points,
             recent_blockhash,
             None,
-            Box::new(PumpFunParams::from_dev_trade(
-                &mint_pubkey,
-                trade_info.token_amount,
-                trade_info.max_sol_cost,
-                creator,
-                None,
-            )),
+            Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
         )
@@ -220,19 +207,12 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
         .sell(
             DexType::PumpFun,
             mint_pubkey,
-            Some(creator),
             amount_token,
             slippage_basis_points,
             recent_blockhash,
             None,
             false,
-            Box::new(PumpFunParams::from_dev_trade(
-                &mint_pubkey,
-                trade_info.token_amount,
-                trade_info.max_sol_cost,
-                creator,
-                None,
-            )),
+            Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
         )
@@ -245,7 +225,6 @@ async fn test_pumpswap() -> AnyResult<()> {
     println!("Testing PumpSwap trading...");
 
     let client = test_create_solana_trade_client().await?;
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
     let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
     let buy_sol_cost = 100_000;
     let slippage_basis_points = Some(100);
@@ -258,7 +237,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         .buy(
             DexType::PumpSwap,
             mint_pubkey,
-            Some(creator),
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -277,7 +255,6 @@ async fn test_pumpswap() -> AnyResult<()> {
         .sell(
             DexType::PumpSwap,
             mint_pubkey,
-            Some(creator),
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -308,7 +285,6 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         .buy(
             DexType::Bonk,
             mint_pubkey,
-            None,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -326,7 +302,6 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
         .sell(
             DexType::Bonk,
             mint_pubkey,
-            None,
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -360,7 +335,6 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         .buy(
             DexType::Bonk,
             mint_pubkey,
-            None,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -378,7 +352,6 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
         .sell(
             DexType::Bonk,
             mint_pubkey,
-            None,
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -408,7 +381,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         .buy(
             DexType::Bonk,
             mint_pubkey,
-            None,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -427,7 +399,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
         .sell(
             DexType::Bonk,
             mint_pubkey,
-            None,
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -458,7 +429,6 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         .buy(
             DexType::RaydiumCpmm,
             mint_pubkey,
-            None,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -479,7 +449,6 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
         .sell(
             DexType::RaydiumCpmm,
             mint_pubkey,
-            None,
             amount_token,
             slippage_basis_points,
             recent_blockhash,
@@ -512,7 +481,6 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
         .buy(
             DexType::RaydiumAmmV4,
             mint_pubkey,
-            None,
             buy_sol_cost,
             slippage_basis_points,
             recent_blockhash,
@@ -531,7 +499,6 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
         .sell(
             DexType::RaydiumAmmV4,
             mint_pubkey,
-            None,
             amount_token,
             slippage_basis_points,
             recent_blockhash,

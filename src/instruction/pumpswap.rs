@@ -44,6 +44,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let quote_mint = protocol_params.quote_mint;
         let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
         let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
+        let coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
+        let coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
 
         self.build_buy_instructions_with_accounts(
             params,
@@ -52,6 +54,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             quote_mint,
             pool_base_token_reserves,
             pool_quote_token_reserves,
+            coin_creator_vault_ata,
+            coin_creator_vault_authority,
             protocol_params.auto_handle_wsol,
         )
         .await
@@ -69,6 +73,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let quote_mint = protocol_params.quote_mint;
         let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
         let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
+        let coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
+        let coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
 
         self.build_sell_instructions_with_accounts(
             params,
@@ -77,6 +83,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             quote_mint,
             pool_base_token_reserves,
             pool_quote_token_reserves,
+            coin_creator_vault_ata,
+            coin_creator_vault_authority,
             protocol_params.auto_handle_wsol,
         )
         .await
@@ -93,6 +101,8 @@ impl PumpSwapInstructionBuilder {
         quote_mint: Pubkey,
         pool_base_token_reserves: u64,
         pool_quote_token_reserves: u64,
+        params_coin_creator_vault_ata: Pubkey,
+        params_coin_creator_vault_authority: Pubkey,
         auto_handle_wsol: bool,
     ) -> Result<Vec<Instruction>> {
         if params.rpc.is_none() {
@@ -102,13 +112,19 @@ impl PumpSwapInstructionBuilder {
 
         let mut token_amount = 0;
         let mut sol_amount = 0;
+
+        let mut creator = Pubkey::default();
+        let default_creator_ata = coin_creator_vault_ata(creator, quote_mint);
+        if default_creator_ata != params_coin_creator_vault_ata {
+            creator = params_coin_creator_vault_ata;
+        }
         if quote_mint_is_wsol {
             let result = buy_quote_input_internal(
                 params.sol_amount,
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
-                &params.creator,
+                &creator,
             )
             .unwrap();
             // base_amount_out
@@ -121,7 +137,7 @@ impl PumpSwapInstructionBuilder {
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
-                &params.creator,
+                &creator,
             )
             .unwrap();
             // min_quote_amount_out
@@ -203,8 +219,6 @@ impl PumpSwapInstructionBuilder {
             &accounts::TOKEN_PROGRAM,
         ));
 
-        let coin_creator_vault_ata = coin_creator_vault_ata(params.creator, quote_mint);
-        let coin_creator_vault_authority = coin_creator_vault_authority(params.creator);
         let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
 
         // Create buy instruction
@@ -229,8 +243,11 @@ impl PumpSwapInstructionBuilder {
             ), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // event_authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_PROGRAM, false), // PUMP_AMM_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new(coin_creator_vault_ata, false), // coin_creator_vault_ata
-            solana_sdk::instruction::AccountMeta::new_readonly(coin_creator_vault_authority, false), // coin_creator_vault_authority (readonly)
+            solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                params_coin_creator_vault_authority,
+                false,
+            ), // coin_creator_vault_authority (readonly)
         ];
         if quote_mint_is_wsol {
             accounts.push(solana_sdk::instruction::AccountMeta::new(
@@ -289,6 +306,8 @@ impl PumpSwapInstructionBuilder {
         quote_mint: Pubkey,
         pool_base_token_reserves: u64,
         pool_quote_token_reserves: u64,
+        params_coin_creator_vault_ata: Pubkey,
+        params_coin_creator_vault_authority: Pubkey,
         auto_handle_wsol: bool,
     ) -> Result<Vec<Instruction>> {
         if params.rpc.is_none() {
@@ -303,13 +322,19 @@ impl PumpSwapInstructionBuilder {
         let mut token_amount = 0;
         let mut sol_amount = 0;
 
+        let mut creator = Pubkey::default();
+        let default_creator_ata = coin_creator_vault_ata(creator, quote_mint);
+        if default_creator_ata != params_coin_creator_vault_ata {
+            creator = params_coin_creator_vault_ata;
+        }
+
         if quote_mint_is_wsol {
             let result = sell_base_input_internal(
                 params.token_amount.unwrap(),
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
-                &params.creator,
+                &creator,
             )
             .unwrap();
             // base_amount_in
@@ -322,7 +347,7 @@ impl PumpSwapInstructionBuilder {
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
-                &params.creator,
+                &creator,
             )
             .unwrap();
             // max_quote_amount_in
@@ -331,8 +356,6 @@ impl PumpSwapInstructionBuilder {
             sol_amount = result.base;
         }
 
-        let coin_creator_vault_ata = coin_creator_vault_ata(params.creator, quote_mint);
-        let coin_creator_vault_authority = coin_creator_vault_authority(params.creator);
         let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
 
         let user_base_token_account = spl_associated_token_account::get_associated_token_address(
@@ -399,8 +422,11 @@ impl PumpSwapInstructionBuilder {
             ), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // event_authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_PROGRAM, false), // PUMP_AMM_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new(coin_creator_vault_ata, false), // coin_creator_vault_ata
-            solana_sdk::instruction::AccountMeta::new_readonly(coin_creator_vault_authority, false), // coin_creator_vault_authority (readonly)
+            solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                params_coin_creator_vault_authority,
+                false,
+            ), // coin_creator_vault_authority (readonly)
         ];
         if !quote_mint_is_wsol {
             accounts.push(solana_sdk::instruction::AccountMeta::new(

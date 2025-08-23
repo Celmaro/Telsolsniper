@@ -27,10 +27,10 @@ pub fn add_tip_compute_budget_instructions(
     instructions
         .push(ComputeBudgetInstruction::set_loaded_accounts_data_size_limit(data_size_limit));
     instructions.push(ComputeBudgetInstruction::set_compute_unit_price(
-        priority_fee.unit_price,
+        priority_fee.tip_unit_price,
     ));
     instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(
-        priority_fee.unit_limit,
+        priority_fee.tip_unit_limit,
     ));
 }
 
@@ -65,9 +65,9 @@ pub fn add_sell_tip_compute_budget_instructions(
     priority_fee: &PriorityFee,
 ) {
     instructions.push(ComputeBudgetInstruction::set_compute_unit_price(
-        priority_fee.unit_price,
+        priority_fee.tip_unit_price,
     ));
     instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(
-        priority_fee.unit_limit,
+        priority_fee.tip_unit_limit,
     ));
 }

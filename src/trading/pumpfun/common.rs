@@ -17,15 +17,6 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
-pub fn create_priority_fee_instructions(priority_fee: PriorityFee) -> Vec<Instruction> {
-    let mut instructions = Vec::with_capacity(2);
-    instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(priority_fee.unit_limit));
-    instructions.push(ComputeBudgetInstruction::set_compute_unit_price(priority_fee.unit_price));
-
-    instructions
-}
-
-#[inline]
 pub fn get_global_pda() -> Pubkey {
     static GLOBAL_PDA: once_cell::sync::Lazy<Pubkey> = once_cell::sync::Lazy::new(|| {
         Pubkey::find_program_address(

@@ -51,13 +51,20 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.sol_amount,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
-        let creator_vault_pda = bonding_curve.get_creator_vault_pda();
+        let creator_vault_pda = protocol_params.creator_vault;
+
+        let mut creator = Pubkey::default();
+        if let Some(default_creator_ata) = get_creator_vault_pda(&creator) {
+            if default_creator_ata != creator_vault_pda {
+                creator = creator_vault_pda;
+            }
+        }
 
         let buy_token_amount = get_buy_token_amount_from_sol_amount(
             bonding_curve.virtual_token_reserves as u128,
             bonding_curve.virtual_sol_reserves as u128,
             bonding_curve.real_token_reserves as u128,
-            bonding_curve.creator,
+            creator,
             params.sol_amount,
         );
 
@@ -102,13 +109,20 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             return Err(anyhow!("Amount token is required"));
         };
-        let creator_vault_pda = get_creator_vault_pda(&params.creator).unwrap();
+        let creator_vault_pda = protocol_params.creator_vault;
         let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
+
+        let mut creator = Pubkey::default();
+        if let Some(default_creator_ata) = get_creator_vault_pda(&creator) {
+            if default_creator_ata != creator_vault_pda {
+                creator = creator_vault_pda;
+            }
+        }
 
         let sol_amount = get_sell_sol_amount_from_token_amount(
             bonding_curve.virtual_token_reserves as u128,
             bonding_curve.virtual_sol_reserves as u128,
-            bonding_curve.creator,
+            creator,
             token_amount,
         );
         let min_sol_output = calculate_with_slippage_sell(

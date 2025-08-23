@@ -5,7 +5,6 @@ use solana_streamer_sdk::streaming::event_parser::protocols::pumpswap::{
     PumpSwapBuyEvent, PumpSwapSellEvent,
 };
 use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::types::AmmInfo;
-use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::RaydiumAmmV4SwapEvent;
 use std::sync::Arc;
 
 use super::traits::ProtocolParams;
@@ -22,7 +21,9 @@ use crate::trading::bonk::common::{
     get_platform_associated_account,
 };
 use crate::trading::common::get_multi_token_balances;
-use crate::trading::pumpswap::common::get_token_balances;
+use crate::trading::pumpswap::common::{
+    coin_creator_vault_ata, coin_creator_vault_authority, get_token_balances,
+};
 use crate::trading::raydium_cpmm::common::get_pool_token_balances;
 
 /// Common buy parameters
@@ -32,7 +33,6 @@ pub struct BuyParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
-    pub creator: Pubkey,
     pub sol_amount: u64,
     pub slippage_basis_points: Option<u64>,
     pub priority_fee: PriorityFee,
@@ -51,7 +51,6 @@ pub struct BuyWithTipParams {
     pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
-    pub creator: Pubkey,
     pub sol_amount: u64,
     pub slippage_basis_points: Option<u64>,
     pub priority_fee: PriorityFee,
@@ -69,7 +68,6 @@ pub struct SellParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
-    pub creator: Pubkey,
     pub token_amount: Option<u64>,
     pub slippage_basis_points: Option<u64>,
     pub priority_fee: PriorityFee,
@@ -87,7 +85,6 @@ pub struct SellWithTipParams {
     pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub payer: Arc<Keypair>,
     pub mint: Pubkey,
-    pub creator: Pubkey,
     pub token_amount: Option<u64>,
     pub slippage_basis_points: Option<u64>,
     pub priority_fee: PriorityFee,
@@ -102,29 +99,33 @@ pub struct SellWithTipParams {
 #[derive(Clone)]
 pub struct PumpFunParams {
     pub bonding_curve: Arc<BondingCurveAccount>,
+    pub creator_vault: Pubkey,
     /// Whether to close token account when selling, only effective during sell operations
     pub close_token_account_when_sell: Option<bool>,
 }
 
 impl PumpFunParams {
-    pub fn immediate_sell(creator: Pubkey, close_token_account_when_sell: bool) -> Self {
+    pub fn immediate_sell(creator_vault: Pubkey, close_token_account_when_sell: bool) -> Self {
         Self {
-            bonding_curve: Arc::new(BondingCurveAccount { creator, ..Default::default() }),
+            bonding_curve: Arc::new(BondingCurveAccount { ..Default::default() }),
+            creator_vault: creator_vault,
             close_token_account_when_sell: Some(close_token_account_when_sell),
         }
     }
 
     pub fn from_dev_trade(
-        mint: &Pubkey,
-        dev_token_amount: u64,
-        dev_sol_amount: u64,
-        creator: Pubkey,
+        event: &PumpFunTradeEvent,
         close_token_account_when_sell: Option<bool>,
     ) -> Self {
-        let bonding_curve =
-            BondingCurveAccount::from_dev_trade(mint, dev_token_amount, dev_sol_amount, creator);
+        let bonding_curve = BondingCurveAccount::from_dev_trade(
+            &event.mint,
+            event.token_amount,
+            event.max_sol_cost,
+            event.creator,
+        );
         Self {
             bonding_curve: Arc::new(bonding_curve),
+            creator_vault: event.creator_vault,
             close_token_account_when_sell: close_token_account_when_sell,
         }
     }
@@ -136,6 +137,7 @@ impl PumpFunParams {
         let bonding_curve = BondingCurveAccount::from_trade(event);
         Self {
             bonding_curve: Arc::new(bonding_curve),
+            creator_vault: event.creator_vault,
             close_token_account_when_sell: close_token_account_when_sell,
         }
     }
@@ -173,6 +175,10 @@ pub struct PumpSwapParams {
     pub pool_base_token_reserves: u64,
     /// Quote token reserves in the pool
     pub pool_quote_token_reserves: u64,
+    /// Coin creator vault ATA
+    pub coin_creator_vault_ata: Pubkey,
+    /// Coin creator vault authority
+    pub coin_creator_vault_authority: Pubkey,
     /// Automatically handle WSOL wrapping
     /// When true, automatically handles wrapping and unwrapping operations between SOL and WSOL
     pub auto_handle_wsol: bool,
@@ -186,6 +192,8 @@ impl PumpSwapParams {
             quote_mint: event.quote_mint,
             pool_base_token_reserves: event.pool_base_token_reserves,
             pool_quote_token_reserves: event.pool_quote_token_reserves,
+            coin_creator_vault_ata: event.coin_creator_vault_ata,
+            coin_creator_vault_authority: event.coin_creator_vault_authority,
             auto_handle_wsol: true,
         }
     }
@@ -197,6 +205,8 @@ impl PumpSwapParams {
             quote_mint: event.quote_mint,
             pool_base_token_reserves: event.pool_base_token_reserves,
             pool_quote_token_reserves: event.pool_quote_token_reserves,
+            coin_creator_vault_ata: event.coin_creator_vault_ata,
+            coin_creator_vault_authority: event.coin_creator_vault_authority,
             auto_handle_wsol: true,
         }
     }
@@ -208,12 +218,17 @@ impl PumpSwapParams {
         let pool_data = crate::trading::pumpswap::common::fetch_pool(rpc, pool_address).await?;
         let (pool_base_token_reserves, pool_quote_token_reserves) =
             get_token_balances(&pool_data, rpc).await?;
+        let creator = pool_data.creator;
+        let coin_creator_vault_ata = coin_creator_vault_ata(creator, pool_data.quote_mint);
+        let coin_creator_vault_authority = coin_creator_vault_authority(creator);
         Ok(Self {
             pool: pool_address.clone(),
             base_mint: pool_data.base_mint,
             quote_mint: pool_data.quote_mint,
             pool_base_token_reserves: pool_base_token_reserves,
             pool_quote_token_reserves: pool_quote_token_reserves,
+            coin_creator_vault_ata: coin_creator_vault_ata,
+            coin_creator_vault_authority: coin_creator_vault_authority,
             auto_handle_wsol: true,
         })
     }
@@ -495,7 +510,6 @@ impl BuyParams {
             swqos_clients,
             payer: self.payer,
             mint: self.mint,
-            creator: self.creator,
             sol_amount: self.sol_amount,
             slippage_basis_points: self.slippage_basis_points,
             priority_fee: self.priority_fee,
@@ -517,7 +531,6 @@ impl SellParams {
             swqos_clients,
             payer: self.payer,
             mint: self.mint,
-            creator: self.creator,
             token_amount: self.token_amount,
             slippage_basis_points: self.slippage_basis_points,
             priority_fee: self.priority_fee,
