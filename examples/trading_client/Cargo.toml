@@ -1,0 +1,9 @@
+[package]
+name = "trading_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sol-trade-sdk = { path = "../.." }
+solana-sdk = "2.3.0"
+tokio = { version = "1", features = ["full"] }

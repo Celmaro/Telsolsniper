@@ -179,6 +179,10 @@ pub struct PumpSwapParams {
     pub coin_creator_vault_ata: Pubkey,
     /// Coin creator vault authority
     pub coin_creator_vault_authority: Pubkey,
+    /// Token program ID
+    pub base_token_program: Pubkey,
+    /// Quote token program ID
+    pub quote_token_program: Pubkey,
     /// Automatically handle WSOL wrapping
     /// When true, automatically handles wrapping and unwrapping operations between SOL and WSOL
     pub auto_handle_wsol: bool,
@@ -194,6 +198,8 @@ impl PumpSwapParams {
             pool_quote_token_reserves: event.pool_quote_token_reserves,
             coin_creator_vault_ata: event.coin_creator_vault_ata,
             coin_creator_vault_authority: event.coin_creator_vault_authority,
+            base_token_program: event.base_token_program,
+            quote_token_program: event.quote_token_program,
             auto_handle_wsol: true,
         }
     }
@@ -207,6 +213,8 @@ impl PumpSwapParams {
             pool_quote_token_reserves: event.pool_quote_token_reserves,
             coin_creator_vault_ata: event.coin_creator_vault_ata,
             coin_creator_vault_authority: event.coin_creator_vault_authority,
+            base_token_program: event.base_token_program,
+            quote_token_program: event.quote_token_program,
             auto_handle_wsol: true,
         }
     }
@@ -221,6 +229,20 @@ impl PumpSwapParams {
         let creator = pool_data.creator;
         let coin_creator_vault_ata = coin_creator_vault_ata(creator, pool_data.quote_mint);
         let coin_creator_vault_authority = coin_creator_vault_authority(creator);
+
+        let base_token_program_ata =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &pool_address,
+                &pool_data.base_mint,
+                &accounts::TOKEN_PROGRAM,
+            );
+        let quote_token_program_ata =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &pool_address,
+                &pool_data.quote_mint,
+                &accounts::TOKEN_PROGRAM,
+            );
+
         Ok(Self {
             pool: pool_address.clone(),
             base_mint: pool_data.base_mint,
@@ -229,6 +251,16 @@ impl PumpSwapParams {
             pool_quote_token_reserves: pool_quote_token_reserves,
             coin_creator_vault_ata: coin_creator_vault_ata,
             coin_creator_vault_authority: coin_creator_vault_authority,
+            base_token_program: if pool_data.pool_base_token_account == base_token_program_ata {
+                accounts::TOKEN_PROGRAM
+            } else {
+                spl_token_2022::ID
+            },
+            quote_token_program: if pool_data.pool_quote_token_account == quote_token_program_ata {
+                accounts::TOKEN_PROGRAM
+            } else {
+                spl_token_2022::ID
+            },
             auto_handle_wsol: true,
         })
     }

@@ -117,7 +117,7 @@ impl BonkInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &accounts::TOKEN_PROGRAM,
+            &protocol_params.mint_token_program,
         ));
 
         // Create buy instruction
@@ -125,7 +125,10 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(protocol_params.platform_onfig, false), // Platform Config (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                protocol_params.platform_onfig,
+                false,
+            ), // Platform Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // User Base Token
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
@@ -141,8 +144,14 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
-            solana_sdk::instruction::AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
+            solana_sdk::instruction::AccountMeta::new(
+                protocol_params.platform_associated_account,
+                false,
+            ), // Platform Associated Account
+            solana_sdk::instruction::AccountMeta::new(
+                protocol_params.creator_associated_account,
+                false,
+            ), // Creator Associated Account
         ];
         // Create instruction data
         let mut data = vec![];
@@ -218,10 +227,12 @@ impl BonkInstructionBuilder {
         );
 
         // Create user token accounts
-        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &params.mint,
-        );
+        let user_base_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &params.mint,
+                &protocol_params.mint_token_program,
+            );
         let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
             &accounts::WSOL_TOKEN_ACCOUNT,
@@ -252,7 +263,10 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(protocol_params.platform_onfig, false), // Platform Config (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                protocol_params.platform_onfig,
+                false,
+            ), // Platform Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // User Base Token
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
@@ -268,8 +282,14 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
-            solana_sdk::instruction::AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
+            solana_sdk::instruction::AccountMeta::new(
+                protocol_params.platform_associated_account,
+                false,
+            ), // Platform Associated Account
+            solana_sdk::instruction::AccountMeta::new(
+                protocol_params.creator_associated_account,
+                false,
+            ), // Creator Associated Account
         ];
 
         // Create instruction data

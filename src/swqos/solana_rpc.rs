@@ -30,7 +30,10 @@ impl SwqosClientTrait for SolRpcClient {
         let start_time = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
-            Err(_) => (),
+            Err(e) => {
+                println!(" rpc{}确认失败: {:?}", trade_type, start_time.elapsed());
+                return Err(e);
+            },
         }
         println!(" signature: {:?}", signature);
         println!(" rpc{}确认: {:?}", trade_type, start_time.elapsed());

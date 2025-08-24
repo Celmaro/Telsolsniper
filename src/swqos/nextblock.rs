@@ -89,7 +89,10 @@ impl NextBlockClient {
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
-            Err(_) => (),
+            Err(e) => {
+                println!(" nextblock{}确认失败: {:?}", trade_type, start_time.elapsed());
+                return Err(e);
+            },
         }
 
         println!(" nextblock{}确认: {:?}", trade_type, start_time.elapsed());

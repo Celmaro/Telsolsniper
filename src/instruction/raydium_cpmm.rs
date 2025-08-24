@@ -55,21 +55,29 @@ impl RaydiumCpmmInstructionBuilder {
         )
         .unwrap();
 
+        let is_base_in = protocol_params.base_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let mint_token_program = if is_base_in {
+            protocol_params.quote_token_program
+        } else {
+            protocol_params.base_token_program
+        };
+
         let wsol_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
             &accounts::WSOL_TOKEN_ACCOUNT,
         );
-        let mint_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &params.mint,
-        );
+        let mint_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &params.mint,
+                &mint_token_program,
+            );
 
         // Get pool token accounts
         let wsol_vault_account = get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
         let mint_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
 
         let observation_state_account = get_observation_state_pda(&pool_state).unwrap();
-        let is_base_in = protocol_params.base_mint == accounts::WSOL_TOKEN_ACCOUNT;
 
         let amount_in: u64 = params.sol_amount;
         let result = compute_swap_amount(
@@ -105,12 +113,6 @@ impl RaydiumCpmmInstructionBuilder {
                     .unwrap(),
             );
         }
-
-        let mint_token_program = if is_base_in {
-            protocol_params.quote_token_program
-        } else {
-            protocol_params.base_token_program
-        };
 
         instructions.push(create_associated_token_account_idempotent(
             &params.payer.pubkey(),
@@ -176,6 +178,11 @@ impl RaydiumCpmmInstructionBuilder {
         }
 
         let is_base_in = protocol_params.base_mint == params.mint;
+        let mint_token_program = if is_base_in {
+            protocol_params.base_token_program
+        } else {
+            protocol_params.quote_token_program
+        };
 
         let minimum_amount_out: u64 = compute_swap_amount(
             protocol_params.base_reserve,
@@ -197,10 +204,12 @@ impl RaydiumCpmmInstructionBuilder {
             &params.payer.pubkey(),
             &accounts::WSOL_TOKEN_ACCOUNT,
         );
-        let mint_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &params.mint,
-        );
+        let mint_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &params.mint,
+                &mint_token_program,
+            );
 
         // Get pool token accounts
         let wsol_vault_account = get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
@@ -220,12 +229,6 @@ impl RaydiumCpmmInstructionBuilder {
                 &spl_token::ID,
             ),
         );
-
-        let mint_token_program = if is_base_in {
-            protocol_params.base_token_program
-        } else {
-            protocol_params.quote_token_program
-        };
 
         // Create sell instruction
         let accounts = vec![

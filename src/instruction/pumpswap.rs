@@ -57,6 +57,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             coin_creator_vault_ata,
             coin_creator_vault_authority,
             protocol_params.auto_handle_wsol,
+            protocol_params.base_token_program,
+            protocol_params.quote_token_program,
         )
         .await
     }
@@ -86,6 +88,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             coin_creator_vault_ata,
             coin_creator_vault_authority,
             protocol_params.auto_handle_wsol,
+            protocol_params.base_token_program,
+            protocol_params.quote_token_program,
         )
         .await
     }
@@ -104,7 +108,12 @@ impl PumpSwapInstructionBuilder {
         params_coin_creator_vault_ata: Pubkey,
         params_coin_creator_vault_authority: Pubkey,
         auto_handle_wsol: bool,
+        base_token_program: Pubkey,
+        quote_token_program: Pubkey,
     ) -> Result<Vec<Instruction>> {
+        if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
+            return Err(anyhow!("Invalid base mint and quote mint"));
+        }
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
@@ -147,28 +156,32 @@ impl PumpSwapInstructionBuilder {
         }
 
         // Create user token accounts
-        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &base_mint,
-        );
-        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &quote_mint,
-        );
+        let user_base_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &base_mint,
+                &base_token_program,
+            );
+        let user_quote_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &quote_mint,
+                &quote_token_program,
+            );
 
         // Get pool token accounts
         let pool_base_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool,
                 &base_mint,
-                &accounts::TOKEN_PROGRAM,
+                &base_token_program,
             );
 
         let pool_quote_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool,
                 &quote_mint,
-                &accounts::TOKEN_PROGRAM,
+                &quote_token_program,
             );
 
         let mut instructions = vec![];
@@ -216,7 +229,7 @@ impl PumpSwapInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             if quote_mint_is_wsol { &base_mint } else { &quote_mint },
-            &accounts::TOKEN_PROGRAM,
+            if quote_mint_is_wsol { &base_token_program } else { &quote_token_program },
         ));
 
         let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
@@ -234,8 +247,8 @@ impl PumpSwapInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_RECIPIENT, false), // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // TOKEN_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
+            solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 accounts::ASSOCIATED_TOKEN_PROGRAM,
@@ -309,7 +322,12 @@ impl PumpSwapInstructionBuilder {
         params_coin_creator_vault_ata: Pubkey,
         params_coin_creator_vault_authority: Pubkey,
         auto_handle_wsol: bool,
+        base_token_program: Pubkey,
+        quote_token_program: Pubkey,
     ) -> Result<Vec<Instruction>> {
+        if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
+            return Err(anyhow!("Invalid base mint and quote mint"));
+        }
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
@@ -358,25 +376,29 @@ impl PumpSwapInstructionBuilder {
 
         let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
 
-        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &base_mint,
-        );
-        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &quote_mint,
-        );
+        let user_base_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &base_mint,
+                &base_token_program,
+            );
+        let user_quote_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &params.payer.pubkey(),
+                &quote_mint,
+                &quote_token_program,
+            );
         let pool_base_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool,
                 &base_mint,
-                &accounts::TOKEN_PROGRAM,
+                &base_token_program,
             );
         let pool_quote_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool,
                 &quote_mint,
-                &accounts::TOKEN_PROGRAM,
+                &quote_token_program,
             );
 
         let mut instructions = vec![];
@@ -397,7 +419,7 @@ impl PumpSwapInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             if quote_mint_is_wsol { &base_mint } else { &quote_mint },
-            &accounts::TOKEN_PROGRAM,
+            if quote_mint_is_wsol { &base_token_program } else { &quote_token_program },
         ));
 
         // Create sell instruction
@@ -413,8 +435,8 @@ impl PumpSwapInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_RECIPIENT, false), // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // TOKEN_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
+            solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
+            solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 accounts::ASSOCIATED_TOKEN_PROGRAM,

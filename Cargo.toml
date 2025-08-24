@@ -1,6 +1,6 @@
 [package]
 name = "sol-trade-sdk"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 authors = [
     "William <byteblock6@gmail.com>",
@@ -13,11 +13,26 @@ license = "MIT"
 keywords = ["solana", "memecoins", "pumpfun", "pumpswap", "raydium"]
 readme = "README.md"
 
+
+[workspace]
+members = [
+    "examples/trading_client",
+    "examples/event_subscription",
+    "examples/middleware_system",
+    "examples/pumpfun_copy_trading",
+    "examples/pumpfun_sniper_trading",
+    "examples/pumpswap_trading",
+    "examples/bonk_sniper_trading",
+    "examples/bonk_copy_trading",
+    "examples/raydium_cpmm_trading",
+    "examples/raydium_amm_v4_trading",
+]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-solana-streamer-sdk = "0.3.9"
+solana-streamer-sdk = "0.3.10"
 solana-sdk = "2.3.0"
 solana-client = "2.3.6"
 solana-program = "2.3.0" 

@@ -33,19 +33,19 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.0" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.1" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.5.0"
+sol-trade-sdk = "0.5.1"
 ```
 
 ## 使用示例
 
-### 重要参数说明
+### 重要说明
 
 #### auto_handle_wsol 参数
 
@@ -71,190 +71,18 @@ sol-trade-sdk = "0.5.0"
   - 提高交易成功率和速度
   - 特别适用于具有许多账户引用的复杂交易
 
+#### 关于shredstream
+
+当你使用 shred 订阅事件时，由于 shred 的特性，你无法获取到交易事件的完整信息。
+请你在使用时，确保你的交易逻辑依赖的参数，在shred中都能获取到。
+
 ### 1. 事件订阅 - 监听代币交易
 
-#### 1.1 使用 Yellowstone gRPC 订阅事件
+查看[examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs) 中的示例代码。
 
-```rust
-use sol_trade_sdk::solana_streamer_sdk::{
-    streaming::{
-        event_parser::{
-            protocols::{
-                bonk::{BonkPoolCreateEvent, BonkTradeEvent},
-                pumpfun::{PumpFunCreateTokenEvent, PumpFunTradeEvent},
-                pumpswap::{
-                    PumpSwapBuyEvent, PumpSwapCreatePoolEvent, PumpSwapDepositEvent,
-                    PumpSwapSellEvent, PumpSwapWithdrawEvent,
-                },
-                raydium_cpmm::RaydiumCpmmSwapEvent,
-            },
-            Protocol, UnifiedEvent,
-        },
-        yellowstone_grpc::{AccountFilter, TransactionFilter},
-        YellowstoneGrpc,
-    },
-    match_event,
-};
-
-use solana_streamer_sdk::streaming::event_parser::protocols::{
-    bonk::parser::BONK_PROGRAM_ID, 
-    pumpfun::parser::PUMPFUN_PROGRAM_ID, 
-    pumpswap::parser::PUMPSWAP_PROGRAM_ID, 
-    raydium_amm_v4::parser::RAYDIUM_AMM_V4_PROGRAM_ID, 
-    raydium_clmm::parser::RAYDIUM_CLMM_PROGRAM_ID, 
-    raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID
-};
-
-async fn test_grpc() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 GRPC 客户端订阅事件
-    println!("正在订阅 GRPC 事件...");
-
-    let grpc = YellowstoneGrpc::new(
-        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
-        None,
-    )?;
-
-    // 定义回调函数处理事件
-    let callback = |event: Box<dyn UnifiedEvent>| {
-        match_event!(event, {
-            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
-                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
-            },
-            BonkTradeEvent => |e: BonkTradeEvent| {
-                println!("BonkTradeEvent: {:?}", e);
-            },
-            PumpFunTradeEvent => |e: PumpFunTradeEvent| {
-                println!("PumpFunTradeEvent: {:?}", e);
-            },
-            PumpFunCreateTokenEvent => |e: PumpFunCreateTokenEvent| {
-                println!("PumpFunCreateTokenEvent: {:?}", e);
-            },
-            PumpSwapBuyEvent => |e: PumpSwapBuyEvent| {
-                println!("Buy event: {:?}", e);
-            },
-            PumpSwapSellEvent => |e: PumpSwapSellEvent| {
-                println!("Sell event: {:?}", e);
-            },
-            PumpSwapCreatePoolEvent => |e: PumpSwapCreatePoolEvent| {
-                println!("CreatePool event: {:?}", e);
-            },
-            PumpSwapDepositEvent => |e: PumpSwapDepositEvent| {
-                println!("Deposit event: {:?}", e);
-            },
-            PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
-                println!("Withdraw event: {:?}", e);
-            },
-            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
-                println!("Raydium CPMM Swap event: {:?}", e);
-            },
-            // ..... 
-            // 更多的事件和说明请参考 https://github.com/0xfnzero/solana-streamer
-        });
-    };
-
-    // 订阅多个协议的事件
-    println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
-    
-    // 过滤账户
-    let account_include = vec![
-        PUMPFUN_PROGRAM_ID.to_string(),      // 监听 pumpfun 程序 ID
-        PUMPSWAP_PROGRAM_ID.to_string(),     // 监听 pumpswap 程序 ID
-        BONK_PROGRAM_ID.to_string(),         // 监听 bonk 程序 ID
-        RAYDIUM_CPMM_PROGRAM_ID.to_string(), // 监听 raydium_cpmm 程序 ID
-        RAYDIUM_CLMM_PROGRAM_ID.to_string(), // 监听 raydium_clmm 程序 ID
-        RAYDIUM_AMM_V4_PROGRAM_ID.to_string(), // 监听 raydium_amm_v4 程序 ID
-        "xxxxxxxx".to_string(),              // 监听特定账户
-    ];
-    let account_exclude = vec![];
-    let account_required = vec![];
-
-    // 监听交易数据
-    let transaction_filter = TransactionFilter {
-        account_include: account_include.clone(),
-        account_exclude,
-        account_required,
-    };
-
-    // 监听属于owner程序的账号数据 -> 账号事件监听
-    let account_filter = AccountFilter { 
-        account: vec![], 
-        owner: account_include.clone() 
-    };
-
-    grpc.subscribe_events_immediate(
-        protocols,
-        None,
-        transaction_filter,
-        account_filter,
-        None,
-        None,
-        callback,
-    )
-    .await?;
-
-    Ok(())
-}
-```
-
-#### 1.2 使用 ShredStream 订阅事件
-
-```rust
-use sol_trade_sdk::solana_streamer_sdk::streaming::ShredStreamGrpc;
-
-async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
-    // 使用 ShredStream 客户端订阅事件
-    println!("正在订阅 ShredStream 事件...");
-
-    let shred_stream = ShredStreamGrpc::new("http://127.0.0.1:10800".to_string()).await?;
-
-    // 定义回调函数处理事件（与上面相同）
-    let callback = |event: Box<dyn UnifiedEvent>| {
-        match_event!(event, {
-            BonkPoolCreateEvent => |e: BonkPoolCreateEvent| {
-                println!("BonkPoolCreateEvent: {:?}", e.base_mint_param.symbol);
-            },
-            BonkTradeEvent => |e: BonkTradeEvent| {
-                println!("BonkTradeEvent: {:?}", e);
-            },
-            PumpFunTradeEvent => |e: PumpFunTradeEvent| {
-                println!("PumpFunTradeEvent: {:?}", e);
-            },
-            PumpFunCreateTokenEvent => |e: PumpFunCreateTokenEvent| {
-                println!("PumpFunCreateTokenEvent: {:?}", e);
-            },
-            PumpSwapBuyEvent => |e: PumpSwapBuyEvent| {
-                println!("Buy event: {:?}", e);
-            },
-            PumpSwapSellEvent => |e: PumpSwapSellEvent| {
-                println!("Sell event: {:?}", e);
-            },
-            PumpSwapCreatePoolEvent => |e: PumpSwapCreatePoolEvent| {
-                println!("CreatePool event: {:?}", e);
-            },
-            PumpSwapDepositEvent => |e: PumpSwapDepositEvent| {
-                println!("Deposit event: {:?}", e);
-            },
-            PumpSwapWithdrawEvent => |e: PumpSwapWithdrawEvent| {
-                println!("Withdraw event: {:?}", e);
-            },
-            RaydiumCpmmSwapEvent => |e: RaydiumCpmmSwapEvent| {
-                println!("Raydium CPMM Swap event: {:?}", e);
-            },
-            // ..... 
-            // 更多的事件和说明请参考 https://github.com/0xfnzero/solana-streamer
-        });
-    };
-
-    // 订阅事件
-    println!("开始监听事件，按 Ctrl+C 停止...");
-    let protocols = vec![Protocol::PumpFun, Protocol::PumpSwap, Protocol::Bonk, Protocol::RaydiumCpmm];
-    shred_stream
-        .shredstream_subscribe(protocols, None, None, callback)
-        .await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package event_subscription
 ```
 
 ### 2. 初始化 SolanaTrade 实例
@@ -271,619 +99,95 @@ async fn test_shreds() -> Result<(), Box<dyn std::error::Error>> {
 - **FlashBlock**: 第一个参数是 API Token, 添加tg官方客服https://t.me/FlashBlock_Official 获取免费key立即加速你的交易！官方文档: https://doc.flashblock.trade/
 - **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！官方文档: https://node1.me/docs.html
 
-```rust
-use std::{str::FromStr, sync::Arc};
-use sol_trade_sdk::{
-    common::{AnyResult, PriorityFee, TradeConfig},
-    swqos::{SwqosConfig, SwqosRegion},
-    SolanaTrade
-};
-use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
+当使用多个MEV服务时，需要使用`Durable Nonce`。你需要初始化`NonceCache`类（或者自行写一个管理nonce的类），获取最新的`nonce`值，并在交易的时候作为`blockhash`使用。
 
-/// 创建 SolanaTrade 客户端的示例
-async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
-    println!("Creating SolanaTrade client...");
+#### 2.2 创建 SolanaTrade 实例
 
-    let payer = Keypair::new();
-    let rpc_url = "https://mainnet.helius-rpc.com/?api-key=xxxxxx".to_string();
+查看[examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs) 中的示例代码。
 
-    // 配置各种 SWQOS 服务
-    let swqos_configs = vec![
-        // 第一个参数是 uuid，如果没有 uuid 则传空字符串
-        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt), 
-        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
-        // 添加tg官方客服 https://t.me/FlashBlock_Official 获取免费 FlashBlock key
-        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        // 添加tg官方客服 https://t.me/node1_me 获取免费 Node1 key
-        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Default(rpc_url.clone()),
-    ];
-
-    // 定义交易配置
-    let trade_config = TradeConfig {
-        rpc_url: rpc_url.clone(),
-        commitment: CommitmentConfig::confirmed(),
-        priority_fee: PriorityFee::default(),
-        swqos_configs,
-        lookup_table_key: None,
-    };
-
-    let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
-    println!("SolanaTrade client created successfully!");
-
-    Ok(solana_trade_client)
-}
+运行示例代码：
+```bash
+cargo run --package trading_client
 ```
 
 ### 3. PumpFun 交易操作
 
-```rust
-use sol_trade_sdk::{
-    common::{bonding_curve::BondingCurveAccount, AnyResult},
-    constants::pumpfun::global_constants::TOKEN_TOTAL_SUPPLY,
-    trading::{core::params::PumpFunParams, factory::DexType},
-};
-use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
+#### 3.1 狙击
 
-// pumpfun 狙击者交易
-async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
-    println!("Testing PumpFun trading...");
+查看[examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs) 中的示例代码。
 
-    // 如果不是开发者购买，则返回
-    if !trade_info.is_dev_create_token_trade {
-        return Ok(());
-    }
+运行示例代码：
+```bash
+cargo run --package pumpfun_sniper_trading
+```
 
-    let trade_client = test_create_solana_trade_client().await?;
+#### 3.2 跟单
 
-    let mint_pubkey = trade_info.mint;
-    let creator = trade_info.creator;
-    let dev_sol_amount = trade_info.max_sol_cost;
-    let dev_token_amount = trade_info.token_amount;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-    
-    println!("Buying tokens from PumpFun...");
-    
-    // 我本次交易所花的的sol金额
-    let buy_sol_amount = 100_000;
-    trade_client.buy(
-        DexType::PumpFun,
-        mint_pubkey,
-        Some(creator),
-        buy_sol_amount,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        Box::new(PumpFunParams::from_dev_trade(
-            &mint_pubkey,
-            dev_token_amount,
-            dev_sol_amount,
-            creator,
-            None,
-        )),
-        None,
-    )
-    .await?;
+查看[examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs) 中的示例代码。
 
-    Ok(())
-}
-
-// pumpfun 跟单交易
-async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
-    println!("Testing PumpFun trading...");
-
-    let trade_client = test_create_solana_trade_client().await?;
-
-    let mint_pubkey = trade_info.mint;
-    let creator = trade_info.creator;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-
-    println!("Buying tokens from PumpFun...");
-
-    // 我本次交易所花的的sol金额
-    let buy_sol_amount = 100_000;
-
-    trade_client.buy(
-        DexType::PumpFun,
-        mint_pubkey,
-        Some(creator),
-        buy_sol_amount,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        Box::new(PumpFunParams::from_trade(&trade_info, None)),
-        None,
-    )
-    .await?;
-
-    Ok(())
-}
-
-// pumpfun 卖出token
-async fn test_pumpfun_sell(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
-    let trade_client = test_create_solana_trade_client().await?;
-    let mint_pubkey = trade_info.mint;
-    let creator = trade_info.creator;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-    
-    let amount_token = 100_000_000; 
-    trade_client.sell(
-        DexType::PumpFun,
-        mint_pubkey,
-        Some(creator),
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        Box::new(PumpFunParams::from_trade(&trade_info, None)),
-        None,
-    )
-    .await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package pumpfun_copy_trading
 ```
 
 ### 4. PumpSwap 交易操作
 
-```rust
-use sol_trade_sdk::{
-    common::AnyResult,
-    trading::{core::params::PumpSwapParams, factory::DexType},
-};
-use solana_sdk::{pubkey::Pubkey, str::FromStr};
+查看[examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs) 中的示例代码。
 
-async fn test_pumpswap() -> AnyResult<()> {
-    println!("Testing PumpSwap trading...");
-
-    let client = test_create_solana_trade_client().await?;
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
-    let mint_pubkey = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
-    let buy_sol_cost = 100_000;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
-    let pool_address = Pubkey::from_str("xxxxxxx")?;
-    let base_mint = Pubkey::from_str("2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv")?;
-    let quote_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
-    let pool_base_token_reserves = 0; // 输入正确的值
-    let pool_quote_token_reserves = 0; // 输入正确的值
-
-    // 买入代币
-    println!("Buying tokens from PumpSwap...");
-    client.buy(
-        DexType::PumpSwap,
-        mint_pubkey,
-        Some(creator),
-        buy_sol_cost,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        // 通过 RPC 调用，会增加延迟。可以通过使用 from_buy_trade 或手动初始化 PumpSwapParams 来优化
-        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
-        None,
-    ).await?;
-
-    // 卖出代币
-    println!("Selling tokens from PumpSwap...");
-    let amount_token = 0;
-    client.sell(
-        DexType::PumpSwap,
-        mint_pubkey,
-        Some(creator),
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        // 通过 RPC 调用，会增加延迟。可以通过使用 from_sell_trade 或手动初始化 PumpSwapParams 来优化
-        Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
-        None,
-    ).await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package pumpswap_trading
 ```
 
 ### 5. Raydium CPMM 交易操作
 
-```rust
-use sol_trade_sdk::{
-    trading::{
-        core::params::RaydiumCpmmParams, 
-        factory::DexType, 
-        raydium_cpmm::common::{get_buy_token_amount, get_sell_sol_amount}
-    },
-};
-use solana_sdk::{pubkey::Pubkey, str::FromStr};
-use spl_token; // 用于标准 SPL Token
-// use spl_token_2022; // 用于 Token 2022 标准（如果需要）
+查看[examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs) 中的示例代码。
 
-async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Testing Raydium CPMM trading...");
-
-    let trade_client = test_create_solana_trade_client().await?;
-
-    let mint_pubkey = Pubkey::from_str("xxxxxxxx")?; // 代币地址
-    let buy_sol_cost = 100_000; // 0.0001 SOL（以lamports为单位）
-    let slippage_basis_points = Some(100); // 1% 滑点
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-    let pool_state = Pubkey::from_str("xxxxxxx")?; // 池状态地址
-
-    // 计算买入时预期获得的代币数量
-    let buy_amount_out = get_buy_token_amount(&trade_client.rpc, &pool_state, buy_sol_cost).await?;
-
-    println!("Buying tokens from Raydium CPMM...");
-    trade_client.buy(
-        DexType::RaydiumCpmm,
-        mint_pubkey,
-        None,
-        buy_sol_cost,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        // 通过 RPC 调用，会增加延迟，或手动初始化 RaydiumCpmmParams
-        Box::new(
-            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
-        ),
-        None,
-    ).await?;
-
-    println!("Selling tokens from Raydium CPMM...");
-    let amount_token = 100_000_000; // 卖出代币数量
-    let sell_sol_amount = get_sell_sol_amount(&trade_client.rpc, &pool_state, amount_token).await?;
-    
-    trade_client.sell(
-        DexType::RaydiumCpmm,
-        mint_pubkey,
-        None,
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        // 通过 RPC 调用，会增加延迟，或手动初始化 RaydiumCpmmParams
-        Box::new(
-            RaydiumCpmmParams::from_pool_address_by_rpc(&trade_client.rpc, &pool_state).await?,
-        ),
-        None,
-    ).await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package raydium_cpmm_trading
 ```
+
 
 ### 6. Raydium AMM V4 交易操作
 
-```rust
-use sol_trade_sdk::trading::core::params::RaydiumAmmV4Params;
+查看[examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs) 中的示例代码。
 
-async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Testing Raydium AMM V4 trading...");
-
-    let trade_client = test_create_solana_trade_client().await?;
-
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?; // 代币地址
-    let buy_sol_cost = 100_000; // 0.0001 SOL（以lamports为单位）
-    let slippage_basis_points = Some(100); // 1% 滑点
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-    let amm_address = Pubkey::from_str("xxxxxx")?; // AMM 池地址
-
-    println!("Buying tokens from Raydium AMM V4...");
-    trade_client.buy(
-        DexType::RaydiumAmmV4,
-        mint_pubkey,
-        None,
-        buy_sol_cost,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        // 通过 RPC 调用，会增加延迟，或使用 from_amm_info_and_reserves 或手动初始化 RaydiumAmmV4Params
-        Box::new(
-            RaydiumAmmV4Params::from_amm_address_by_rpc(&trade_client.rpc, amm_address).await?,
-        ),
-        None,
-    ).await?;
-
-    println!("Selling tokens from Raydium AMM V4...");
-    let amount_token = 100_000_000; // 卖出代币数量
-    
-    trade_client.sell(
-        DexType::RaydiumAmmV4,
-        mint_pubkey,
-        None,
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        // 通过 RPC 调用，会增加延迟，或使用 from_amm_info_and_reserves 或手动初始化 RaydiumAmmV4Params
-        Box::new(
-            RaydiumAmmV4Params::from_amm_address_by_rpc(&trade_client.rpc, amm_address).await?,
-        ),
-        None,
-    ).await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package raydium_amm_v4_trading
 ```
 
 ### 7. Bonk 交易操作
 
-```rust
-use sol_trade_sdk::{
-    common::AnyResult,
-    trading::{core::params::BonkParams, factory::DexType},
-};
-use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
-use solana_sdk::{pubkey::Pubkey, str::FromStr};
+#### 7.1 狙击
 
-// bonk 狙击者交易
-async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<()> {
-    println!("Testing Bonk trading...");
+查看[examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) 中的示例代码。
 
-    if !trade_info.is_dev_create_token_trade {
-        return Ok(());
-    }
+运行示例代码：
+```bash
+cargo run --package bonk_sniper_trading
+```
 
-    let trade_client = test_create_solana_trade_client().await?;
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
-    let buy_sol_cost = 100_000;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
+#### 7.2 跟单
 
-    println!("Buying tokens from letsbonk.fun...");
-    
-    // 使用开发者交易信息构建 BonkParams，可以节约交易时间
-    trade_client.buy(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        buy_sol_cost,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        Box::new(BonkParams::from_dev_trade(trade_info.clone())),
-        None,
-    ).await?;
+查看[examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) 中的示例代码。
 
-    println!("Selling tokens from letsbonk.fun...");
-    let amount_token = 0;
-    trade_client.sell(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        Box::new(BonkParams::from_dev_trade(trade_info)),
-        None,
-    ).await?;
-
-    Ok(())
-}
-
-// bonk 跟单交易
-async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult<()> {
-    println!("Testing Bonk trading...");
-
-    let trade_client = test_create_solana_trade_client().await?;
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
-    let buy_sol_cost = 100_000;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-
-    println!("Buying tokens from letsbonk.fun...");
-    
-    // 使用交易事件信息构建 BonkParams，可以节约交易时间
-    trade_client.buy(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        buy_sol_cost,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        Box::new(BonkParams::from_trade(trade_info.clone())),
-        None,
-    ).await?;
-
-    println!("Selling tokens from letsbonk.fun...");
-    let amount_token = 0;
-    trade_client.sell(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        Box::new(BonkParams::from_trade(trade_info)),
-        None,
-    ).await?;
-
-    Ok(())
-}
-
-// bonk 普通交易
-async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Testing Bonk trading...");
-
-    let trade_client = test_create_solana_trade_client().await?;
-
-    let mint_pubkey = Pubkey::from_str("xxxxxxx")?;
-    let buy_sol_amount = 100_000; 
-    let slippage_basis_points = Some(100); // 1%
-    let recent_blockhash = trade_client.rpc.get_latest_blockhash().await?;
-
-    println!("Buying tokens from letsbonk.fun...");
-
-    trade_client.buy(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        buy_sol_amount,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        // 通过 RPC 调用，会增加延迟。可以通过使用 from_trade 或手动初始化 BonkParams 来优化
-        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
-        None,
-    )
-    .await?;
-    
-    println!("Selling tokens from letsbonk.fun...");
-
-    let amount_token = 100_000; 
-    trade_client.sell(
-        DexType::Bonk,
-        mint_pubkey,
-        None,
-        amount_token,
-        slippage_basis_points,
-        recent_blockhash,
-        None,
-        false,
-        // 通过 RPC 调用，会增加延迟。可以通过使用 from_trade 或手动初始化 BonkParams 来优化
-        Box::new(BonkParams::from_mint_by_rpc(&trade_client.rpc, &mint_pubkey).await?),
-        None,
-    )
-    .await?;
-
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package bonk_copy_trading
 ```
 
 ### 8. 中间件系统
 
 SDK 提供了强大的中间件系统，允许您在交易执行前对指令进行修改、添加或移除。这为您提供了极大的灵活性来自定义交易行为。
 
-#### 8.1 使用内置的日志中间件
+查看[examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) 中的示例代码。
 
-```rust
-use sol_trade_sdk::{
-    trading::{
-        factory::DexType,
-        middleware::builtin::LoggingMiddleware,
-        MiddlewareManager,
-    },
-};
-
-async fn test_middleware() -> AnyResult<()> {
-    let mut client = test_create_solana_trade_client().await?;
-    
-    // SDK 内置的示例中间件，打印指令信息
-    // 您可以参考 LoggingMiddleware 来实现 InstructionMiddleware trait 来实现自己的中间件
-    let middleware_manager = MiddlewareManager::new()
-        .add_middleware(Box::new(LoggingMiddleware));
-    
-    client = client.with_middleware_manager(middleware_manager);
-    
-    let creator = Pubkey::from_str("11111111111111111111111111111111")?;
-    let mint_pubkey = Pubkey::from_str("xxxxx")?;
-    let buy_sol_cost = 100_000;
-    let slippage_basis_points = Some(100);
-    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
-    let pool_address = Pubkey::from_str("xxxx")?;
-    
-    // 购买代币
-    println!("Buying tokens from PumpSwap...");
-    client
-        .buy(
-            DexType::PumpSwap,
-            mint_pubkey,
-            Some(creator),
-            buy_sol_cost,
-            slippage_basis_points,
-            recent_blockhash,
-            None,
-            Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
-            None,
-        )
-        .await?;
-    Ok(())
-}
+运行示例代码：
+```bash
+cargo run --package middleware_system
 ```
-
-#### 8.2 创建自定义中间件
-
-您可以通过实现 `InstructionMiddleware` trait 来创建自定义中间件：
-
-```rust
-use sol_trade_sdk::trading::middleware::traits::InstructionMiddleware;
-use anyhow::Result;
-use solana_sdk::instruction::Instruction;
-
-/// 自定义中间件示例 - 添加额外指令
-#[derive(Clone)]
-pub struct CustomMiddleware;
-
-impl InstructionMiddleware for CustomMiddleware {
-    fn name(&self) -> &'static str {
-        "CustomMiddleware"
-    }
-
-    fn process_protocol_instructions(
-        &self,
-        protocol_instructions: Vec<Instruction>,
-        protocol_name: String,
-        is_buy: bool,
-    ) -> Result<Vec<Instruction>> {
-        println!("自定义中间件处理中，协议: {}", protocol_name);
-        
-        // 在这里您可以：
-        // 1. 修改现有指令
-        // 2. 添加新指令
-        // 3. 移除特定指令
-        
-        // 示例：在指令开始前添加一个自定义指令
-        // let custom_instruction = create_your_custom_instruction();
-        // instructions.insert(0, custom_instruction);
-        
-        Ok(protocol_instructions)
-    }
-
-    fn process_full_instructions(
-        &self,
-        full_instructions: Vec<Instruction>,
-        protocol_name: String,
-        is_buy: bool,
-    ) -> Result<Vec<Instruction>> {
-        println!("自定义中间件处理中，指令数量: {}", full_instructions.len());
-        Ok(full_instructions)
-    }
-
-    fn clone_box(&self) -> Box<dyn InstructionMiddleware> {
-        Box::new(self.clone())
-    }
-}
-
-// 使用自定义中间件
-async fn test_custom_middleware() -> AnyResult<()> {
-    let mut client = test_create_solana_trade_client().await?;
-    
-    let middleware_manager = MiddlewareManager::new()
-        .add_middleware(Box::new(LoggingMiddleware))           // 日志中间件
-        .add_middleware(Box::new(CustomMiddleware));
-    
-    client = client.with_middleware_manager(middleware_manager);
-    
-    // 现在所有交易都会通过您的中间件处理
-    // ...
-    Ok(())
-}
-```
-
-#### 8.3 中间件执行顺序
 
 中间件按照添加顺序依次执行：
 
@@ -901,8 +205,8 @@ use sol_trade_sdk::common::PriorityFee;
 
 // 自定义优先费用配置
 let priority_fee = PriorityFee {
-    unit_limit: 190000,
-    unit_price: 1000000,
+    tip_unit_limit: 190000,
+    tip_unit_price: 1000000,
     rpc_unit_limit: 500000,
     rpc_unit_price: 500000,
     buy_tip_fee: 0.001,
