@@ -59,7 +59,7 @@ pub async fn poll_transaction_confirmation(rpc: &SolanaRpcClient, txt_sig: Signa
 pub async fn send_nb_transaction(client: Client, endpoint: &str, auth_token: &str, transaction: &Transaction) -> Result<Signature, anyhow::Error> {
     // 序列化交易
     let serialized = bincode::serialize(transaction)
-        .map_err(|e| anyhow::anyhow!("序列化交易失败: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Transaction serialization failed: {}", e))?;
     
     // Base64编码
     let encoded = STANDARD.encode(serialized);
@@ -79,20 +79,20 @@ pub async fn send_nb_transaction(client: Client, endpoint: &str, auth_token: &st
         .json(&request_data)
         .send()
         .await
-        .map_err(|e| anyhow::anyhow!("请求失败: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Request failed: {}", e))?;
 
     let resp = response.json::<serde_json::Value>().await
-        .map_err(|e| anyhow::anyhow!("解析响应失败: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Response parsing failed: {}", e))?;
 
     if let Some(reason) = resp["reason"].as_str() {
         return Err(anyhow::anyhow!(reason.to_string()));
     }
 
     let signature = resp["signature"].as_str()
-        .ok_or_else(|| anyhow::anyhow!("响应中缺少signature字段"))?;
+        .ok_or_else(|| anyhow::anyhow!("Missing signature field in response"))?;
 
     let signature = Signature::from_str(signature)
-        .map_err(|e| anyhow::anyhow!("无效的签名: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Invalid signature: {}", e))?;
 
     Ok(signature)
 }

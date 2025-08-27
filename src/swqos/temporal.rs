@@ -61,9 +61,9 @@ impl TemporalClient {
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
-        // 按照 Nozomi 文档要求构建请求体
+        // Build request body according to Nozomi documentation requirements
         let request_body = serde_json::to_string(&json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -89,22 +89,24 @@ impl TemporalClient {
 
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" nozomi{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" nozomi {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                // eprintln!("nozomi交易提交失败: {:?}", _error);
+                // eprintln!("nozomi transaction submission failed: {:?}", _error);
             }
+        } else {
+            eprintln!(" nozomi {} submission failed: {:?}", trade_type, response_text);
         }
 
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" nozomi{}确认失败: {:?}", trade_type, start_time.elapsed());
+                println!(" nozomi {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
 
-        println!(" nozomi{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" nozomi {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }

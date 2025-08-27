@@ -51,15 +51,15 @@ impl Node1Client {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()
-            // 由于有 ping 机制，可以延长连接池空闲超时
-            .pool_idle_timeout(Duration::from_secs(300)) // 5分钟，比 ping 间隔更长
-            .pool_max_idle_per_host(32) // 减少连接数，因为连接会更稳定
-            // TCP keepalive 可以设置得更长，因为 ping 会主动保持连接
-            .tcp_keepalive(Some(Duration::from_secs(300))) // 5分钟
-            // HTTP/2 keepalive 间隔可以更长
-            .http2_keep_alive_interval(Duration::from_secs(30)) // 30秒
-            // 请求超时可以适当延长，因为连接更稳定
-            .timeout(Duration::from_secs(15)) // 15秒
+            // Due to ping mechanism, can extend connection pool idle timeout
+            .pool_idle_timeout(Duration::from_secs(300)) // 5 minutes, longer than ping interval
+            .pool_max_idle_per_host(32) // Reduce connections as they will be more stable
+            // TCP keepalive can be set longer as ping will actively maintain connections
+            .tcp_keepalive(Some(Duration::from_secs(300))) // 5 minutes
+            // HTTP/2 keepalive interval can be longer
+            .http2_keep_alive_interval(Duration::from_secs(30)) // 30 seconds
+            // Request timeout can be appropriately extended as connections are more stable
+            .timeout(Duration::from_secs(15)) // 15 seconds
             .connect_timeout(Duration::from_secs(5))
             .build()
             .unwrap();
@@ -73,7 +73,7 @@ impl Node1Client {
             stop_ping: Arc::new(AtomicBool::new(false)),
         };
         
-        // 启动 ping 任务
+        // Start ping task
         let client_clone = client.clone();
         tokio::spawn(async move {
             client_clone.start_ping_task().await;
@@ -82,7 +82,7 @@ impl Node1Client {
         client
     }
 
-    /// 启动定期 ping 任务以保持连接活跃
+    /// Start periodic ping task to keep connections active
     async fn start_ping_task(&self) {
         let endpoint = self.endpoint.clone();
         let auth_token = self.auth_token.clone();
@@ -90,7 +90,7 @@ impl Node1Client {
         let stop_ping = self.stop_ping.clone();
         
         let handle = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60)); // 每60秒ping一次
+            let mut interval = tokio::time::interval(Duration::from_secs(60)); // Ping every 60 seconds
             
             loop {
                 interval.tick().await;
@@ -99,14 +99,14 @@ impl Node1Client {
                     break;
                 }
                 
-                // 发送 ping 请求
+                // Send ping request
                 if let Err(e) = Self::send_ping_request(&http_client, &endpoint, &auth_token).await {
-                    eprintln!("Node1 ping 请求失败: {}", e);
+                    eprintln!("Node1 ping request failed: {}", e);
                 }
             }
         });
         
-        // 更新 ping_handle - 使用 Mutex 来安全地更新
+        // Update ping_handle - use Mutex to safely update
         {
             let mut ping_guard = self.ping_handle.lock().await;
             if let Some(old_handle) = ping_guard.as_ref() {
@@ -116,25 +116,25 @@ impl Node1Client {
         }
     }
 
-    /// 发送 ping 请求到 /ping 端点
+    /// Send ping request to /ping endpoint
     async fn send_ping_request(http_client: &Client, endpoint: &str, _auth_token: &str) -> Result<()> {
-        // 构建 ping URL
+        // Build ping URL
         let ping_url = if endpoint.ends_with('/') {
             format!("{}ping", endpoint)
         } else {
             format!("{}/ping", endpoint)
         };
 
-        // 发送 GET 请求到 /ping 端点（不需要 api-key）
+        // Send GET request to /ping endpoint (no api-key required)
         let response = http_client.get(&ping_url)
             .send()
             .await?;
         
         if response.status().is_success() {
-            // ping 成功，连接保持活跃
-            // 可以选择性地记录日志，但为了减少噪音，这里不打印
+            // ping successful, connection remains active
+            // Can optionally log, but to reduce noise, not printing here
         } else {
-            eprintln!("Node1 ping 请求返回非成功状态: {}", response.status());
+            eprintln!("Node1 ping request returned non-success status: {}", response.status());
         }
         
         Ok(())
@@ -143,7 +143,7 @@ impl Node1Client {
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
         let request_body = serde_json::to_string(&json!({
             "jsonrpc": "2.0",
@@ -155,7 +155,7 @@ impl Node1Client {
             ]
         }))?;
 
-        // Node1使用api-key header而不是URL参数
+        // Node1 uses api-key header instead of URL parameter
         let response_text = self.http_client.post(&self.endpoint)
             .body(request_body)
             .header("Content-Type", "application/json")
@@ -165,25 +165,27 @@ impl Node1Client {
             .text()
             .await?;
 
-        // 解析JSON响应
+        // Parse JSON response
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" node1{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" node1 {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" node1{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" node1 {} submission failed: {:?}", trade_type, _error);
             }
+        } else {
+            eprintln!(" node1 {} submission failed: {:?}", trade_type, response_text);
         }
 
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" node1{}确认失败: {:?}", trade_type, start_time.elapsed());
+                println!(" node1 {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
 
-        println!(" node1{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" node1 {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }
@@ -198,11 +200,11 @@ impl Node1Client {
 
 impl Drop for Node1Client {
     fn drop(&mut self) {
-        // 确保在客户端被销毁时停止 ping 任务
+        // Ensure ping task stops when client is destroyed
         self.stop_ping.store(true, Ordering::Relaxed);
         
-        // 尝试立即停止 ping 任务
-        // 使用 tokio::spawn 来避免阻塞 Drop
+        // Try to stop ping task immediately
+        // Use tokio::spawn to avoid blocking Drop
         let ping_handle = self.ping_handle.clone();
         tokio::spawn(async move {
             let mut ping_guard = ping_handle.lock().await;

@@ -61,7 +61,7 @@ impl ZeroSlotClient {
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
         let request_body = serde_json::to_string(&json!({
             "jsonrpc": "2.0",
@@ -78,34 +78,36 @@ impl ZeroSlotClient {
         url.push_str("/?api-key=");
         url.push_str(&self.auth_token);
 
-        // 4. 直接使用 `text().await?`，避免 `json().await?` 的异步 JSON 解析
+        // 4. Use `text().await?` directly, avoiding async JSON parsing from `json().await?`
         let response_text = self.http_client.post(&url)
-            .body(request_body) // 直接传字符串，避免 `json()` 开销
-            .header("Content-Type", "application/json") // 显式指定 JSON 头
+            .body(request_body) // Pass string directly, avoiding `json()` overhead
+            .header("Content-Type", "application/json") // Explicitly specify JSON header
             .send()
             .await?
             .text()
             .await?;
 
-        // 5. 用 `serde_json::from_str()` 解析 JSON，减少 `.json().await?` 额外等待
+        // 5. Use `serde_json::from_str()` to parse JSON, reducing extra wait from `.json().await?`
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" 0slot{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" 0slot {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" 0slot{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" 0slot {} submission failed: {:?}", trade_type, _error);
             }
+        } else {
+            eprintln!(" 0slot {} submission failed: {:?}", trade_type, response_text);
         }
 
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" 0slot{}确认失败: {:?}", trade_type, start_time.elapsed());
+                println!(" 0slot {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
 
-        println!(" 0slot{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" 0slot {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }

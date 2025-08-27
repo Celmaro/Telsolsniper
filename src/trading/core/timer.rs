@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-/// 交易时间测量器
+/// Trade time measurement tool
 #[derive(Clone)]
 pub struct TradeTimer {
     start_time: Instant,
@@ -8,31 +8,28 @@ pub struct TradeTimer {
 }
 
 impl TradeTimer {
-    /// 创建新的计时器
+    /// Create a new timer
     pub fn new(stage: impl Into<String>) -> Self {
-        Self {
-            start_time: Instant::now(),
-            stage: stage.into(),
-        }
+        Self { start_time: Instant::now(), stage: stage.into() }
     }
-    
-    /// 记录当前阶段耗时并开始新阶段
+
+    /// Record current stage time and start a new stage
     pub fn stage(&mut self, new_stage: impl Into<String>) {
         let elapsed = self.start_time.elapsed();
-        println!(" {} 耗时: {:?}", self.stage, elapsed);
-        
+        println!(" {} time cost: {:?}", self.stage, elapsed);
+
         self.start_time = Instant::now();
         self.stage = new_stage.into();
     }
-    
-    /// 完成计时并输出最终耗时
+
+    /// Complete timing and output final time cost
     pub fn finish(mut self) {
         let elapsed = self.start_time.elapsed();
-        println!(" {} 耗时: {:?}", self.stage, elapsed);
-        self.stage.clear(); // 清空stage，避免Drop时重复打印
+        println!(" {} time cost: {:?}", self.stage, elapsed);
+        self.stage.clear(); // Clear stage to avoid duplicate printing in Drop
     }
-    
-    /// 获取当前阶段的耗时（不重置计时器）
+
+    /// Get the elapsed time of current stage (without resetting the timer)
     pub fn elapsed(&self) -> std::time::Duration {
         self.start_time.elapsed()
     }
@@ -42,7 +39,7 @@ impl Drop for TradeTimer {
     fn drop(&mut self) {
         if !self.stage.is_empty() {
             let elapsed = self.start_time.elapsed();
-            println!(" {} 耗时: {:?}", self.stage, elapsed);
+            println!(" {} time cost: {:?}", self.stage, elapsed);
         }
     }
-} 
+}

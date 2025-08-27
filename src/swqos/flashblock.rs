@@ -61,16 +61,16 @@ impl FlashBlockClient {
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
-        // FlashBlock API格式
+        // FlashBlock API format
         let request_body = serde_json::to_string(&json!({
             "transactions": [content]
         }))?;
 
         let url = format!("{}/api/v2/submit-batch", self.endpoint);
 
-        // 发送请求到FlashBlock
+        // Send request to FlashBlock
         let response_text = self.http_client.post(&url)
             .body(request_body)
             .header("Authorization", &self.auth_token)
@@ -80,25 +80,27 @@ impl FlashBlockClient {
             .text()
             .await?;
 
-        // 解析响应
+        // Parse response
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("success").is_some() || response_json.get("result").is_some() {
-                println!(" FlashBlock{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" FlashBlock {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" FlashBlock{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" FlashBlock {} submission failed: {:?}", trade_type, _error);
             }
+        } else {
+            eprintln!(" FlashBlock {} submission failed: {:?}", trade_type, response_text);
         }
 
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" FlashBlock{}确认失败: {:?}", trade_type, start_time.elapsed());
+                println!(" FlashBlock {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
 
-        println!(" FlashBlock{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" FlashBlock {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }

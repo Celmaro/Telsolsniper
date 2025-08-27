@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-/// 并行执行交易的通用函数
+/// Generic function for parallel transaction execution
 pub async fn parallel_execute_with_tips(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
@@ -49,8 +49,10 @@ pub async fn parallel_execute_with_tips(
         let handle = tokio::spawn(async move {
             core_affinity::set_for_current(core_id);
 
-            let mut timer =
-                TradeTimer::new(format!("构建交易指令: {:?}", swqos_client.get_swqos_type()));
+            let mut timer = TradeTimer::new(format!(
+                "Building transaction instructions: {:?}",
+                swqos_client.get_swqos_type()
+            ));
 
             let transaction = if matches!(trade_type, TradeType::Sell)
                 && swqos_client.get_swqos_type() == SwqosType::Default
@@ -99,7 +101,8 @@ pub async fn parallel_execute_with_tips(
             } else {
                 let tip_account = swqos_client.get_tip_account()?;
                 let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
-                priority_fee.buy_tip_fee = priority_fee.buy_tip_fees[i % priority_fee.buy_tip_fees.len()];
+                priority_fee.buy_tip_fee =
+                    priority_fee.buy_tip_fees[i % priority_fee.buy_tip_fees.len()];
 
                 build_tip_transaction_with_priority_fee(
                     payer,
@@ -116,7 +119,10 @@ pub async fn parallel_execute_with_tips(
                 .await?
             };
 
-            timer.stage(format!("提交交易指令: {:?}", swqos_client.get_swqos_type()));
+            timer.stage(format!(
+                "Submitting transaction instructions: {:?}",
+                swqos_client.get_swqos_type()
+            ));
 
             swqos_client.send_transaction(trade_type, &transaction).await?;
 
@@ -126,11 +132,10 @@ pub async fn parallel_execute_with_tips(
 
         handles.push(handle);
     }
-
-    // 任意一个成功即返回
+    // Return as soon as any one succeeds
     let (tx, mut rx) = mpsc::channel(swqos_clients.len());
 
-    // 启动监听任务
+    // Start monitoring tasks
     for handle in handles {
         let tx = tx.clone();
         tokio::spawn(async move {
@@ -138,9 +143,9 @@ pub async fn parallel_execute_with_tips(
             let _ = tx.send(result).await;
         });
     }
-    drop(tx); // 关闭发送端
+    drop(tx); // Close the sender
 
-    // 等待第一个成功的结果
+    // Wait for the first successful result
     let mut errors = Vec::new();
 
     if !wait_transaction_confirmed {
@@ -157,6 +162,6 @@ pub async fn parallel_execute_with_tips(
         }
     }
 
-    // 如果没有成功的，返回错误
-    return Err(anyhow!("所有交易都失败了: {:?}", errors));
+    // If no success, return error
+    return Err(anyhow!("All transactions failed: {:?}", errors));
 }

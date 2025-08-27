@@ -60,7 +60,7 @@ impl BloxrouteClient {
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64).await?;
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
         let body = serde_json::json!({
             "transaction": {
@@ -80,32 +80,34 @@ impl BloxrouteClient {
             .text()
             .await?;
 
-        // 5. 用 `serde_json::from_str()` 解析 JSON，减少 `.json().await?` 额外等待
+        // 5. Use `serde_json::from_str()` to parse JSON, reducing extra wait from `.json().await?`
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" bloxroute{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" bloxroute {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" bloxroute{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" bloxroute {} submission failed: {:?}", trade_type, _error);
             }
+        } else {
+            eprintln!(" bloxroute {} submission failed: {:?}", trade_type, response_text);
         }
 
         let start_time: Instant = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" bloxroute{}确认失败: {:?}", trade_type, start_time.elapsed());
+                println!(" bloxroute {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
 
-        println!(" bloxroute{}确认: {:?}", trade_type, start_time.elapsed());
+        println!(" bloxroute {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }
 
     pub async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>) -> Result<()> {
         let start_time = Instant::now();
-        println!(" 交易编码base64: {:?}", start_time.elapsed());
+        println!(" Transaction encoded to base64: {:?}", start_time.elapsed());
 
         let body = serde_json::json!({
             "entries":  transactions
@@ -132,9 +134,9 @@ impl BloxrouteClient {
 
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
             if response_json.get("result").is_some() {
-                println!(" bloxroute{}提交: {:?}", trade_type, start_time.elapsed());
+                println!(" bloxroute {} submitted: {:?}", trade_type, start_time.elapsed());
             } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" bloxroute{}提交失败: {:?}", trade_type, _error);
+                eprintln!(" bloxroute {} submission failed: {:?}", trade_type, _error);
             }
         }
 
