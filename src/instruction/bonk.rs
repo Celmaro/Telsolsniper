@@ -126,7 +126,7 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.platform_onfig,
+                protocol_params.platform_config,
                 false,
             ), // Platform Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
@@ -264,7 +264,7 @@ impl BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.platform_onfig,
+                protocol_params.platform_config,
                 false,
             ), // Platform Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
