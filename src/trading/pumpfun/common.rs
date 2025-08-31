@@ -74,6 +74,17 @@ pub fn get_global_volume_accumulator_pda() -> Option<Pubkey> {
 }
 
 #[inline]
+pub fn get_fee_config_pda() -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[
+        constants::pumpfun::seeds::FEE_CONFIG_SEED,
+        constants::pumpfun::accounts::PUMPFUN.as_ref(),
+    ];
+    let program_id: &Pubkey = &constants::pumpfun::accounts::FEE_PROGRAM;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
+}
+
+#[inline]
 pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(
         &[

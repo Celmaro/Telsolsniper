@@ -32,6 +32,8 @@ pub mod seeds {
 
     /// Seed for global volume accumulator PDAs
     pub const GLOBAL_VOLUME_ACCUMULATOR_SEED: &[u8] = b"global_volume_accumulator";
+
+    pub const FEE_CONFIG_SEED: &[u8] = b"fee_config";
 }
 
 pub mod global_constants {
@@ -108,6 +110,8 @@ pub mod accounts {
     pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
 
     pub const AMM_PROGRAM: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
+
+    pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 }
 
 pub struct Symbol;

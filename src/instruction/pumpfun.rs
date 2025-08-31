@@ -8,7 +8,7 @@ use spl_token::instruction::close_account;
 use crate::{
     constants,
     trading::pumpfun::common::{
-        get_bonding_curve_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
+        get_bonding_curve_pda, get_fee_config_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda
     },
     utils::calc::{
         common::{calculate_with_slippage_buy, calculate_with_slippage_sell},
@@ -209,6 +209,8 @@ pub fn buy(
             AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
             AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
             AccountMeta::new(get_user_volume_accumulator_pda(&payer.pubkey()).unwrap(), false),
+            AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
+            AccountMeta::new_readonly(constants::pumpfun::accounts::FEE_PROGRAM, false),
         ],
     )
 }
@@ -237,8 +239,8 @@ pub fn sell(
             AccountMeta::new_readonly(constants::pumpfun::accounts::TOKEN_PROGRAM, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
             AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
-            AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
-            AccountMeta::new(get_user_volume_accumulator_pda(&payer.pubkey()).unwrap(), false),
+            AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
+            AccountMeta::new_readonly(constants::pumpfun::accounts::FEE_PROGRAM, false),
         ],
     )
 }
