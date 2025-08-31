@@ -287,7 +287,7 @@ pub struct BonkParams {
     /// Token program ID
     /// Specifies the program used by the token, usually spl_token::ID or spl_token_2022::ID
     pub mint_token_program: Pubkey,
-    pub platform_onfig: Pubkey,
+    pub platform_config: Pubkey,
     pub platform_associated_account: Pubkey,
     pub creator_associated_account: Pubkey,
     pub auto_handle_wsol: bool,
@@ -296,14 +296,14 @@ pub struct BonkParams {
 impl BonkParams {
     pub fn immediate_sell(
         mint_token_program: Pubkey,
-        platform_onfig: Pubkey,
+        platform_config: Pubkey,
         platform_associated_account: Pubkey,
         creator_associated_account: Pubkey,
     ) -> Self {
         Self {
             auto_handle_wsol: true,
             mint_token_program,
-            platform_onfig,
+            platform_config,
             platform_associated_account,
             creator_associated_account,
             ..Default::default()
@@ -316,7 +316,7 @@ impl BonkParams {
             real_base: trade_info.real_base_after as u128,
             real_quote: trade_info.real_quote_after as u128,
             mint_token_program: trade_info.base_token_program,
-            platform_onfig: trade_info.platform_config,
+            platform_config: trade_info.platform_config,
             platform_associated_account: trade_info.platform_associated_account,
             creator_associated_account: trade_info.creator_associated_account,
             auto_handle_wsol: true,
@@ -366,7 +366,7 @@ impl BonkParams {
             real_base: real_base,
             real_quote: real_quote,
             mint_token_program: trade_info.base_token_program,
-            platform_onfig: trade_info.platform_config,
+            platform_config: trade_info.platform_config,
             platform_associated_account: trade_info.platform_associated_account,
             creator_associated_account: trade_info.creator_associated_account,
             auto_handle_wsol: true,
@@ -393,7 +393,7 @@ impl BonkParams {
             real_base: pool_data.real_base as u128,
             real_quote: pool_data.real_quote as u128,
             mint_token_program: token_account.owner,
-            platform_onfig: pool_data.platform_config,
+            platform_config: pool_data.platform_config,
             platform_associated_account,
             creator_associated_account,
             auto_handle_wsol: true,
