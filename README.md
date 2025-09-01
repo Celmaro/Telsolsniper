@@ -96,7 +96,7 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **Bloxroute**: The first parameter is API Token  
 - **ZeroSlot**: The first parameter is API Token
 - **Temporal**: The first parameter is API Token
-- **FlashBlock**: The first parameter is API Token, Add the official TG support at https://t.me/FlashBlock_Official to get a free key and instantly accelerate your trades! Official docs: https://doc.flashblock.trade/
+- **FlashBlock**: The first parameter is API Token, Add the official TG support at https://t.me/xyz_0xfnzero to get a free key and instantly accelerate your trades! Official docs: https://doc.flashblock.trade/
 - **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me to get a free key and instantly accelerate your trades! Official docs: https://node1.me/docs.html
 
 When using multiple MEV services, you need to use `Durable Nonce`. You need to initialize a `NonceCache` class (or write your own nonce management class), get the latest `nonce` value, and use it as the `blockhash` when trading.
@@ -238,8 +238,8 @@ let trade_config = TradeConfig {
 - **ZeroSlot**: Zero-latency transactions
 - **Temporal**: Time-sensitive transactions
 - **Bloxroute**: Blockchain network acceleration
-- **FlashBlock**: High-speed transaction execution with API key authentication - [Official Docs](https://doc.flashblock.trade/)
-- **Node1**: High-speed transaction execution with API key authentication - [Official Docs](https://node1.me/docs.html)
+- **FlashBlock**: High-speed transaction execution with API key authentication 
+- **Node1**: High-speed transaction execution with API key authentication 
 
 ## New Architecture Features
 
