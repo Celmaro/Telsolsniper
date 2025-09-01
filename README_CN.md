@@ -96,8 +96,8 @@ cargo run --package event_subscription
 - **Bloxroute**: 第一个参数是 API Token  
 - **ZeroSlot**: 第一个参数是 API Token
 - **Temporal**: 第一个参数是 API Token
-- **FlashBlock**: 第一个参数是 API Token, 添加tg官方客服https://t.me/FlashBlock_Official 获取免费key立即加速你的交易！官方文档: https://doc.flashblock.trade/
-- **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！官方文档: https://node1.me/docs.html
+- **FlashBlock**: 第一个参数是 API Token, 添加社区tg管理员https://t.me/xyz_0xfnzero 获取免费key立即加速你的交易(可获得小费返还)！
+- **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！
 
 当使用多个MEV服务时，需要使用`Durable Nonce`。你需要初始化`NonceCache`类（或者自行写一个管理nonce的类），获取最新的`nonce`值，并在交易的时候作为`blockhash`使用。
 
