@@ -33,14 +33,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.4" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.5.3"
+sol-trade-sdk = "0.5.4"
 ```
 
 ## Usage Examples
@@ -70,6 +70,20 @@ The `lookup_table_key` parameter is an optional `Pubkey` that specifies an addre
   - Reduces transaction size by referencing addresses from lookup tables
   - Improves transaction success rate and speed
   - Particularly useful for complex transactions with many account references
+
+#### priority_fee Parameter
+
+The `priority_fee` parameter is an optional `PriorityFee` that allows you to override the default priority fee settings for individual transactions:
+
+- **Purpose**: Provides fine-grained control over transaction priority fees on a per-transaction basis
+- **Usage**:
+  - Can be passed to `buy()` and `sell()` methods to override the global priority fee settings
+  - If not provided, defaults to `None` and uses the priority fee settings from `TradeConfig`
+  - When provided, the `buy_tip_fees` array will be automatically padded to match the number of SWQOS clients
+- **Benefits**:
+  - Allows dynamic adjustment of priority fees based on market conditions
+  - Enables different fee strategies for different types of transactions
+  - Provides flexibility for high-frequency trading scenarios
 
 #### About ShredStream
 

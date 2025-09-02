@@ -103,6 +103,7 @@ async fn test_middleware() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
+            None,
         )
         .await?;
     println!("tip: This transaction will not succeed because we're using a test account. You can modify the code to initialize the payer with your own private key");

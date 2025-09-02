@@ -65,16 +65,16 @@ impl SolanaTrade {
         let mut priority_fee = trade_config.priority_fee.clone();
         let commitment = trade_config.commitment.clone();
         if priority_fee.buy_tip_fees.len() < swqos_configs.len() {
-            // 补齐数组,只补齐缺少的
+            // Fill the array, only fill the missing elements
             let mut buy_tip_fees = priority_fee.buy_tip_fees.clone();
             let default_fee = priority_fee.buy_tip_fee;
-            // 计算需要补充的元素数量
+            // Calculate the number of elements that need to be added
             let missing_count = swqos_configs.len() - buy_tip_fees.len();
-            // 添加缺少的元素，使用默认值
+            // Add missing elements using default values
             for _ in 0..missing_count {
                 buy_tip_fees.push(default_fee);
             }
-            // 更新 priority_fee 中的 buy_tip_fees
+            // Update buy_tip_fees in priority_fee
             priority_fee.buy_tip_fees = buy_tip_fees;
             trade_config.priority_fee = priority_fee.clone();
         }
@@ -159,6 +159,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        priority_fee: Option<PriorityFee>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
@@ -178,6 +179,23 @@ impl SolanaTrade {
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
         };
+        if priority_fee.is_some() {
+            let mut custom_priority_fee = priority_fee.unwrap();
+            // Fill the array, only fill the missing elements
+            if custom_priority_fee.buy_tip_fees.len() < self.swqos_clients.len() {
+                let mut buy_tip_fees = custom_priority_fee.buy_tip_fees.clone();
+                let default_fee = custom_priority_fee.buy_tip_fee;
+                // Calculate the number of elements that need to be added
+                let missing_count = self.swqos_clients.len() - buy_tip_fees.len();
+                // Add missing elements using default values
+                for _ in 0..missing_count {
+                    buy_tip_fees.push(default_fee);
+                }
+                // Update buy_tip_fees in custom_priority_fee
+                custom_priority_fee.buy_tip_fees = buy_tip_fees;
+            }
+            buy_params.priority_fee = custom_priority_fee;
+        }
         if custom_buy_tip_fee.is_some() {
             buy_params.priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
             buy_params.priority_fee.buy_tip_fees = buy_params
@@ -250,6 +268,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        priority_fee: Option<PriorityFee>,
     ) -> Result<(), anyhow::Error> {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
@@ -268,6 +287,23 @@ impl SolanaTrade {
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
         };
+        if priority_fee.is_some() {
+            let mut custom_priority_fee = priority_fee.unwrap();
+            // Fill the array, only fill the missing elements
+            if custom_priority_fee.buy_tip_fees.len() < self.swqos_clients.len() {
+                let mut buy_tip_fees = custom_priority_fee.buy_tip_fees.clone();
+                let default_fee = custom_priority_fee.buy_tip_fee;
+                // Calculate the number of elements that need to be added
+                let missing_count = self.swqos_clients.len() - buy_tip_fees.len();
+                // Add missing elements using default values
+                for _ in 0..missing_count {
+                    buy_tip_fees.push(default_fee);
+                }
+                // Update buy_tip_fees in custom_priority_fee
+                custom_priority_fee.buy_tip_fees = buy_tip_fees;
+            }
+            sell_params.priority_fee = custom_priority_fee;
+        }
         if custom_buy_tip_fee.is_some() {
             sell_params.priority_fee.buy_tip_fee = custom_buy_tip_fee.unwrap();
             sell_params.priority_fee.buy_tip_fees = sell_params
@@ -351,6 +387,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        priority_fee: Option<PriorityFee>,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
@@ -367,6 +404,7 @@ impl SolanaTrade {
             extension_params,
             lookup_table_key,
             wait_transaction_confirmed,
+            priority_fee,
         )
         .await
     }

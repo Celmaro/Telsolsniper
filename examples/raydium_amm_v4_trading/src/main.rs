@@ -161,6 +161,7 @@ async fn raydium_amm_v4_copy_trade_with_grpc(trade_info: RaydiumAmmV4SwapEvent) 
             Box::new(params),
             None,
             true,
+            None,
         )
         .await?;
 
@@ -188,6 +189,7 @@ async fn raydium_amm_v4_copy_trade_with_grpc(trade_info: RaydiumAmmV4SwapEvent) 
             Box::new(params),
             None,
             true,
+            None,
         )
         .await?;
 

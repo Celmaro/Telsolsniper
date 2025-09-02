@@ -188,6 +188,7 @@ async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -
             Box::new(params.clone()),
             None,
             true,
+            None,
         )
         .await?;
 
@@ -216,6 +217,7 @@ async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -
             Box::new(params.clone()),
             None,
             true,
+            None,
         )
         .await?;
 

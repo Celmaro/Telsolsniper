@@ -33,14 +33,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.4" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.5.3"
+sol-trade-sdk = "0.5.4"
 ```
 
 ## 使用示例
@@ -70,6 +70,20 @@ sol-trade-sdk = "0.5.3"
   - 通过从查找表引用地址来减少交易大小
   - 提高交易成功率和速度
   - 特别适用于具有许多账户引用的复杂交易
+
+#### priority_fee 参数
+
+`priority_fee` 参数是一个可选的 `PriorityFee`，允许您为单个交易覆盖默认的优先级费用设置：
+
+- **用途**：为每个交易提供对交易优先级费用的细粒度控制
+- **使用方法**：
+  - 可以传递给 `buy()` 和 `sell()` 方法来覆盖全局优先级费用设置
+  - 如果不提供，默认为 `None` 并使用 `TradeConfig` 中的优先级费用设置
+  - 当提供时，`buy_tip_fees` 数组将自动填充以匹配 SWQOS 客户端的数量
+- **优势**：
+  - 允许根据市场条件动态调整优先级费用
+  - 为不同类型的交易启用不同的费用策略
+  - 为高频交易场景提供灵活性
 
 #### 关于shredstream
 
