@@ -101,11 +101,12 @@ impl TemporalClient {
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
+                println!(" signature: {:?}", signature);
                 println!(" nozomi {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
-
+        println!(" signature: {:?}", signature);
         println!(" nozomi {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())

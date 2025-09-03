@@ -92,11 +92,12 @@ impl NextBlockClient {
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
+                println!(" signature: {:?}", signature);
                 println!(" nextblock {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
-
+        println!(" signature: {:?}", signature);
         println!(" nextblock {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())

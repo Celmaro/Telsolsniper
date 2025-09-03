@@ -180,11 +180,12 @@ impl Node1Client {
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
+                println!(" signature: {:?}", signature);
                 println!(" node1 {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
-
+        println!(" signature: {:?}", signature);
         println!(" node1 {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())

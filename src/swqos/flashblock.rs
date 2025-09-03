@@ -95,11 +95,12 @@ impl FlashBlockClient {
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
+                println!(" signature: {:?}", signature);
                 println!(" FlashBlock {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             },
         }
-
+        println!(" signature: {:?}", signature);
         println!(" FlashBlock {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())

@@ -41,12 +41,13 @@ impl SwqosClientTrait for SolRpcClient {
         match poll_transaction_confirmation(&self.rpc_client, signature).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" rpc{} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                println!(" signature: {:?}", signature);
+                println!(" rpc {} confirmation failed: {:?}", trade_type, start_time.elapsed());
                 return Err(e);
             }
         }
         println!(" signature: {:?}", signature);
-        println!(" rpc{} confirmed: {:?}", trade_type, start_time.elapsed());
+        println!(" rpc {} confirmed: {:?}", trade_type, start_time.elapsed());
 
         Ok(())
     }
