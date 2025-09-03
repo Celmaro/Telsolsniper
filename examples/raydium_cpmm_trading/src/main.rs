@@ -162,7 +162,6 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
             Box::new(buy_params),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -192,7 +191,6 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
             Box::new(sell_params),
             None,
             true,
-            None,
         )
         .await?;
 

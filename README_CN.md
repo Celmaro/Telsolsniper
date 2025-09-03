@@ -33,14 +33,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.4" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.5" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.5.4"
+sol-trade-sdk = "0.5.5"
 ```
 
 ## 使用示例
@@ -90,18 +90,22 @@ sol-trade-sdk = "0.5.4"
 当你使用 shred 订阅事件时，由于 shred 的特性，你无法获取到交易事件的完整信息。
 请你在使用时，确保你的交易逻辑依赖的参数，在shred中都能获取到。
 
-### 1. 事件订阅 - 监听代币交易
+### 使用示例汇总表格
 
-查看[examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs) 中的示例代码。
+| 功能类型 | 示例包名 | 描述 | 运行命令 | 源码路径 |
+|---------|---------|------|---------|----------|
+| 事件订阅 | `event_subscription` | 监听代币交易事件 | `cargo run --package event_subscription` | [examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs) |
+| 交易客户端 | `trading_client` | 创建和配置 SolanaTrade 实例 | `cargo run --package trading_client` | [examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs) |
+| PumpFun 狙击 | `pumpfun_sniper_trading` | PumpFun 代币狙击交易 | `cargo run --package pumpfun_sniper_trading` | [examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs) |
+| PumpFun 跟单 | `pumpfun_copy_trading` | PumpFun 代币跟单交易 | `cargo run --package pumpfun_copy_trading` | [examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs) |
+| PumpSwap | `pumpswap_trading` | PumpSwap 交易操作 | `cargo run --package pumpswap_trading` | [examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs) |
+| Raydium CPMM | `raydium_cpmm_trading` | Raydium CPMM 交易操作 | `cargo run --package raydium_cpmm_trading` | [examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs) |
+| Raydium AMM V4 | `raydium_amm_v4_trading` | Raydium AMM V4 交易操作 | `cargo run --package raydium_amm_v4_trading` | [examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs) |
+| Bonk 狙击 | `bonk_sniper_trading` | Bonk 代币狙击交易 | `cargo run --package bonk_sniper_trading` | [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) |
+| Bonk 跟单 | `bonk_copy_trading` | Bonk 代币跟单交易 | `cargo run --package bonk_copy_trading` | [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) |
+| 中间件系统 | `middleware_system` | 自定义指令中间件示例 | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
 
-运行示例代码：
-```bash
-cargo run --package event_subscription
-```
-
-### 2. 初始化 SolanaTrade 实例
-
-#### 2.1 SWQOS 服务配置说明
+### SWQOS 服务配置说明
 
 在配置 SWQOS 服务时，需要注意不同服务的参数要求：
 
@@ -115,95 +119,9 @@ cargo run --package event_subscription
 
 当使用多个MEV服务时，需要使用`Durable Nonce`。你需要初始化`NonceCache`类（或者自行写一个管理nonce的类），获取最新的`nonce`值，并在交易的时候作为`blockhash`使用。
 
-#### 2.2 创建 SolanaTrade 实例
+### 中间件系统说明
 
-查看[examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package trading_client
-```
-
-### 3. PumpFun 交易操作
-
-#### 3.1 狙击
-
-查看[examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package pumpfun_sniper_trading
-```
-
-#### 3.2 跟单
-
-查看[examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package pumpfun_copy_trading
-```
-
-### 4. PumpSwap 交易操作
-
-查看[examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package pumpswap_trading
-```
-
-### 5. Raydium CPMM 交易操作
-
-查看[examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package raydium_cpmm_trading
-```
-
-
-### 6. Raydium AMM V4 交易操作
-
-查看[examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package raydium_amm_v4_trading
-```
-
-### 7. Bonk 交易操作
-
-#### 7.1 狙击
-
-查看[examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package bonk_sniper_trading
-```
-
-#### 7.2 跟单
-
-查看[examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package bonk_copy_trading
-```
-
-### 8. 中间件系统
-
-SDK 提供了强大的中间件系统，允许您在交易执行前对指令进行修改、添加或移除。这为您提供了极大的灵活性来自定义交易行为。
-
-查看[examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) 中的示例代码。
-
-运行示例代码：
-```bash
-cargo run --package middleware_system
-```
-
-中间件按照添加顺序依次执行：
+SDK 提供了强大的中间件系统，允许您在交易执行前对指令进行修改、添加或移除。中间件按照添加顺序依次执行：
 
 ```rust
 let middleware_manager = MiddlewareManager::new()

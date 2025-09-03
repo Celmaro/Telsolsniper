@@ -33,14 +33,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.4" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.5" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.5.4"
+sol-trade-sdk = "0.5.5"
 ```
 
 ## Usage Examples
@@ -90,18 +90,22 @@ The `priority_fee` parameter is an optional `PriorityFee` that allows you to ove
 When using shred to subscribe to events, due to the nature of shreds, you cannot get complete information about transaction events.
 Please ensure that the parameters your trading logic depends on are available in shreds when using them.
 
-### 1. Event Subscription - Monitor Token Trading
+### Usage Examples Summary Table
 
-See the example code in [examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs).
+| Feature Type | Package Name | Description | Run Command | Source Code |
+|-------------|--------------|-------------|-------------|-------------|
+| Event Subscription | `event_subscription` | Monitor token trading events | `cargo run --package event_subscription` | [examples/event_subscription](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/event_subscription/src/main.rs) |
+| Trading Client | `trading_client` | Create and configure SolanaTrade instance | `cargo run --package trading_client` | [examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs) |
+| PumpFun Sniping | `pumpfun_sniper_trading` | PumpFun token sniping trading | `cargo run --package pumpfun_sniper_trading` | [examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs) |
+| PumpFun Copy Trading | `pumpfun_copy_trading` | PumpFun token copy trading | `cargo run --package pumpfun_copy_trading` | [examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs) |
+| PumpSwap | `pumpswap_trading` | PumpSwap trading operations | `cargo run --package pumpswap_trading` | [examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs) |
+| Raydium CPMM | `raydium_cpmm_trading` | Raydium CPMM trading operations | `cargo run --package raydium_cpmm_trading` | [examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs) |
+| Raydium AMM V4 | `raydium_amm_v4_trading` | Raydium AMM V4 trading operations | `cargo run --package raydium_amm_v4_trading` | [examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs) |
+| Bonk Sniping | `bonk_sniper_trading` | Bonk token sniping trading | `cargo run --package bonk_sniper_trading` | [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) |
+| Bonk Copy Trading | `bonk_copy_trading` | Bonk token copy trading | `cargo run --package bonk_copy_trading` | [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) |
+| Middleware System | `middleware_system` | Custom instruction middleware example | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
 
-Run the example code:
-```bash
-cargo run --package event_subscription
-```
-
-### 2. Initialize SolanaTrade Instance
-
-#### 2.1 SWQOS Service Configuration
+### SWQOS Service Configuration
 
 When configuring SWQOS services, note the different parameter requirements for each service:
 
@@ -115,94 +119,9 @@ When configuring SWQOS services, note the different parameter requirements for e
 
 When using multiple MEV services, you need to use `Durable Nonce`. You need to initialize a `NonceCache` class (or write your own nonce management class), get the latest `nonce` value, and use it as the `blockhash` when trading.
 
-#### 2.2 Creating SolanaTrade Instance
+### Middleware System Explanation
 
-See the example code in [examples/trading_client](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/trading_client/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package trading_client
-```
-
-### 3. PumpFun Trading Operations
-
-#### 3.1 Sniping
-
-See the example code in [examples/pumpfun_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_sniper_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package pumpfun_sniper_trading
-```
-
-#### 3.2 Copy Trading
-
-See the example code in [examples/pumpfun_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpfun_copy_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package pumpfun_copy_trading
-```
-
-### 4. PumpSwap Trading Operations
-
-See the example code in [examples/pumpswap_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/pumpswap_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package pumpswap_trading
-```
-
-### 5. Raydium CPMM Trading Operations
-
-See the example code in [examples/raydium_cpmm_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_cpmm_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package raydium_cpmm_trading
-```
-
-### 6. Raydium AMM V4 Trading Operations
-
-See the example code in [examples/raydium_amm_v4_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/raydium_amm_v4_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package raydium_amm_v4_trading
-```
-
-### 7. Bonk Trading Operations
-
-#### 7.1 Sniping
-
-See the example code in [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package bonk_sniper_trading
-```
-
-#### 7.2 Copy Trading
-
-See the example code in [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package bonk_copy_trading
-```
-
-### 8. Middleware System
-
-The SDK provides a powerful middleware system that allows you to modify, add, or remove instructions before transaction execution. This gives you tremendous flexibility to customize trading behavior.
-
-See the example code in [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs).
-
-Run the example code:
-```bash
-cargo run --package middleware_system
-```
-
-Middleware executes in the order they are added:
+The SDK provides a powerful middleware system that allows you to modify, add, or remove instructions before transaction execution. Middleware executes in the order they are added:
 
 ```rust
 let middleware_manager = MiddlewareManager::new()

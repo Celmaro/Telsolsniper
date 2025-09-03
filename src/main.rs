@@ -120,7 +120,6 @@ async fn test_middleware() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
-            None,
         )
         .await?;
     Ok(())
@@ -148,7 +147,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -167,7 +165,6 @@ async fn test_pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> Any
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -200,7 +197,6 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -219,7 +215,6 @@ async fn test_pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) ->
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -250,7 +245,6 @@ async fn test_pumpswap() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -270,7 +264,6 @@ async fn test_pumpswap() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -299,7 +292,6 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
             Box::new(BonkParams::from_trade(trade_info.clone())),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -318,7 +310,6 @@ async fn test_bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult
             Box::new(BonkParams::from_trade(trade_info)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -351,7 +342,6 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
             Box::new(BonkParams::from_dev_trade(trade_info.clone())),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -370,7 +360,6 @@ async fn test_bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyRe
             Box::new(BonkParams::from_dev_trade(trade_info)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -400,7 +389,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -420,7 +408,6 @@ async fn test_bonk() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(BonkParams::from_mint_by_rpc(&client.rpc, &mint_pubkey).await?),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -452,7 +439,6 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             ),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -474,7 +460,6 @@ async fn test_raydium_cpmm() -> Result<(), Box<dyn std::error::Error>> {
             ),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -504,7 +489,6 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -524,7 +508,6 @@ async fn test_raydium_amm_v4() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(RaydiumAmmV4Params::from_amm_address_by_rpc(&client.rpc, amm_address).await?),
             None,
             true,
-            None,
         )
         .await?;
 

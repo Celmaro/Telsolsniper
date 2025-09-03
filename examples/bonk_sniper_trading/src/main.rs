@@ -121,7 +121,6 @@ async fn bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<
             Box::new(BonkParams::from_dev_trade(trade_info.clone())),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -153,7 +152,6 @@ async fn bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<
             )),
             None,
             true,
-            None,
         )
         .await?;
 

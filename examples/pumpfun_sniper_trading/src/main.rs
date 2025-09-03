@@ -114,7 +114,6 @@ async fn pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyR
             Box::new(PumpFunParams::from_dev_trade(&trade_info, None)),
             None,
             true,
-            None,
         )
         .await?;
 
@@ -141,7 +140,6 @@ async fn pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyR
             Box::new(PumpFunParams::immediate_sell(trade_info.creator_vault, true)),
             None,
             true,
-            None,
         )
         .await?;
 
