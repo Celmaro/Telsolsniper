@@ -26,6 +26,7 @@ pub mod seeds {
 
     pub const USER_VOLUME_ACCUMULATOR_SEED: &[u8] = b"user_volume_accumulator";
     pub const GLOBAL_VOLUME_ACCUMULATOR_SEED: &[u8] = b"global_volume_accumulator";
+    pub const FEE_CONFIG_SEED: &[u8] = b"fee_config";
 }
 
 /// Constants related to program accounts and authorities
@@ -65,7 +66,8 @@ pub mod accounts {
     pub const LP_FEE_BASIS_POINTS: u64 = 20;
     pub const PROTOCOL_FEE_BASIS_POINTS: u64 = 5;
     pub const COIN_CREATOR_FEE_BASIS_POINTS: u64 = 5;
-    
+
+    pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 }
 
 pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];

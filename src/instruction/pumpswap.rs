@@ -16,7 +16,7 @@ use crate::{
         },
         pumpswap::common::{
             coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata,
-            get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
+            get_fee_config_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
         },
     },
     utils::calc::pumpswap::{buy_quote_input_internal, sell_base_input_internal},
@@ -272,6 +272,10 @@ impl PumpSwapInstructionBuilder {
                 false,
             ));
         }
+        accounts
+            .push(solana_sdk::instruction::AccountMeta::new(get_fee_config_pda().unwrap(), false));
+        accounts
+            .push(solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_PROGRAM, false));
 
         // Create instruction data
         let mut data = vec![];
@@ -460,6 +464,11 @@ impl PumpSwapInstructionBuilder {
                 false,
             ));
         }
+
+        accounts
+            .push(solana_sdk::instruction::AccountMeta::new(get_fee_config_pda().unwrap(), false));
+        accounts
+            .push(solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_PROGRAM, false));
 
         // Create instruction data
         let mut data = vec![];

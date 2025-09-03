@@ -1,5 +1,5 @@
-use crate::common::SolanaRpcClient;
 use crate::constants::pumpswap::accounts;
+use crate::{common::SolanaRpcClient, constants};
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::pubkey::Pubkey;
@@ -163,4 +163,15 @@ pub async fn get_token_balances(
     let quote_amount = quote_balance.amount.parse::<u64>().map_err(|e| anyhow!(e))?;
 
     Ok((base_amount, quote_amount))
+}
+
+#[inline]
+pub fn get_fee_config_pda() -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[
+        constants::pumpswap::seeds::FEE_CONFIG_SEED,
+        constants::pumpswap::accounts::AMM_PROGRAM.as_ref(),
+    ];
+    let program_id: &Pubkey = &constants::pumpswap::accounts::FEE_PROGRAM;
+    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+    pda.map(|pubkey| pubkey.0)
 }
