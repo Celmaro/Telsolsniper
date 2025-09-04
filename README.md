@@ -33,14 +33,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.6" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.7" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.5.6"
+sol-trade-sdk = "0.5.7"
 ```
 
 ## Usage Examples
@@ -59,7 +59,7 @@ In PumpSwap, Bonk, and Raydium CPMM trading, the `auto_handle_wsol` parameter is
 
 #### lookup_table_key Parameter
 
-The `lookup_table_key` parameter is an optional `Pubkey` that specifies an address lookup table for transaction optimization:
+The `lookup_table_key` parameter is an optional `Pubkey` that specifies an address lookup table for transaction optimization. You need to use `AddressLookupTableCache` to manage the cached address lookup table before using it.
 
 - **Purpose**: Address lookup tables can reduce transaction size and improve execution speed by storing frequently used addresses
 - **Usage**: 
@@ -104,6 +104,8 @@ Please ensure that the parameters your trading logic depends on are available in
 | Bonk Sniping | `bonk_sniper_trading` | Bonk token sniping trading | `cargo run --package bonk_sniper_trading` | [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) |
 | Bonk Copy Trading | `bonk_copy_trading` | Bonk token copy trading | `cargo run --package bonk_copy_trading` | [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) |
 | Middleware System | `middleware_system` | Custom instruction middleware example | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
+| Address Lookup | `address_lookup` | Address lookup table example | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
+| Nonce | `nonce_cache` | Nonce example | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
 
 ### SWQOS Service Configuration
 

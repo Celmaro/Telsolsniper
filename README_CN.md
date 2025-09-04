@@ -33,14 +33,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.6" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.5.7" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.5.6"
+sol-trade-sdk = "0.5.7"
 ```
 
 ## 使用示例
@@ -59,7 +59,7 @@ sol-trade-sdk = "0.5.6"
 
 #### lookup_table_key 参数
 
-`lookup_table_key` 参数是一个可选的 `Pubkey`，用于指定地址查找表以优化交易：
+`lookup_table_key` 参数是一个可选的 `Pubkey`，用于指定地址查找表以优化交易。在使用前你需要通过`AddressLookupTableCache`来管理缓存地址查找表。
 
 - **用途**：地址查找表可以通过存储常用地址来减少交易大小并提高执行速度
 - **使用方法**：
@@ -104,6 +104,8 @@ sol-trade-sdk = "0.5.6"
 | Bonk 狙击 | `bonk_sniper_trading` | Bonk 代币狙击交易 | `cargo run --package bonk_sniper_trading` | [examples/bonk_sniper_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_sniper_trading/src/main.rs) |
 | Bonk 跟单 | `bonk_copy_trading` | Bonk 代币跟单交易 | `cargo run --package bonk_copy_trading` | [examples/bonk_copy_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/bonk_copy_trading/src/main.rs) |
 | 中间件系统 | `middleware_system` | 自定义指令中间件示例 | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
+| 地址查找表 | `address_lookup` | 地址查找表示例 | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
+| Nonce    | `nonce_cache` | Nonce示例 | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
 
 ### SWQOS 服务配置说明
 

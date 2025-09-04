@@ -1,6 +1,6 @@
 [package]
 name = "sol-trade-sdk"
-version = "0.5.6"
+version = "0.5.7"
 edition = "2021"
 authors = [
     "William <byteblock6@gmail.com>",
@@ -26,6 +26,8 @@ members = [
     "examples/bonk_copy_trading",
     "examples/raydium_cpmm_trading",
     "examples/raydium_amm_v4_trading",
+    "examples/address_lookup",
+    "examples/nonce_cache",
 ]
 
 [lib]
@@ -86,4 +88,6 @@ bytemuck = { version = "1.4.0" }
 arrayref = "0.3.6"
 borsh-derive = "1.5.5"
 indicatif = "0.18.0"
-solana-system-interface = "1.0.0"
+solana-system-interface = { version = "1.0.0", features = ["bincode"] }
+fnv = "1.0.7"
+dashmap = "6.1.0"
