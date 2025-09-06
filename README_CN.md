@@ -1,5 +1,5 @@
 # Sol Trade SDK
-[中文](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README.md) | [Telegram](https://t.me/fnzero_group)
+[中文](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README_CN.md) | [English](https://github.com/0xfnzero/sol-trade-sdk/blob/main/README.md) | [Website](https://fnzero.dev/) | [Telegram](https://t.me/fnzero_group)
 
 一个全面的 Rust SDK，用于与 Solana DEX 交易程序进行无缝交互。此 SDK 提供强大的工具和接口集，将 PumpFun、PumpSwap 和 Bonk 功能集成到您的应用程序中。
 
@@ -292,6 +292,7 @@ MIT 许可证
 
 ## 联系方式
 
+- 官方网站: https://fnzero.dev/
 - 项目仓库: https://github.com/0xfnzero/sol-trade-sdk
 - Telegram 群组: https://t.me/fnzero_group
 
