@@ -147,7 +147,7 @@ impl BlockRazorClient {
             // ping successful, connection remains active
             // Can optionally log, but to reduce noise, not printing here
         } else {
-            eprintln!("BlockRazor ping request failed with status: {}, body: {}", response.status(), body);
+            eprintln!("BlockRazor ping request failed with status: {}", response.status());
         }
         
         Ok(())
