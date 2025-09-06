@@ -120,13 +120,13 @@ pub const SWQOS_ENDPOINTS_JITO: [&str; 8] = [
 
 pub const SWQOS_ENDPOINTS_NEXTBLOCK: [&str; 8] = [
     "http://ny.nextblock.io",
-    "http://fra.nextblock.io",
-    "http://fra.nextblock.io",
+    "http://frankfurt.nextblock.io",
+    "http://amsterdam.nextblock.io",
     "http://slc.nextblock.io",
     "http://tokyo.nextblock.io",  
     "http://london.nextblock.io", 
-    "http://ny.nextblock.io",
-    "http://fra.nextblock.io",
+    "http://singapore.nextblock.io",
+    "http://frankfurt.nextblock.io",
 ];
 
 pub const SWQOS_ENDPOINTS_ZERO_SLOT: [&str; 8] = [

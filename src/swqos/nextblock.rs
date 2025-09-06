@@ -44,6 +44,12 @@ impl SwqosClientTrait for NextBlockClient {
 
 impl NextBlockClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
+        // Ensure endpoint ends with /api/v2/submit
+        let endpoint = if endpoint.ends_with("/api/v2/submit") {
+            endpoint
+        } else {
+            format!("{}/api/v2/submit", endpoint.trim_end_matches('/'))
+        };
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()
             .pool_idle_timeout(Duration::from_secs(60))
