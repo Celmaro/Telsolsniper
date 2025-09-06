@@ -35,16 +35,16 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 fn create_swqos_configs(rpc_url: &str) -> Vec<SwqosConfig> {
     vec![
         // First parameter is UUID, pass empty string if no UUID
-        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         // Add tg official customer https://t.me/FlashBlock_Official to get free FlashBlock key
-        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         // Add tg official customer https://t.me/node1_me to get free Node1 key
-        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::Default(rpc_url.to_string()),
     ]
 }

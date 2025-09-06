@@ -120,6 +120,31 @@ sol-trade-sdk = "0.5.7"
 - **BlockRazor**: 第一个参数是 API Token, 添加tg官方客服获取免费key立即加速你的交易！
 - **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！
 
+#### 自定义 URL 支持
+
+每个 SWQOS 服务现在都支持可选的自定义 URL 参数：
+
+```rust
+// 使用自定义 URL（第三个参数）
+let jito_config = SwqosConfig::Jito(
+    "your_uuid".to_string(),
+    SwqosRegion::Frankfurt, // 这个参数仍然需要，但会被忽略
+    Some("https://custom-jito-endpoint.com".to_string()) // 自定义 URL
+);
+
+// 使用默认区域端点（第三个参数为 None）
+let nextblock_config = SwqosConfig::NextBlock(
+    "your_api_token".to_string(),
+    SwqosRegion::NewYork, // 将使用该区域的默认端点
+    None // 没有自定义 URL，使用 SwqosRegion
+);
+```
+
+**URL 优先级逻辑**：
+- 如果提供了自定义 URL（`Some(url)`），将使用自定义 URL 而不是区域端点
+- 如果没有提供自定义 URL（`None`），系统将使用指定 `SwqosRegion` 的默认端点
+- 这提供了最大的灵活性，同时保持向后兼容性
+
 当使用多个MEV服务时，需要使用`Durable Nonce`。你需要初始化`NonceCache`类（或者自行写一个管理nonce的类），获取最新的`nonce`值，并在交易的时候作为`blockhash`使用。
 
 ### 中间件系统说明

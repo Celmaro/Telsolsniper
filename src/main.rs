@@ -75,14 +75,14 @@ async fn test_create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
 fn create_swqos_configs(rpc_url: &str) -> Vec<SwqosConfig> {
     vec![
-        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
-        SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::Jito("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::NextBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::ZeroSlot("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::Default(rpc_url.to_string()),
     ]
 }

@@ -103,18 +103,22 @@ pub enum SwqosRegion {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SwqosConfig {
     Default(String),
-    Jito(String, SwqosRegion),
-    NextBlock(String, SwqosRegion),
-    Bloxroute(String, SwqosRegion),
-    Temporal(String, SwqosRegion),
-    ZeroSlot(String, SwqosRegion),
-    Node1(String, SwqosRegion),
-    FlashBlock(String, SwqosRegion),
-    BlockRazor(String, SwqosRegion),
+    Jito(String, SwqosRegion, Option<String>),
+    NextBlock(String, SwqosRegion, Option<String>),
+    Bloxroute(String, SwqosRegion, Option<String>),
+    Temporal(String, SwqosRegion, Option<String>),
+    ZeroSlot(String, SwqosRegion, Option<String>),
+    Node1(String, SwqosRegion, Option<String>),
+    FlashBlock(String, SwqosRegion, Option<String>),
+    BlockRazor(String, SwqosRegion, Option<String>),
 }
 
 impl SwqosConfig {
-    pub fn get_endpoint(swqos_type: SwqosType, region: SwqosRegion) -> String {
+    pub fn get_endpoint(swqos_type: SwqosType, region: SwqosRegion, url: Option<String>) -> String {
+        if let Some(custom_url) = url {
+            return custom_url;
+        }
+        
         match swqos_type {
             SwqosType::Jito => SWQOS_ENDPOINTS_JITO[region as usize].to_string(),
             SwqosType::NextBlock => SWQOS_ENDPOINTS_NEXTBLOCK[region as usize].to_string(),
@@ -130,8 +134,8 @@ impl SwqosConfig {
 
     pub fn get_swqos_client(rpc_url: String, commitment: CommitmentConfig, swqos_config: SwqosConfig) -> Arc<SwqosClient> {
         match swqos_config {
-            SwqosConfig::Jito(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::Jito, region);
+            SwqosConfig::Jito(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Jito, region, url);
                 let jito_client = JitoClient::new(
                     rpc_url.clone(),
                     endpoint,
@@ -139,8 +143,8 @@ impl SwqosConfig {
                 );
                 Arc::new(jito_client)
             }
-            SwqosConfig::NextBlock(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::NextBlock, region);
+            SwqosConfig::NextBlock(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::NextBlock, region, url);
                 let nextblock_client = NextBlockClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -148,8 +152,8 @@ impl SwqosConfig {
                 );
                 Arc::new(nextblock_client)
             },
-            SwqosConfig::ZeroSlot(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::ZeroSlot, region);
+            SwqosConfig::ZeroSlot(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::ZeroSlot, region, url);
                 let zeroslot_client = ZeroSlotClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -157,8 +161,8 @@ impl SwqosConfig {
                 );
                 Arc::new(zeroslot_client)
             },
-            SwqosConfig::Temporal(auth_token, region) => {  
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::Temporal, region);
+            SwqosConfig::Temporal(auth_token, region, url) => {  
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Temporal, region, url);
                 let temporal_client = TemporalClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -166,8 +170,8 @@ impl SwqosConfig {
                 );
                 Arc::new(temporal_client)
             },
-            SwqosConfig::Bloxroute(auth_token, region) => { 
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::Bloxroute, region);
+            SwqosConfig::Bloxroute(auth_token, region, url) => { 
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Bloxroute, region, url);
                 let bloxroute_client = BloxrouteClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -175,8 +179,8 @@ impl SwqosConfig {
                 );
                 Arc::new(bloxroute_client)
             },
-            SwqosConfig::Node1(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::Node1, region);
+            SwqosConfig::Node1(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Node1, region, url);
                 let node1_client = Node1Client::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -184,8 +188,8 @@ impl SwqosConfig {
                 );
                 Arc::new(node1_client)
             },
-            SwqosConfig::FlashBlock(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::FlashBlock, region);
+            SwqosConfig::FlashBlock(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::FlashBlock, region, url);
                 let flashblock_client = FlashBlockClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),
@@ -193,8 +197,8 @@ impl SwqosConfig {
                 );
                 Arc::new(flashblock_client)
             },
-            SwqosConfig::BlockRazor(auth_token, region) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::BlockRazor, region);
+            SwqosConfig::BlockRazor(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::BlockRazor, region, url);
                 let blockrazor_client = BlockRazorClient::new(
                     rpc_url.clone(),
                     endpoint.to_string(),

@@ -118,7 +118,32 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **Temporal**: The first parameter is API Token
 - **FlashBlock**: The first parameter is API Token, Add community TG admin [xyz_0xfnzero](https://t.me/xyz_0xfnzero) to get a free key and instantly speed up your trading (with tip refunds available)!
 - **BlockRazor**: The first parameter is API Token, Add official TG support to get a free key and instantly accelerate your trades!
-- **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me to get a free key and instantly accelerate your trades! 
+- **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me to get a free key and instantly accelerate your trades!
+
+#### Custom URL Support
+
+Each SWQOS service now supports an optional custom URL parameter:
+
+```rust
+// Using custom URL (third parameter)
+let jito_config = SwqosConfig::Jito(
+    "your_uuid".to_string(),
+    SwqosRegion::Frankfurt, // This parameter is still required but will be ignored
+    Some("https://custom-jito-endpoint.com".to_string()) // Custom URL
+);
+
+// Using default regional endpoint (third parameter is None)
+let nextblock_config = SwqosConfig::NextBlock(
+    "your_api_token".to_string(),
+    SwqosRegion::NewYork, // Will use the default endpoint for this region
+    None // No custom URL, uses SwqosRegion
+);
+```
+
+**URL Priority Logic**:
+- If a custom URL is provided (`Some(url)`), it will be used instead of the regional endpoint
+- If no custom URL is provided (`None`), the system will use the default endpoint for the specified `SwqosRegion`
+- This allows for maximum flexibility while maintaining backward compatibility 
 
 When using multiple MEV services, you need to use `Durable Nonce`. You need to initialize a `NonceCache` class (or write your own nonce management class), get the latest `nonce` value, and use it as the `blockhash` when trading.
 
