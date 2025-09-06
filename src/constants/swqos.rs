@@ -81,6 +81,23 @@ pub const FLASHBLOCK_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("FLAsHZTRcf3Dy1APaz6j74ebdMC6Xx4g6i9YxjyrDybR"),
 ];
 
+pub const BLOCKRAZOR_TIP_ACCOUNTS: &[Pubkey] = &[
+    pubkey!("FjmZZrFvhnqqb9ThCuMVnENaM3JGVuGWNyCAxRJcFpg9"),
+    pubkey!("6No2i3aawzHsjtThw81iq1EXPJN6rh8eSJCLaYZfKDTG"),
+    pubkey!("A9cWowVAiHe9pJfKAj3TJiN9VpbzMUq6E4kEvf5mUT22"),
+    pubkey!("Gywj98ophM7GmkDdaWs4isqZnDdFCW7B46TXmKfvyqSm"),
+    pubkey!("68Pwb4jS7eZATjDfhmTXgRJjCiZmw1L7Huy4HNpnxJ3o"),
+    pubkey!("4ABhJh5rZPjv63RBJBuyWzBK3g9gWMUQdTZP2kiW31V9"),
+    pubkey!("B2M4NG5eyZp5SBQrSdtemzk5TqVuaWGQnowGaCBt8GyM"),
+    pubkey!("5jA59cXMKQqZAVdtopv8q3yyw9SYfiE3vUCbt7p8MfVf"),
+    pubkey!("5YktoWygr1Bp9wiS1xtMtUki1PeYuuzuCF98tqwYxf61"),
+    pubkey!("295Avbam4qGShBYK7E9H5Ldew4B3WyJGmgmXfiWdeeyV"),
+    pubkey!("EDi4rSy2LZgKJX74mbLTFk4mxoTgT6F7HxxzG2HBAFyK"),
+    pubkey!("BnGKHAC386n4Qmv9xtpBVbRaUTKixjBe3oagkPFKtoy6"),
+    pubkey!("Dd7K2Fp7AtoN8xCghKDRmyqr5U169t48Tw5fEd3wT9mq"),
+    pubkey!("AP6qExwrbRgBAVaehg4b5xHENX815sMabtBzUzVB4v8S"),
+];
+
 // NewYork,
 // Frankfurt,
 // Amsterdam,
@@ -165,5 +182,16 @@ pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 8] = [
     "http://london.flashblock.trade",
     "http://ny.flashblock.trade",
     "http://ny.flashblock.trade",
+];
+
+pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 8] = [
+    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
+    "http://amsterdam.solana.blockrazor.xyz:443/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
+    "http://tokyo.solana.blockrazor.xyz:443/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
 ];
 

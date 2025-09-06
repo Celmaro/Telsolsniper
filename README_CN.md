@@ -13,7 +13,7 @@
 6. **事件订阅**: 订阅 PumpFun、PumpSwap、Bonk、Raydium CPMM 和 Raydium AMM V4 程序的交易事件
 7. **Yellowstone gRPC**: 使用 Yellowstone gRPC 订阅程序事件
 8. **ShredStream 支持**: 使用 ShredStream 订阅程序事件
-9. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、Node1 等服务
+9. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、FlashBlock、BlockRazor、Node1 等服务
 10. **并发交易**: 同时使用多个 MEV 服务发送交易，最快的成功，其他失败
 11. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
 12. **中间件系统**: 支持自定义指令中间件，可在交易执行前对指令进行修改、添加或移除
@@ -117,6 +117,7 @@ sol-trade-sdk = "0.5.7"
 - **ZeroSlot**: 第一个参数是 API Token
 - **Temporal**: 第一个参数是 API Token
 - **FlashBlock**: 第一个参数是 API Token, 添加社区tg管理员[xyz_0xfnzero](https://t.me/xyz_0xfnzero)获取免费key立即加速你的交易(可获得小费返还)！
+- **BlockRazor**: 第一个参数是 API Token, 添加tg官方客服获取免费key立即加速你的交易！
 - **Node1**: 第一个参数是 API Token, 添加tg官方客服https://t.me/node1_me 获取免费key立即加速你的交易！
 
 当使用多个MEV服务时，需要使用`Durable Nonce`。你需要初始化`NonceCache`类（或者自行写一个管理nonce的类），获取最新的`nonce`值，并在交易的时候作为`blockhash`使用。
@@ -174,6 +175,7 @@ let trade_config = TradeConfig {
 - **Temporal**: 时间敏感交易
 - **Bloxroute**: 区块链网络加速
 - **FlashBlock**: 高速交易执行，支持 API 密钥认证 - [官方文档](https://doc.flashblock.trade/)
+- **BlockRazor**: 高速交易执行，支持 API 密钥认证 - [官方文档](https://blockrazor.gitbook.io/blockrazor/)
 - **Node1**: 高速交易执行，支持 API 密钥认证 - [官方文档](https://node1.me/docs.html)
 
 ## 新架构特性

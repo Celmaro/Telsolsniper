@@ -44,6 +44,7 @@ fn create_swqos_configs(rpc_url: &str) -> Vec<SwqosConfig> {
         SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt),
         // Add tg official customer https://t.me/node1_me to get free Node1 key
         SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt),
+        SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt),
         SwqosConfig::Default(rpc_url.to_string()),
     ]
 }

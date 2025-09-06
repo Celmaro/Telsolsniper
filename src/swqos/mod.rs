@@ -7,6 +7,7 @@ pub mod temporal;
 pub mod bloxroute;
 pub mod node1;
 pub mod flashblock;
+pub mod blockrazor;
 
 use std::sync::Arc;
 
@@ -24,7 +25,8 @@ use crate::{
         SWQOS_ENDPOINTS_TEMPORAL, 
         SWQOS_ENDPOINTS_ZERO_SLOT, 
         SWQOS_ENDPOINTS_NODE1, 
-        SWQOS_ENDPOINTS_FLASHBLOCK
+        SWQOS_ENDPOINTS_FLASHBLOCK,
+        SWQOS_ENDPOINTS_BLOCKRAZOR
     }, 
     swqos::{
         bloxroute::BloxrouteClient, 
@@ -34,7 +36,8 @@ use crate::{
         temporal::TemporalClient, 
         zeroslot::ZeroSlotClient, 
         node1::Node1Client, 
-        flashblock::FlashBlockClient
+        flashblock::FlashBlockClient,
+        blockrazor::BlockRazorClient
     }
 };
 
@@ -71,6 +74,7 @@ pub enum SwqosType {
     Bloxroute,
     Node1,
     FlashBlock,
+    BlockRazor,
     Default,
 }
 
@@ -106,6 +110,7 @@ pub enum SwqosConfig {
     ZeroSlot(String, SwqosRegion),
     Node1(String, SwqosRegion),
     FlashBlock(String, SwqosRegion),
+    BlockRazor(String, SwqosRegion),
 }
 
 impl SwqosConfig {
@@ -118,6 +123,7 @@ impl SwqosConfig {
             SwqosType::Bloxroute => SWQOS_ENDPOINTS_BLOX[region as usize].to_string(),
             SwqosType::Node1 => SWQOS_ENDPOINTS_NODE1[region as usize].to_string(),
             SwqosType::FlashBlock => SWQOS_ENDPOINTS_FLASHBLOCK[region as usize].to_string(),
+            SwqosType::BlockRazor => SWQOS_ENDPOINTS_BLOCKRAZOR[region as usize].to_string(),
             SwqosType::Default => "".to_string(),
         }
     }
@@ -186,6 +192,15 @@ impl SwqosConfig {
                     auth_token
                 );
                 Arc::new(flashblock_client)
+            },
+            SwqosConfig::BlockRazor(auth_token, region) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::BlockRazor, region);
+                let blockrazor_client = BlockRazorClient::new(
+                    rpc_url.clone(),
+                    endpoint.to_string(),
+                    auth_token
+                );
+                Arc::new(blockrazor_client)
             },
             SwqosConfig::Default(endpoint) => {
                 let rpc = SolanaRpcClient::new_with_commitment(
