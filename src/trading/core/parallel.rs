@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
 use solana_hash::Hash;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signature::Keypair};
-use std::{str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::{
     common::PriorityFee,
     swqos::{SwqosClient, SwqosType, TradeType},
-    trading::{common::build_transaction, core::timer::TradeTimer, MiddlewareManager},
+    trading::{common::build_transaction, MiddlewareManager},
 };
 
 /// Generic function for parallel transaction execution
@@ -16,25 +16,33 @@ pub async fn parallel_execute_with_tips(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     instructions: Vec<Instruction>,
-    priority_fee: PriorityFee,
+    priority_fee: Arc<PriorityFee>,
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
     data_size_limit: u32,
     middleware_manager: Option<Arc<MiddlewareManager>>,
-    protocol_name: String,
+    protocol_name: &'static str,
     is_buy: bool,
     wait_transaction_confirmed: bool,
     with_tip: bool,
 ) -> Result<()> {
     let cores = core_affinity::get_core_ids().unwrap();
-    let mut handles: Vec<JoinHandle<Result<()>>> = vec![];
-
-    if is_buy && swqos_clients.len() > priority_fee.buy_tip_fees.len() {
+    let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(swqos_clients.len());
+    if is_buy
+        && (swqos_clients.len() > priority_fee.buy_tip_fees.len()
+            || priority_fee.buy_tip_fees.is_empty())
+    {
         return Err(anyhow!("Number of tip clients exceeds the configured buy tip fees"));
     }
-    if !is_buy && swqos_clients.len() > priority_fee.sell_tip_fees.len() {
+    if !is_buy
+        && !with_tip
+        && (swqos_clients.len() > priority_fee.sell_tip_fees.len()
+            || priority_fee.sell_tip_fees.is_empty())
+    {
         return Err(anyhow!("Number of tip clients exceeds the configured sell tip fees"));
     }
+
+    let instructions = Arc::new(instructions);
 
     for i in 0..swqos_clients.len() {
         let swqos_client = swqos_clients[i].clone();
@@ -47,43 +55,36 @@ pub async fn parallel_execute_with_tips(
         let core_id = cores[i % cores.len()];
 
         let middleware_manager = middleware_manager.clone();
-        let protocol_name = protocol_name.clone();
 
         let handle = tokio::spawn(async move {
             core_affinity::set_for_current(core_id);
 
-            let mut timer = TradeTimer::new(format!(
-                "Building transaction instructions: {:?}",
-                swqos_client.get_swqos_type()
-            ));
+            let swqos_type = swqos_client.get_swqos_type();
+            let mut start = Instant::now();
 
-            let tip_account = swqos_client.get_tip_account()?;
-            let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
-            if priority_fee.buy_tip_fees.len() == 0 {
-                return Err(anyhow!("buy_tip_fees is empty"));
-            }
+            let tip_account_str = swqos_client.get_tip_account()?;
+            let tip_account = Arc::new(Pubkey::from_str(&tip_account_str).unwrap_or_default());
             let tip_amount = priority_fee.buy_tip_fees[i];
 
             let transaction = build_transaction(
                 payer,
                 &priority_fee,
-                instructions,
+                (*instructions).clone(),
                 lookup_table_key,
                 recent_blockhash,
                 data_size_limit,
                 middleware_manager,
                 protocol_name,
                 is_buy,
-                swqos_client.get_swqos_type() != SwqosType::Default,
+                swqos_type != SwqosType::Default,
                 &tip_account,
                 tip_amount,
             )
             .await?;
 
-            timer.stage(format!(
-                "Submitting transaction instructions: {:?}",
-                swqos_client.get_swqos_type()
-            ));
+            println!("Building transaction instructions: {:?} {:?}", swqos_type, start.elapsed());
+
+            start = Instant::now();
 
             swqos_client
                 .send_transaction(
@@ -92,7 +93,8 @@ pub async fn parallel_execute_with_tips(
                 )
                 .await?;
 
-            timer.finish();
+            println!("Submitting transaction instructions: {:?} {:?}", swqos_type, start.elapsed());
+
             Ok::<(), anyhow::Error>(())
         });
 

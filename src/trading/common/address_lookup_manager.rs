@@ -7,12 +7,11 @@ use crate::common::address_lookup_cache::get_address_lookup_table_account;
 pub async fn get_address_lookup_table_accounts(
     lookup_table_key: Option<Pubkey>,
 ) -> Vec<AddressLookupTableAccount> {
-    let mut address_lookup_table_accounts = vec![];
-
-    if let Some(lookup_table_key) = lookup_table_key {
-        let account = get_address_lookup_table_account(&lookup_table_key).await;
-        address_lookup_table_accounts.push(account);
+    match lookup_table_key {
+        Some(key) => {
+            let account = get_address_lookup_table_account(&key).await;
+            vec![account]
+        }
+        None => Vec::new(),
     }
-
-    address_lookup_table_accounts
 }

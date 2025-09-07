@@ -103,5 +103,5 @@ pub async fn get_address_lookup_table_account(
     lookup_table_address: &Pubkey,
 ) -> AddressLookupTableAccount {
     let cache = AddressLookupTableCache::get_instance();
-    return cache.get_table_content(&lookup_table_address);
+    cache.get_table_content(lookup_table_address)
 }

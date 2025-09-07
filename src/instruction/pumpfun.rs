@@ -45,7 +45,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        let bonding_curve = protocol_params.bonding_curve.clone();
+        let bonding_curve = &protocol_params.bonding_curve;
 
         let max_sol_cost = calculate_with_slippage_buy(
             params.sol_amount,
@@ -53,12 +53,20 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         );
         let creator_vault_pda = protocol_params.creator_vault;
 
-        let mut creator = Pubkey::default();
-        if let Some(default_creator_ata) = get_creator_vault_pda(&creator) {
-            if default_creator_ata != creator_vault_pda {
-                creator = creator_vault_pda;
+        // Optimize creator lookup - avoid PDA calculation if not default
+        let creator = if creator_vault_pda == Pubkey::default() {
+            Pubkey::default()
+        } else {
+            // Fast check against cached default creator vault
+            static DEFAULT_CREATOR_VAULT: std::sync::LazyLock<Option<Pubkey>> = 
+                std::sync::LazyLock::new(|| get_creator_vault_pda(&Pubkey::default()));
+            
+            if Some(creator_vault_pda) == *DEFAULT_CREATOR_VAULT {
+                Pubkey::default()
+            } else {
+                creator_vault_pda
             }
-        }
+        };
 
         let buy_token_amount = get_buy_token_amount_from_sol_amount(
             bonding_curve.virtual_token_reserves as u128,
@@ -68,7 +76,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.sol_amount,
         );
 
-        let mut instructions = vec![];
+        let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
         instructions.push(create_associated_token_account(
@@ -99,7 +107,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             .downcast_ref::<PumpFunParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpFun"))?;
 
-        let bonding_curve = protocol_params.bonding_curve.clone();
+        let bonding_curve = &protocol_params.bonding_curve;
 
         let token_amount = if let Some(amount) = params.token_amount {
             if amount == 0 {

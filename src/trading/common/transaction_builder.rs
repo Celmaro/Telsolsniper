@@ -27,13 +27,13 @@ pub async fn build_transaction(
     recent_blockhash: Hash,
     data_size_limit: u32,
     middleware_manager: Option<Arc<MiddlewareManager>>,
-    protocol_name: String,
+    protocol_name: &str,
     is_buy: bool,
     with_tip: bool,
     tip_account: &Pubkey,
     tip_amount: f64,
 ) -> Result<VersionedTransaction, anyhow::Error> {
-    let mut instructions = vec![];
+    let mut instructions = Vec::with_capacity(business_instructions.len() + 5);
 
     // 添加nonce指令
     if is_buy {
@@ -84,12 +84,16 @@ async fn build_versioned_transaction(
     address_lookup_table_accounts: Vec<solana_sdk::message::AddressLookupTableAccount>,
     blockhash: Hash,
     middleware_manager: Option<Arc<MiddlewareManager>>,
-    protocol_name: String,
+    protocol_name: &str,
     is_buy: bool,
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let full_instructions = match middleware_manager {
         Some(middleware_manager) => middleware_manager
-            .apply_middlewares_process_full_instructions(instructions, protocol_name, is_buy)?,
+            .apply_middlewares_process_full_instructions(
+                instructions,
+                protocol_name.to_string(),
+                is_buy,
+            )?,
         None => instructions,
     };
     let v0_message: v0::Message = v0::Message::try_compile(
