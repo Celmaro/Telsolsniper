@@ -162,7 +162,7 @@ impl AstralaneClient {
             ]
         }))?;
 
-        // Send request with api_key header (like your example)
+        // Send request with api_key header
         let response_text = self.http_client.post(&self.endpoint)
             .body(request_body)
             .header("Content-Type", "application/json")
