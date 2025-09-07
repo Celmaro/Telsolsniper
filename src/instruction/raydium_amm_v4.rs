@@ -31,10 +31,10 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
         let wsol_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
 
-        let is_base_in = protocol_params.coin_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let is_base_in = protocol_params.coin_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
 
         let amount_in: u64 = params.sol_amount;
         let swap_result = compute_swap_amount(
@@ -55,8 +55,8 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
                 create_associated_token_account_idempotent(
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
-                    &accounts::WSOL_TOKEN_ACCOUNT,
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::WSOL_TOKEN_ACCOUNT,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
             );
             instructions.push(
@@ -66,8 +66,11 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
             // Sync wSOL balance
             instructions.push(
-                spl_token::instruction::sync_native(&accounts::TOKEN_PROGRAM, &wsol_token_account)
-                    .unwrap(),
+                spl_token::instruction::sync_native(
+                    &crate::constants::TOKEN_PROGRAM,
+                    &wsol_token_account,
+                )
+                .unwrap(),
             );
         }
 
@@ -75,12 +78,12 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &accounts::TOKEN_PROGRAM,
+            &crate::constants::TOKEN_PROGRAM,
         ));
 
         let user_source_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
         let user_destination_token_account =
             spl_associated_token_account::get_associated_token_address(
@@ -90,9 +93,9 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
         // Create buy instruction
         let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(), // Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
+            accounts::AUTHORITY_META.clone(),             // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm Open Orders
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_coin, false), // Pool Coin Token Account
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_pc, false), // Pool Pc Token Account
@@ -120,7 +123,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             // Close wSOL ATA account, reclaim rent
             instructions.push(
                 spl_token::instruction::close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &wsol_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
@@ -146,10 +149,10 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
         let wsol_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
 
-        let is_base_in = protocol_params.pc_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let is_base_in = protocol_params.pc_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
         let swap_result = compute_swap_amount(
             protocol_params.coin_reserve,
             protocol_params.pc_reserve,
@@ -167,8 +170,8 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             create_associated_token_account_idempotent(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
-                &accounts::WSOL_TOKEN_ACCOUNT,
-                &accounts::TOKEN_PROGRAM,
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
             ),
         );
 
@@ -179,14 +182,14 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         let user_destination_token_account =
             spl_associated_token_account::get_associated_token_address(
                 &params.payer.pubkey(),
-                &accounts::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
             );
 
         // Create buy instruction
         let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(), // Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
+            accounts::AUTHORITY_META.clone(),             // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm Open Orders
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_coin, false), // Pool Coin Token Account
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_pc, false), // Pool Pc Token Account
@@ -213,7 +216,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         if protocol_params.auto_handle_wsol {
             instructions.push(
                 close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &wsol_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),

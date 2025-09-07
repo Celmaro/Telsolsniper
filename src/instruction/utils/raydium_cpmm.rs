@@ -17,15 +17,22 @@ pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
     pub const AUTHORITY: Pubkey = pubkey!("GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL");
     pub const AMM_CONFIG: Pubkey = pubkey!("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2");
-    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
-    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
     pub const RAYDIUM_CPMM: Pubkey = pubkey!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
-
     pub const FEE_RATE_DENOMINATOR_VALUE: u128 = 1_000_000;
     pub const TRADE_FEE_RATE: u64 = 2500;
     pub const CREATOR_FEE_RATE: u64 = 0;
     pub const PROTOCOL_FEE_RATE: u64 = 120000;
     pub const FUND_FEE_RATE: u64 = 40000;
+    // META
+    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
+        });
+
+    pub const AMM_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(AMM_CONFIG, false)
+        });
 }
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[143, 190, 90, 218, 196, 30, 51, 222];

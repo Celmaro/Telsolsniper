@@ -61,9 +61,19 @@ pub mod global_constants {
 
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
+    /// Static AccountMeta for fee recipient (initialized once)
+    pub static FEE_RECIPIENT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new(FEE_RECIPIENT, false)
+        });
 
     /// Public key for the global PDA
     pub const GLOBAL_ACCOUNT: Pubkey = pubkey!("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf");
+    /// Static AccountMeta for global account (initialized once)
+    pub static GLOBAL_ACCOUNT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_ACCOUNT, false)
+        });
 
     /// Public key for the authority
     pub const AUTHORITY: Pubkey = pubkey!("FFWtrEQ4B4PKQoVuHYzZq8FabGkVatYzDpEVHsK5rrhF");
@@ -85,6 +95,10 @@ pub mod global_constants {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
 
+    use crate::instruction::utils::pumpfun::{
+        get_fee_config_pda, get_global_volume_accumulator_pda,
+    };
+
     /// Public key for the Pump.fun program
     pub const PUMPFUN: Pubkey = pubkey!("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 
@@ -93,12 +107,6 @@ pub mod accounts {
 
     /// Authority for program events
     pub const EVENT_AUTHORITY: Pubkey = pubkey!("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1");
-
-    /// System Program ID
-    pub const SYSTEM_PROGRAM: Pubkey = pubkey!("11111111111111111111111111111111");
-
-    /// Token Program ID
-    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
 
     /// Associated Token Program ID
     pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
@@ -110,6 +118,37 @@ pub mod accounts {
     pub const AMM_PROGRAM: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 
     pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
+
+    // META
+
+    pub const PUMPFUN_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(PUMPFUN, false)
+        });
+
+    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
+        });
+
+    pub const FEE_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(FEE_PROGRAM, false)
+        });
+
+    pub const GLOBAL_VOLUME_ACCUMULATOR_META: once_cell::sync::Lazy<
+        solana_sdk::instruction::AccountMeta,
+    > = once_cell::sync::Lazy::new(|| {
+        solana_sdk::instruction::AccountMeta::new_readonly(
+            get_global_volume_accumulator_pda().unwrap(),
+            false,
+        )
+    });
+
+    pub const FEE_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false)
+        });
 }
 
 pub struct Symbol;

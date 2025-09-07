@@ -189,13 +189,13 @@ impl PumpSwapParams {
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool_address,
                 &pool_data.base_mint,
-                &crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM,
+                &crate::constants::TOKEN_PROGRAM,
             );
         let quote_token_program_ata =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool_address,
                 &pool_data.quote_mint,
-                &crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM,
+                &crate::constants::TOKEN_PROGRAM,
             );
 
         Ok(Self {
@@ -207,14 +207,14 @@ impl PumpSwapParams {
             coin_creator_vault_ata: coin_creator_vault_ata,
             coin_creator_vault_authority: coin_creator_vault_authority,
             base_token_program: if pool_data.pool_base_token_account == base_token_program_ata {
-                crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM
+                crate::constants::TOKEN_PROGRAM
             } else {
-                spl_token_2022::ID
+                crate::constants::TOKEN_PROGRAM_2022
             },
             quote_token_program: if pool_data.pool_quote_token_account == quote_token_program_ata {
-                crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM
+                crate::constants::TOKEN_PROGRAM
             } else {
-                spl_token_2022::ID
+                crate::constants::TOKEN_PROGRAM_2022
             },
             auto_handle_wsol: true,
         })
@@ -337,7 +337,7 @@ impl BonkParams {
     ) -> Result<Self, anyhow::Error> {
         let pool_address = crate::instruction::utils::bonk::get_pool_pda(
             mint,
-            &crate::instruction::utils::bonk::accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         )
         .unwrap();
         let pool_data =

@@ -17,15 +17,30 @@ pub mod accounts {
 
     pub const AUTHORITY: Pubkey = pubkey!("WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh");
     pub const GLOBAL_CONFIG: Pubkey = pubkey!("6s1xP3hpbAfFoNtUNF8mfHsjr2Bd97JxFJRWLbL6aHuX");
-    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
     pub const EVENT_AUTHORITY: Pubkey = pubkey!("2DPAtwB8L12vrMRExbLuyGnC7n2J5LNoZQSejeQGpwkr");
-    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
     pub const BONK: Pubkey = pubkey!("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj");
-    pub const SYSTEM_PROGRAM: Pubkey = solana_sdk::system_program::ID;
 
     pub const PLATFORM_FEE_RATE: u128 = 100; // 1%
     pub const PROTOCOL_FEE_RATE: u128 = 25; // 0.25%
     pub const SHARE_FEE_RATE: u128 = 0; // 0%
+
+    // META
+    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
+        });
+    pub const GLOBAL_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_CONFIG, false)
+        });
+    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
+        });
+    pub const BONK_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(BONK, false)
+        });
 }
 
 pub const BUY_EXECT_IN_DISCRIMINATOR: [u8; 8] = [250, 234, 13, 123, 213, 156, 19, 236];
@@ -142,14 +157,15 @@ pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
 }
 
 pub fn get_platform_associated_account(platform_config: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[platform_config.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
+    let seeds: &[&[u8]; 2] =
+        &[platform_config.as_ref(), crate::constants::WSOL_TOKEN_ACCOUNT.as_ref()];
     let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_creator_associated_account(creator: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[creator.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
+    let seeds: &[&[u8]; 2] = &[creator.as_ref(), crate::constants::WSOL_TOKEN_ACCOUNT.as_ref()];
     let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)

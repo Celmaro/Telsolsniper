@@ -15,14 +15,19 @@ pub mod seeds {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
     pub const AUTHORITY: Pubkey = pubkey!("5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1");
-    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
-    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
     pub const RAYDIUM_AMM_V4: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 
     pub const TRADE_FEE_NUMERATOR: u64 = 25;
     pub const TRADE_FEE_DENOMINATOR: u64 = 10000;
     pub const SWAP_FEE_NUMERATOR: u64 = 25;
     pub const SWAP_FEE_DENOMINATOR: u64 = 10000;
+
+    // META
+
+    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
+        });
 }
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[9];

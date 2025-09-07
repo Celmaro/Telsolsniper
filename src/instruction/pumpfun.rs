@@ -7,9 +7,8 @@ use spl_token::instruction::close_account;
 
 use crate::{
     instruction::utils::pumpfun::{
-        accounts, get_bonding_curve_pda, get_creator_vault_pda, get_fee_config_pda,
-        get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
-        global_constants::{self, FEE_RECIPIENT},
+        accounts, get_bonding_curve_pda, get_creator_vault_pda, get_user_volume_accumulator_pda,
+        global_constants::{self},
     },
     utils::calc::{
         common::{calculate_with_slippage_buy, calculate_with_slippage_sell},
@@ -82,7 +81,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &accounts::TOKEN_PROGRAM,
+            &crate::constants::TOKEN_PROGRAM,
         ));
 
         // Create buy instruction data
@@ -96,8 +95,8 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             accounts::PUMPFUN,
             &buy_data,
             vec![
-                AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
-                AccountMeta::new(FEE_RECIPIENT, false),
+                global_constants::GLOBAL_ACCOUNT_META.clone(),
+                global_constants::FEE_RECIPIENT_META.clone(),
                 AccountMeta::new_readonly(params.mint, false),
                 AccountMeta::new(bonding_curve.account, false),
                 AccountMeta::new(
@@ -109,18 +108,18 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                     false,
                 ),
                 AccountMeta::new(params.payer.pubkey(), true),
-                AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
-                AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
+                crate::constants::SYSTEM_PROGRAM_META.clone(),
+                crate::constants::TOKEN_PROGRAM_META.clone(),
                 AccountMeta::new(creator_vault_pda, false),
-                AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
-                AccountMeta::new_readonly(accounts::PUMPFUN, false),
-                AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
+                accounts::EVENT_AUTHORITY_META.clone(),
+                accounts::PUMPFUN_META.clone(),
+                accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone(),
                 AccountMeta::new(
                     get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
                     false,
                 ),
-                AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-                AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
+                accounts::FEE_CONFIG_META.clone(),
+                accounts::FEE_PROGRAM_META.clone(),
             ],
         ));
 
@@ -179,8 +178,8 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             accounts::PUMPFUN,
             &sell_data,
             vec![
-                AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
-                AccountMeta::new(FEE_RECIPIENT, false),
+                global_constants::GLOBAL_ACCOUNT_META.clone(),
+                global_constants::FEE_RECIPIENT_META.clone(),
                 AccountMeta::new_readonly(params.mint, false),
                 AccountMeta::new(bonding_curve, false),
                 AccountMeta::new(get_associated_token_address(&bonding_curve, &params.mint), false),
@@ -189,20 +188,20 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                     false,
                 ),
                 AccountMeta::new(params.payer.pubkey(), true),
-                AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
+                crate::constants::SYSTEM_PROGRAM_META.clone(),
                 AccountMeta::new(creator_vault_pda, false),
-                AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
-                AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
-                AccountMeta::new_readonly(accounts::PUMPFUN, false),
-                AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-                AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
+                crate::constants::TOKEN_PROGRAM_META.clone(),
+                accounts::EVENT_AUTHORITY_META.clone(),
+                accounts::PUMPFUN_META.clone(),
+                accounts::FEE_CONFIG_META.clone(),
+                accounts::FEE_PROGRAM_META.clone(),
             ],
         )];
 
         // If selling all tokens, close the account
         if protocol_params.close_token_account_when_sell.unwrap_or(false) {
             instructions.push(close_account(
-                &spl_token::ID,
+                &crate::constants::TOKEN_PROGRAM,
                 &ata,
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),

@@ -18,10 +18,14 @@ pub async fn get_multi_token_balances(
     let token0_balance = rpc.get_token_account_balance(&token0_vault).await?;
     let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
     // Parse balance string to u64
-    let token0_amount =
-        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
-    let token1_amount =
-        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
+    let token0_amount = token0_balance
+        .amount
+        .parse::<u64>()
+        .map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
+    let token1_amount = token1_balance
+        .amount
+        .parse::<u64>()
+        .map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
     Ok((token0_amount, token1_amount))
 }
 
@@ -107,8 +111,13 @@ pub async fn close_token_account(
     }
 
     // Build close account instruction
-    let close_account_ix =
-        close_account(&spl_token::ID, &ata, &payer.pubkey(), &payer.pubkey(), &[&payer.pubkey()])?;
+    let close_account_ix = close_account(
+        &crate::constants::TOKEN_PROGRAM,
+        &ata,
+        &payer.pubkey(),
+        &payer.pubkey(),
+        &[&payer.pubkey()],
+    )?;
 
     // Build transaction
     let recent_blockhash = rpc.get_latest_blockhash().await?;

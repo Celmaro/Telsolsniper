@@ -37,7 +37,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
             .downcast_ref::<BonkParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
 
-        let pool_state = get_pool_pda(&params.mint, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+        let pool_state = get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
 
         // Create user token accounts
         let user_base_token_account = spl_associated_token_account::get_associated_token_address(
@@ -46,13 +46,13 @@ impl InstructionBuilder for BonkInstructionBuilder {
         );
         let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
 
         // Get pool token accounts
         let base_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
         let quote_vault_account =
-            get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
 
         let virtual_base = protocol_params.virtual_base;
         let virtual_quote = protocol_params.virtual_quote;
@@ -79,8 +79,8 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 create_associated_token_account_idempotent(
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
-                    &accounts::WSOL_TOKEN_ACCOUNT,
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::WSOL_TOKEN_ACCOUNT,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
             );
             instructions.push(
@@ -91,7 +91,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
             // Sync wSOL balance
             instructions.push(
                 spl_token::instruction::sync_native(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &user_quote_token_account,
                 )
                 .unwrap(),
@@ -109,8 +109,8 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // Create buy instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
+            accounts::AUTHORITY_META.clone(), // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META.clone(), // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,
                 false,
@@ -121,15 +121,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Quote Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.mint_token_program,
                 false,
             ), // Base Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(),      // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META.clone(),            // Event Authority (readonly)
+            accounts::BONK_META.clone(),                       // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META.clone(),     // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new(
                 protocol_params.platform_associated_account,
                 false,
@@ -152,7 +152,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
             // Close wSOL ATA account, reclaim rent
             instructions.push(
                 spl_token::instruction::close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &user_quote_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
@@ -191,7 +191,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        let pool_state = get_pool_pda(&params.mint, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+        let pool_state = get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
 
         let virtual_base = protocol_params.virtual_base;
         let virtual_quote = protocol_params.virtual_quote;
@@ -217,13 +217,13 @@ impl InstructionBuilder for BonkInstructionBuilder {
             );
         let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
 
         // Get pool token accounts
         let base_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
         let quote_vault_account =
-            get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
 
         let share_fee_rate: u64 = 0;
 
@@ -235,16 +235,16 @@ impl InstructionBuilder for BonkInstructionBuilder {
             create_associated_token_account_idempotent(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
-                &accounts::WSOL_TOKEN_ACCOUNT,
-                &accounts::TOKEN_PROGRAM,
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
             ),
         );
 
         // Create sell instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_CONFIG, false), // Global Config (readonly)
+            accounts::AUTHORITY_META.clone(), // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META.clone(), // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,
                 false,
@@ -255,15 +255,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Quote Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.mint_token_program,
                 false,
             ), // Base Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Quote Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // Event Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::BONK, false), // Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(),      // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META.clone(),            // Event Authority (readonly)
+            accounts::BONK_META.clone(),                       // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META.clone(),     // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new(
                 protocol_params.platform_associated_account,
                 false,
@@ -286,7 +286,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
         if protocol_params.auto_handle_wsol {
             instructions.push(
                 close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &user_quote_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),

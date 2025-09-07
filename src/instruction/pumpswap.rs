@@ -7,9 +7,8 @@ use spl_token::instruction::close_account;
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::pumpswap::{
-        accounts, coin_creator_vault_ata, fee_recipient_ata, get_fee_config_pda,
-        get_global_volume_accumulator_pda, get_user_volume_accumulator_pda, BUY_DISCRIMINATOR,
-        SELL_DISCRIMINATOR,
+        accounts, coin_creator_vault_ata, fee_recipient_ata, get_user_volume_accumulator_pda,
+        BUY_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
     trading::core::{
         params::{BuyParams, PumpSwapParams, SellParams},
@@ -47,13 +46,15 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
 
-        if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
+        if base_mint != crate::constants::WSOL_TOKEN_ACCOUNT
+            && quote_mint != crate::constants::WSOL_TOKEN_ACCOUNT
+        {
             return Err(anyhow!("Invalid base mint and quote mint"));
         }
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
-        let quote_mint_is_wsol = quote_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let quote_mint_is_wsol = quote_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
 
         let mut token_amount = 0;
         let mut sol_amount = 0;
@@ -129,8 +130,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 create_associated_token_account_idempotent(
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
-                    &accounts::WSOL_TOKEN_ACCOUNT,
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::WSOL_TOKEN_ACCOUNT,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
             );
             instructions.push(
@@ -149,7 +150,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             // Sync wSOL balance
             instructions.push(
                 spl_token::instruction::sync_native(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     if quote_mint_is_wsol {
                         &user_quote_token_account
                     } else {
@@ -174,24 +175,21 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let mut accounts = vec![
             solana_sdk::instruction::AccountMeta::new_readonly(pool, false), // pool_id (readonly)
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // user (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_ACCOUNT, false), // global (readonly)
+            accounts::GLOBAL_ACCOUNT_META.clone(),                           // global (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(base_mint, false), // base_mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_mint, false), // quote_mint (readonly)
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // user_base_token_account
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // user_quote_token_account
             solana_sdk::instruction::AccountMeta::new(pool_base_token_account, false), // pool_base_token_account
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_RECIPIENT, false), // fee_recipient (readonly)
+            accounts::FEE_RECIPIENT_META.clone(), // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
             solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                accounts::ASSOCIATED_TOKEN_PROGRAM,
-                false,
-            ), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // event_authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_PROGRAM, false), // PUMP_AMM_PROGRAM_ID (readonly)
+            crate::constants::SYSTEM_PROGRAM_META.clone(), // System Program (readonly)
+            accounts::ASSOCIATED_TOKEN_PROGRAM_META.clone(), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
+            accounts::EVENT_AUTHORITY_META.clone(),          // event_authority (readonly)
+            accounts::AMM_PROGRAM_META.clone(),              // PUMP_AMM_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
             solana_sdk::instruction::AccountMeta::new_readonly(
                 params_coin_creator_vault_authority,
@@ -199,19 +197,14 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             ), // coin_creator_vault_authority (readonly)
         ];
         if quote_mint_is_wsol {
-            accounts.push(solana_sdk::instruction::AccountMeta::new(
-                get_global_volume_accumulator_pda().unwrap(),
-                false,
-            ));
+            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone());
             accounts.push(solana_sdk::instruction::AccountMeta::new(
                 get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
                 false,
             ));
         }
-        accounts
-            .push(solana_sdk::instruction::AccountMeta::new(get_fee_config_pda().unwrap(), false));
-        accounts
-            .push(solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_PROGRAM, false));
+        accounts.push(accounts::FEE_CONFIG_META.clone());
+        accounts.push(accounts::FEE_PROGRAM_META.clone());
 
         // Create instruction data
         let mut data = vec![];
@@ -234,7 +227,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             // Close wSOL ATA account, reclaim rent
             instructions.push(
                 spl_token::instruction::close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     if quote_mint_is_wsol {
                         &user_quote_token_account
                     } else {
@@ -270,7 +263,9 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
 
-        if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
+        if base_mint != crate::constants::WSOL_TOKEN_ACCOUNT
+            && quote_mint != crate::constants::WSOL_TOKEN_ACCOUNT
+        {
             return Err(anyhow!("Invalid base mint and quote mint"));
         }
         if params.rpc.is_none() {
@@ -280,7 +275,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             return Err(anyhow!("Token amount is not set"));
         }
 
-        let quote_mint_is_wsol = quote_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let quote_mint_is_wsol = quote_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
 
         let mut token_amount = 0;
         let mut sol_amount = 0;
@@ -354,8 +349,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             create_associated_token_account_idempotent(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
-                &accounts::WSOL_TOKEN_ACCOUNT,
-                &accounts::TOKEN_PROGRAM,
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
             ),
         );
 
@@ -371,24 +366,21 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let mut accounts = vec![
             solana_sdk::instruction::AccountMeta::new_readonly(pool, false), // pool_id (readonly)
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // user (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::GLOBAL_ACCOUNT, false), // global (readonly)
+            accounts::GLOBAL_ACCOUNT_META.clone(),                           // global (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(base_mint, false), // mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_mint, false), // WSOL_TOKEN_ACCOUNT (readonly)
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // user_base_token_account
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // user_quote_token_account
             solana_sdk::instruction::AccountMeta::new(pool_base_token_account, false), // pool_base_token_account
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_RECIPIENT, false), // fee_recipient (readonly)
+            accounts::FEE_RECIPIENT_META.clone(), // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
             solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false), // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                accounts::ASSOCIATED_TOKEN_PROGRAM,
-                false,
-            ), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false), // event_authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_PROGRAM, false), // PUMP_AMM_PROGRAM_ID (readonly)
+            crate::constants::SYSTEM_PROGRAM_META.clone(), // System Program (readonly)
+            accounts::ASSOCIATED_TOKEN_PROGRAM_META.clone(), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
+            accounts::EVENT_AUTHORITY_META.clone(),          // event_authority (readonly)
+            accounts::AMM_PROGRAM_META.clone(),              // PUMP_AMM_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
             solana_sdk::instruction::AccountMeta::new_readonly(
                 params_coin_creator_vault_authority,
@@ -396,20 +388,15 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             ), // coin_creator_vault_authority (readonly)
         ];
         if !quote_mint_is_wsol {
-            accounts.push(solana_sdk::instruction::AccountMeta::new(
-                get_global_volume_accumulator_pda().unwrap(),
-                false,
-            ));
+            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone());
             accounts.push(solana_sdk::instruction::AccountMeta::new(
                 get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
                 false,
             ));
         }
 
-        accounts
-            .push(solana_sdk::instruction::AccountMeta::new(get_fee_config_pda().unwrap(), false));
-        accounts
-            .push(solana_sdk::instruction::AccountMeta::new_readonly(accounts::FEE_PROGRAM, false));
+        accounts.push(accounts::FEE_CONFIG_META.clone());
+        accounts.push(accounts::FEE_PROGRAM_META.clone());
 
         // Create instruction data
         let mut data = vec![];
@@ -432,7 +419,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         if auto_handle_wsol {
             instructions.push(
                 close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     if quote_mint_is_wsol {
                         &user_quote_token_account
                     } else {
@@ -448,4 +435,3 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         Ok(instructions)
     }
 }
-

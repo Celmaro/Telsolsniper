@@ -134,7 +134,7 @@ async fn raydium_amm_v4_copy_trade_with_grpc(trade_info: RaydiumAmmV4SwapEvent) 
     let amm_info = fetch_amm_info(&client.rpc, trade_info.amm).await?;
     let (coin_reserve, pc_reserve) =
         get_multi_token_balances(&client.rpc, &amm_info.token_coin, &amm_info.token_pc).await?;
-    let mint_pubkey = if amm_info.pc_mint == accounts::WSOL_TOKEN_ACCOUNT {
+    let mint_pubkey = if amm_info.pc_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT {
         amm_info.coin_mint
     } else {
         amm_info.pc_mint

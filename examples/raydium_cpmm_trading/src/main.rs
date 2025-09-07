@@ -138,7 +138,8 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
     println!("Testing Raydium_cpmm trading...");
 
     let client = create_solana_trade_client().await?;
-    let mint_pubkey = if trade_info.input_token_mint == accounts::WSOL_TOKEN_ACCOUNT {
+    let mint_pubkey = if trade_info.input_token_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT
+    {
         trade_info.output_token_mint
     } else {
         trade_info.input_token_mint

@@ -1,4 +1,7 @@
-use crate::{common::SolanaRpcClient, constants};
+use crate::{
+    common::SolanaRpcClient,
+    constants::{self, TOKEN_PROGRAM},
+};
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::pubkey::Pubkey;
@@ -27,6 +30,10 @@ pub mod seeds {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
 
+    use crate::instruction::utils::pumpswap::{
+        get_fee_config_pda, get_global_volume_accumulator_pda,
+    };
+
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
@@ -35,14 +42,6 @@ pub mod accounts {
 
     /// Authority for program events
     pub const EVENT_AUTHORITY: Pubkey = pubkey!("GS4CU59F31iL7aR2Q8zVS8DRrcRnXX1yjQ66TqNVQnaR");
-
-    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
-
-    /// System Program ID
-    pub const SYSTEM_PROGRAM: Pubkey = pubkey!("11111111111111111111111111111111");
-
-    /// Token Program ID
-    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
 
     /// Associated Token Program ID
     pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
@@ -62,6 +61,53 @@ pub mod accounts {
     pub const COIN_CREATOR_FEE_BASIS_POINTS: u64 = 5;
 
     pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
+
+    // META
+
+    pub const GLOBAL_ACCOUNT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_ACCOUNT, false)
+        });
+
+    pub const FEE_RECIPIENT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(FEE_RECIPIENT, false)
+        });
+
+    pub const ASSOCIATED_TOKEN_PROGRAM_META: once_cell::sync::Lazy<
+        solana_sdk::instruction::AccountMeta,
+    > = once_cell::sync::Lazy::new(|| {
+        solana_sdk::instruction::AccountMeta::new_readonly(ASSOCIATED_TOKEN_PROGRAM, false)
+    });
+
+    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
+        });
+
+    pub const AMM_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(AMM_PROGRAM, false)
+        });
+
+    pub const GLOBAL_VOLUME_ACCUMULATOR_META: once_cell::sync::Lazy<
+        solana_sdk::instruction::AccountMeta,
+    > = once_cell::sync::Lazy::new(|| {
+        solana_sdk::instruction::AccountMeta::new_readonly(
+            get_global_volume_accumulator_pda().unwrap(),
+            false,
+        )
+    });
+
+    pub const FEE_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false)
+        });
+
+    pub const FEE_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
+        once_cell::sync::Lazy::new(|| {
+            solana_sdk::instruction::AccountMeta::new_readonly(FEE_PROGRAM, false)
+        });
 }
 
 pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];
@@ -87,7 +133,7 @@ pub(crate) fn coin_creator_vault_ata(coin_creator: Pubkey, quote_mint: Pubkey) -
         spl_associated_token_account::get_associated_token_address_with_program_id(
             &creator_vault_authority,
             &quote_mint,
-            &accounts::TOKEN_PROGRAM,
+            &TOKEN_PROGRAM,
         );
     associated_token_creator_vault_authority
 }
@@ -97,7 +143,7 @@ pub(crate) fn fee_recipient_ata(fee_recipient: Pubkey, quote_mint: Pubkey) -> Pu
         spl_associated_token_account::get_associated_token_address_with_program_id(
             &fee_recipient,
             &quote_mint,
-            &accounts::TOKEN_PROGRAM,
+            &TOKEN_PROGRAM,
         );
     associated_token_fee_recipient
 }

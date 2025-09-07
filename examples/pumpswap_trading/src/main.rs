@@ -86,7 +86,7 @@ fn create_event_callback() -> impl Fn(Box<dyn UnifiedEvent>) {
     |event: Box<dyn UnifiedEvent>| {
         match_event!(event, {
             PumpSwapBuyEvent => |e: PumpSwapBuyEvent| {
-                if e.base_mint == accounts::WSOL_TOKEN_ACCOUNT || e.quote_mint == accounts::WSOL_TOKEN_ACCOUNT {
+                if e.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT || e.quote_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT {
                     // Test code, only test one transaction
                     if !ALREADY_EXECUTED.swap(true, Ordering::SeqCst) {
                         let event_clone = e.clone();
@@ -100,7 +100,7 @@ fn create_event_callback() -> impl Fn(Box<dyn UnifiedEvent>) {
                 }
             },
             PumpSwapSellEvent => |e: PumpSwapSellEvent| {
-                if e.base_mint == accounts::WSOL_TOKEN_ACCOUNT || e.quote_mint == accounts::WSOL_TOKEN_ACCOUNT {
+                if e.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT || e.quote_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT {
                     // Test code, only test one transaction
                     if !ALREADY_EXECUTED.swap(true, Ordering::SeqCst) {
                         let event_clone = e.clone();
@@ -147,7 +147,7 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
 
 async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> AnyResult<()> {
     let params = PumpSwapParams::from_buy_trade(&trade_info);
-    let mint = if trade_info.base_mint == accounts::WSOL_TOKEN_ACCOUNT {
+    let mint = if trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT {
         trade_info.quote_mint
     } else {
         trade_info.base_mint
@@ -158,7 +158,7 @@ async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> Any
 
 async fn pumpswap_trade_with_grpc_sell_event(trade_info: PumpSwapSellEvent) -> AnyResult<()> {
     let params = PumpSwapParams::from_sell_trade(&trade_info);
-    let mint = if trade_info.base_mint == accounts::WSOL_TOKEN_ACCOUNT {
+    let mint = if trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT {
         trade_info.quote_mint
     } else {
         trade_info.base_mint

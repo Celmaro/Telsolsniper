@@ -39,7 +39,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         )
         .unwrap();
 
-        let is_base_in = protocol_params.base_mint == accounts::WSOL_TOKEN_ACCOUNT;
+        let is_base_in = protocol_params.base_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
         let mint_token_program = if is_base_in {
             protocol_params.quote_token_program
         } else {
@@ -48,7 +48,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         let wsol_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
         let mint_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -58,7 +58,8 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             );
 
         // Get pool token accounts
-        let wsol_vault_account = get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+        let wsol_vault_account =
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
         let mint_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
 
         let observation_state_account = get_observation_state_pda(&pool_state).unwrap();
@@ -82,8 +83,8 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
                 create_associated_token_account_idempotent(
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
-                    &accounts::WSOL_TOKEN_ACCOUNT,
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::WSOL_TOKEN_ACCOUNT,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
             );
             instructions.push(
@@ -93,8 +94,11 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
             // Sync wSOL balance
             instructions.push(
-                spl_token::instruction::sync_native(&accounts::TOKEN_PROGRAM, &wsol_token_account)
-                    .unwrap(),
+                spl_token::instruction::sync_native(
+                    &crate::constants::TOKEN_PROGRAM,
+                    &wsol_token_account,
+                )
+                .unwrap(),
             );
         }
 
@@ -108,16 +112,16 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         // Create buy instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_CONFIG, false), // Amm Config (readonly)
+            accounts::AUTHORITY_META.clone(), // Authority (readonly)
+            accounts::AMM_CONFIG_META.clone(), // Amm Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Input Token Account
             solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Output Token Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Output Vault Account
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Input Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(), // Input Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Output Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Input token mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Input token mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Output token mint (readonly)
             solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
@@ -133,7 +137,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             // Close wSOL ATA account, reclaim rent
             instructions.push(
                 spl_token::instruction::close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &wsol_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
@@ -182,7 +186,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         let wsol_token_account = spl_associated_token_account::get_associated_token_address(
             &params.payer.pubkey(),
-            &accounts::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
         );
         let mint_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -192,7 +196,8 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             );
 
         // Get pool token accounts
-        let wsol_vault_account = get_vault_pda(&pool_state, &accounts::WSOL_TOKEN_ACCOUNT).unwrap();
+        let wsol_vault_account =
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
         let mint_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
 
         let observation_state_account = get_observation_state_pda(&pool_state).unwrap();
@@ -205,25 +210,25 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             create_associated_token_account_idempotent(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
-                &accounts::WSOL_TOKEN_ACCOUNT,
-                &spl_token::ID,
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
             ),
         );
 
         // Create sell instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AUTHORITY, false), // Authority (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::AMM_CONFIG, false), // Amm Config (readonly)
+            accounts::AUTHORITY_META.clone(), // Authority (readonly)
+            accounts::AMM_CONFIG_META.clone(), // Amm Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Input Token Account
             solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Output Token Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Output Vault Account
             solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Input Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false), // Output Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META.clone(), // Output Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Input token mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(accounts::WSOL_TOKEN_ACCOUNT, false), // Output token mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Output token mint (readonly)
             solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
         // Create instruction data
@@ -237,7 +242,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         if protocol_params.auto_handle_wsol {
             instructions.push(
                 close_account(
-                    &accounts::TOKEN_PROGRAM,
+                    &crate::constants::TOKEN_PROGRAM,
                     &wsol_token_account,
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
