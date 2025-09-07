@@ -83,6 +83,7 @@ fn create_swqos_configs(rpc_url: &str) -> Vec<SwqosConfig> {
         SwqosConfig::Node1("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Astralane("your api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::Default(rpc_url.to_string()),
     ]
 }

@@ -98,6 +98,17 @@ pub const BLOCKRAZOR_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("AP6qExwrbRgBAVaehg4b5xHENX815sMabtBzUzVB4v8S"),
 ];
 
+pub const ASTRALANE_TIP_ACCOUNTS: &[Pubkey] = &[
+    pubkey!("astrazznxsGUhWShqgNtAdfrzP2G83DzcWVJDxwV9bF"),
+    pubkey!("astra4uejePWneqNaJKuFFA8oonqCE1sqF6b45kDMZm"),
+    pubkey!("astra9xWY93QyfG6yM8zwsKsRodscjQ2uU2HKNL5prk"),
+    pubkey!("astraRVUuTHjpwEVvNBeQEgwYx9w9CFyfxjYoobCZhL"),
+    pubkey!("astraEJ2fEj8Xmy6KLG7B3VfbKfsHXhHrNdCQx7iGJK"),
+    pubkey!("astraubkDw81n4LuutzSQ8uzHCv4BhPVhfvTcYv8SKC"),
+    pubkey!("astraZW5GLFefxNPAatceHhYjfA1ciq9gvfEg2S47xk"),
+    pubkey!("astrawVNP4xDBKT7rAdxrLYiTSTdqtUr63fSMduivXK"),
+];
+
 // NewYork,
 // Frankfurt,
 // Amsterdam,
@@ -193,5 +204,16 @@ pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 8] = [
     "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
     "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
     "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
+];
+
+pub const SWQOS_ENDPOINTS_ASTRALANE: [&str; 8] = [
+    "http://ny.gateway.astralane.io/iris",
+    "http://fr.gateway.astralane.io/iris",
+    "http://ams.gateway.astralane.io/iris",
+    "http://ny.gateway.astralane.io/iris",
+    "http://jp.gateway.astralane.io/iris",
+    "http://ny.gateway.astralane.io/iris",
+    "http://lax.gateway.astralane.io/iris",
+    "http://lim.gateway.astralane.io/iris",
 ];
 
