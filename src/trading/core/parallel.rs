@@ -8,14 +8,7 @@ use tokio::task::JoinHandle;
 use crate::{
     common::PriorityFee,
     swqos::{SwqosClient, SwqosType, TradeType},
-    trading::{
-        common::{
-            build_rpc_transaction, build_sell_tip_transaction_with_priority_fee,
-            build_sell_transaction, build_tip_transaction_with_priority_fee,
-        },
-        core::timer::TradeTimer,
-        MiddlewareManager,
-    },
+    trading::{common::build_transaction, core::timer::TradeTimer, MiddlewareManager},
 };
 
 /// Generic function for parallel transaction execution
@@ -27,20 +20,30 @@ pub async fn parallel_execute_with_tips(
     lookup_table_key: Option<Pubkey>,
     recent_blockhash: Hash,
     data_size_limit: u32,
-    trade_type: TradeType,
     middleware_manager: Option<Arc<MiddlewareManager>>,
     protocol_name: String,
     is_buy: bool,
     wait_transaction_confirmed: bool,
+    with_tip: bool,
 ) -> Result<()> {
     let cores = core_affinity::get_core_ids().unwrap();
     let mut handles: Vec<JoinHandle<Result<()>>> = vec![];
 
+    if is_buy && swqos_clients.len() > priority_fee.buy_tip_fees.len() {
+        return Err(anyhow!("Number of tip clients exceeds the configured buy tip fees"));
+    }
+    if !is_buy && swqos_clients.len() > priority_fee.sell_tip_fees.len() {
+        return Err(anyhow!("Number of tip clients exceeds the configured sell tip fees"));
+    }
+
     for i in 0..swqos_clients.len() {
         let swqos_client = swqos_clients[i].clone();
+        if !with_tip && !matches!(swqos_client.get_swqos_type(), SwqosType::Default) {
+            continue;
+        }
         let payer = payer.clone();
         let instructions = instructions.clone();
-        let mut priority_fee = priority_fee.clone();
+        let priority_fee = priority_fee.clone();
         let core_id = cores[i % cores.len()];
 
         let middleware_manager = middleware_manager.clone();
@@ -54,77 +57,40 @@ pub async fn parallel_execute_with_tips(
                 swqos_client.get_swqos_type()
             ));
 
-            let transaction = if matches!(trade_type, TradeType::Sell)
-                && swqos_client.get_swqos_type() == SwqosType::Default
-            {
-                build_sell_transaction(
-                    payer,
-                    &priority_fee,
-                    instructions,
-                    lookup_table_key,
-                    recent_blockhash,
-                    middleware_manager,
-                    protocol_name,
-                    is_buy,
-                )
-                .await?
-            } else if matches!(trade_type, TradeType::Sell)
-                && swqos_client.get_swqos_type() != SwqosType::Default
-            {
-                let tip_account = swqos_client.get_tip_account()?;
-                let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
-                build_sell_tip_transaction_with_priority_fee(
-                    payer,
-                    &priority_fee,
-                    instructions,
-                    &tip_account,
-                    lookup_table_key,
-                    recent_blockhash,
-                    middleware_manager,
-                    protocol_name,
-                    is_buy,
-                )
-                .await?
-            } else if swqos_client.get_swqos_type() == SwqosType::Default {
-                build_rpc_transaction(
-                    payer,
-                    &priority_fee,
-                    instructions,
-                    lookup_table_key,
-                    recent_blockhash,
-                    data_size_limit,
-                    middleware_manager,
-                    protocol_name,
-                    is_buy,
-                )
-                .await?
-            } else {
-                let tip_account = swqos_client.get_tip_account()?;
-                let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
-                priority_fee.buy_tip_fee =
-                    priority_fee.buy_tip_fees[i % priority_fee.buy_tip_fees.len()];
+            let tip_account = swqos_client.get_tip_account()?;
+            let tip_account = Arc::new(Pubkey::from_str(&tip_account).map_err(|e| anyhow!(e))?);
+            if priority_fee.buy_tip_fees.len() == 0 {
+                return Err(anyhow!("buy_tip_fees is empty"));
+            }
+            let tip_amount = priority_fee.buy_tip_fees[i];
 
-                build_tip_transaction_with_priority_fee(
-                    payer,
-                    &priority_fee,
-                    instructions,
-                    &tip_account,
-                    lookup_table_key,
-                    recent_blockhash,
-                    data_size_limit,
-                    middleware_manager,
-                    protocol_name,
-                    is_buy,
-                )
-                .await?
-            };
+            let transaction = build_transaction(
+                payer,
+                &priority_fee,
+                instructions,
+                lookup_table_key,
+                recent_blockhash,
+                data_size_limit,
+                middleware_manager,
+                protocol_name,
+                is_buy,
+                swqos_client.get_swqos_type() != SwqosType::Default,
+                &tip_account,
+                tip_amount,
+            )
+            .await?;
 
             timer.stage(format!(
                 "Submitting transaction instructions: {:?}",
                 swqos_client.get_swqos_type()
             ));
 
-            swqos_client.send_transaction(trade_type, &transaction).await?;
+            swqos_client
+                .send_transaction(
+                    if is_buy { TradeType::Buy } else { TradeType::Sell },
+                    &transaction,
+                )
+                .await?;
 
             timer.finish();
             Ok::<(), anyhow::Error>(())

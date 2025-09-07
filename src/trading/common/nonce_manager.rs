@@ -47,10 +47,3 @@ pub fn get_transaction_blockhash(recent_blockhash: Hash) -> Hash {
         recent_blockhash
     }
 }
-
-/// Check if using nonce account
-pub fn is_using_nonce() -> bool {
-    let nonce_cache = NonceCache::get_instance();
-    let nonce_info = nonce_cache.get_nonce_info();
-    nonce_info.nonce_account.is_some()
-}

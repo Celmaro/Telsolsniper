@@ -7,6 +7,7 @@ pub mod trading;
 pub mod utils;
 pub use solana_streamer_sdk;
 
+use crate::constants::trade::trade::DEFAULT_SLIPPAGE;
 use crate::swqos::SwqosConfig;
 use crate::trading::core::params::BonkParams;
 use crate::trading::core::params::PumpFunParams;
@@ -53,7 +54,7 @@ impl Clone for SolanaTrade {
 
 impl SolanaTrade {
     #[inline]
-    pub async fn new(payer: Arc<Keypair>, mut trade_config: TradeConfig) -> Self {
+    pub async fn new(payer: Arc<Keypair>, trade_config: TradeConfig) -> Self {
         if CryptoProvider::get_default().is_none() {
             let _ = default_provider()
                 .install_default()
@@ -62,23 +63,8 @@ impl SolanaTrade {
 
         let rpc_url = trade_config.rpc_url.clone();
         let swqos_configs = trade_config.swqos_configs.clone();
-        let mut priority_fee = trade_config.priority_fee.clone();
+        let priority_fee = trade_config.priority_fee.clone();
         let commitment = trade_config.commitment.clone();
-        if priority_fee.buy_tip_fees.len() < swqos_configs.len() {
-            // Fill the array, only fill the missing elements
-            let mut buy_tip_fees = priority_fee.buy_tip_fees.clone();
-            let default_fee = priority_fee.buy_tip_fee;
-            // Calculate the number of elements that need to be added
-            let missing_count = swqos_configs.len() - buy_tip_fees.len();
-            // Add missing elements using default values
-            for _ in 0..missing_count {
-                buy_tip_fees.push(default_fee);
-            }
-            // Update buy_tip_fees in priority_fee
-            priority_fee.buy_tip_fees = buy_tip_fees;
-            trade_config.priority_fee = priority_fee.clone();
-        }
-
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
 
         for swqos in swqos_configs {
@@ -160,6 +146,12 @@ impl SolanaTrade {
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
     ) -> Result<(), anyhow::Error> {
+        if slippage_basis_points.is_none() {
+            println!(
+                "slippage_basis_points is none, use default slippage basis points: {}",
+                DEFAULT_SLIPPAGE
+            );
+        }
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
@@ -179,23 +171,8 @@ impl SolanaTrade {
             protocol_params: protocol_params.clone(),
         };
         if custom_priority_fee.is_some() {
-            let mut custom_priority_fee = custom_priority_fee.unwrap();
-            // Fill the array, only fill the missing elements
-            if custom_priority_fee.buy_tip_fees.len() < self.swqos_clients.len() {
-                let mut buy_tip_fees = custom_priority_fee.buy_tip_fees.clone();
-                let default_fee = custom_priority_fee.buy_tip_fee;
-                // Calculate the number of elements that need to be added
-                let missing_count = self.swqos_clients.len() - buy_tip_fees.len();
-                // Add missing elements using default values
-                for _ in 0..missing_count {
-                    buy_tip_fees.push(default_fee);
-                }
-                // Update buy_tip_fees in custom_priority_fee
-                custom_priority_fee.buy_tip_fees = buy_tip_fees;
-            }
-            buy_params.priority_fee = custom_priority_fee;
+            buy_params.priority_fee = custom_priority_fee.unwrap();
         }
-        let buy_with_tip_params = buy_params.clone().with_tip(self.swqos_clients.clone());
 
         // Validate protocol params
         let is_valid_params = match dex_type {
@@ -216,7 +193,9 @@ impl SolanaTrade {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
-        executor.buy_with_tip(buy_with_tip_params, self.middleware_manager.clone()).await
+        executor
+            .buy_with_tip(buy_params, self.swqos_clients.clone(), self.middleware_manager.clone())
+            .await
     }
 
     /// Execute a sell order for a specified token
@@ -259,6 +238,12 @@ impl SolanaTrade {
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
     ) -> Result<(), anyhow::Error> {
+        if slippage_basis_points.is_none() {
+            println!(
+                "slippage_basis_points is none, use default slippage basis points: {}",
+                DEFAULT_SLIPPAGE
+            );
+        }
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
@@ -275,25 +260,11 @@ impl SolanaTrade {
             recent_blockhash,
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
+            with_tip: with_tip,
         };
         if custom_priority_fee.is_some() {
-            let mut custom_priority_fee = custom_priority_fee.unwrap();
-            // Fill the array, only fill the missing elements
-            if custom_priority_fee.buy_tip_fees.len() < self.swqos_clients.len() {
-                let mut buy_tip_fees = custom_priority_fee.buy_tip_fees.clone();
-                let default_fee = custom_priority_fee.buy_tip_fee;
-                // Calculate the number of elements that need to be added
-                let missing_count = self.swqos_clients.len() - buy_tip_fees.len();
-                // Add missing elements using default values
-                for _ in 0..missing_count {
-                    buy_tip_fees.push(default_fee);
-                }
-                // Update buy_tip_fees in custom_priority_fee
-                custom_priority_fee.buy_tip_fees = buy_tip_fees;
-            }
-            sell_params.priority_fee = custom_priority_fee;
+            sell_params.priority_fee = custom_priority_fee.unwrap();
         }
-        let sell_with_tip_params = sell_params.clone().with_tip(self.swqos_clients.clone());
 
         // Validate protocol params
         let is_valid_params = match dex_type {
@@ -315,11 +286,9 @@ impl SolanaTrade {
         }
 
         // Execute sell based on tip preference
-        if with_tip {
-            executor.sell_with_tip(sell_with_tip_params, self.middleware_manager.clone()).await
-        } else {
-            executor.sell(sell_params, self.middleware_manager.clone()).await
-        }
+        executor
+            .sell_with_tip(sell_params, self.swqos_clients.clone(), self.middleware_manager.clone())
+            .await
     }
 
     /// Execute a sell order for a percentage of the specified token amount

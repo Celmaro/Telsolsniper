@@ -1,6 +1,14 @@
 use dashmap::DashMap;
-use solana_sdk::{message::AddressLookupTableAccount, pubkey::Pubkey};
-use std::sync::{Arc, OnceLock};
+use solana_sdk::{
+    address_lookup_table::state::AddressLookupTable, message::AddressLookupTableAccount,
+    pubkey::Pubkey,
+};
+use std::{
+    error::Error,
+    sync::{Arc, OnceLock},
+};
+
+use crate::common::SolanaRpcClient;
 
 /// AddressLookupTableInfo struct, stores address lookup table related information
 #[derive(Clone)]
@@ -28,8 +36,24 @@ impl AddressLookupTableCache {
             .clone()
     }
 
+    /// Get lookup table information
+    pub async fn set_address_lookup_table(
+        &self,
+        client: Arc<SolanaRpcClient>,
+        lookup_table_address: &Pubkey,
+    ) -> Result<(), Box<dyn Error>> {
+        let account = client.get_account(lookup_table_address).await?;
+        let lookup_table = AddressLookupTable::deserialize(&account.data)?;
+        let address_lookup_table_account = AddressLookupTableAccount {
+            key: *lookup_table_address,
+            addresses: lookup_table.addresses.to_vec(),
+        };
+        self.add_or_update_table(lookup_table_address.clone(), Some(address_lookup_table_account));
+        Ok(())
+    }
+
     /// Add or update address lookup table information - lock-free implementation
-    pub fn add_or_update_table(
+    fn add_or_update_table(
         &self,
         lookup_table_address: Pubkey,
         address_lookup_table: Option<AddressLookupTableAccount>,
@@ -51,42 +75,8 @@ impl AddressLookupTableCache {
         }
     }
 
-    /// Remove address lookup table - lock-free implementation
-    pub fn remove_table(&self, lookup_table_address: &Pubkey) -> bool {
-        self.tables.remove(lookup_table_address).is_some()
-    }
-
-    /// Get address lookup table information - lock-free implementation
-    pub fn get_table(&self, lookup_table_address: &Pubkey) -> Option<AddressLookupTableInfo> {
-        self.tables.get(lookup_table_address).map(|entry| entry.value().clone())
-    }
-
-    /// Get all table addresses - lock-free implementation
-    pub fn get_all_table_addresses(&self) -> Vec<Pubkey> {
-        self.tables.iter().map(|entry| *entry.key()).collect()
-    }
-
-    /// Check if table exists - lock-free implementation
-    pub fn table_exists(&self, lookup_table_address: &Pubkey) -> bool {
-        self.tables.contains_key(lookup_table_address)
-    }
-
-    /// Update address lookup table content - lock-free implementation
-    pub fn update_table_content(
-        &self,
-        lookup_table_address: &Pubkey,
-        address_lookup_table: AddressLookupTableAccount,
-    ) -> bool {
-        if let Some(mut entry) = self.tables.get_mut(lookup_table_address) {
-            entry.address_lookup_table = Some(address_lookup_table);
-            true
-        } else {
-            false
-        }
-    }
-
     /// Get table content - high-performance lock-free implementation
-    pub fn get_table_content(&self, lookup_table_address: &Pubkey) -> AddressLookupTableAccount {
+    fn get_table_content(&self, lookup_table_address: &Pubkey) -> AddressLookupTableAccount {
         let result = self
             .tables
             .get(lookup_table_address)

@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+use sol_trade_sdk::solana_streamer_sdk::match_event;
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::parser::PUMPFUN_PROGRAM_ID;
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::{Protocol, UnifiedEvent};
@@ -13,9 +14,6 @@ use sol_trade_sdk::solana_streamer_sdk::streaming::yellowstone_grpc::{
     AccountFilter, TransactionFilter,
 };
 use sol_trade_sdk::solana_streamer_sdk::streaming::YellowstoneGrpc;
-use sol_trade_sdk::{
-    common::address_lookup::get_address_lookup_table, solana_streamer_sdk::match_event,
-};
 use sol_trade_sdk::{
     common::address_lookup_cache::AddressLookupTableCache,
     solana_streamer_sdk::streaming::event_parser::common::EventType,
@@ -109,13 +107,10 @@ async fn setup_lookup_table_cache(
     client: Arc<SolanaRpcClient>,
     lookup_table_address: Pubkey,
 ) -> AnyResult<()> {
-    let lookup_table = get_address_lookup_table(client, &lookup_table_address)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get address lookup table: {}", e))?;
-
     AddressLookupTableCache::get_instance()
-        .add_or_update_table(lookup_table_address, Some(lookup_table));
-
+        .set_address_lookup_table(client, &lookup_table_address)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set address lookup table: {}", e))?;
     Ok(())
 }
 

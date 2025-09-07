@@ -15,7 +15,6 @@ use crate::constants::bonk::accounts::{
 };
 use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
-use crate::swqos::SwqosClient;
 use crate::trading::bonk::common::{
     get_amount_in, get_amount_in_net, get_amount_out, get_creator_associated_account,
     get_platform_associated_account,
@@ -25,9 +24,7 @@ use crate::trading::pumpswap::common::{
     coin_creator_vault_ata, coin_creator_vault_authority, get_token_balances,
 };
 use crate::trading::raydium_cpmm::common::get_pool_token_balances;
-
-/// Common buy parameters
-/// Contains all necessary information for executing buy transactions
+/// Buy parameters
 #[derive(Clone)]
 pub struct BuyParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
@@ -43,26 +40,7 @@ pub struct BuyParams {
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
-/// Buy parameters with MEV service support
-/// Extends BuyParams with MEV client configurations for transaction acceleration
-#[derive(Clone)]
-pub struct BuyWithTipParams {
-    pub rpc: Option<Arc<SolanaRpcClient>>,
-    pub swqos_clients: Vec<Arc<SwqosClient>>,
-    pub payer: Arc<Keypair>,
-    pub mint: Pubkey,
-    pub sol_amount: u64,
-    pub slippage_basis_points: Option<u64>,
-    pub priority_fee: PriorityFee,
-    pub lookup_table_key: Option<Pubkey>,
-    pub recent_blockhash: Hash,
-    pub data_size_limit: u32,
-    pub wait_transaction_confirmed: bool,
-    pub protocol_params: Box<dyn ProtocolParams>,
-}
-
-/// Common sell parameters
-/// Contains all necessary information for executing sell transactions
+/// Sell parameters
 #[derive(Clone)]
 pub struct SellParams {
     pub rpc: Option<Arc<SolanaRpcClient>>,
@@ -74,23 +52,7 @@ pub struct SellParams {
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
     pub wait_transaction_confirmed: bool,
-    pub protocol_params: Box<dyn ProtocolParams>,
-}
-
-/// Sell parameters with MEV service support
-/// Extends SellParams with MEV client configurations for transaction acceleration
-#[derive(Clone)]
-pub struct SellWithTipParams {
-    pub rpc: Option<Arc<SolanaRpcClient>>,
-    pub swqos_clients: Vec<Arc<SwqosClient>>,
-    pub payer: Arc<Keypair>,
-    pub mint: Pubkey,
-    pub token_amount: Option<u64>,
-    pub slippage_basis_points: Option<u64>,
-    pub priority_fee: PriorityFee,
-    pub lookup_table_key: Option<Pubkey>,
-    pub recent_blockhash: Hash,
-    pub wait_transaction_confirmed: bool,
+    pub with_tip: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
 }
 
@@ -530,46 +492,5 @@ impl ProtocolParams for RaydiumAmmV4Params {
 
     fn clone_box(&self) -> Box<dyn ProtocolParams> {
         Box::new(self.clone())
-    }
-}
-
-impl BuyParams {
-    /// Convert to BuyWithTipParams
-    /// Transforms basic buy parameters into MEV-enabled parameters
-    pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> BuyWithTipParams {
-        BuyWithTipParams {
-            rpc: self.rpc,
-            swqos_clients,
-            payer: self.payer,
-            mint: self.mint,
-            sol_amount: self.sol_amount,
-            slippage_basis_points: self.slippage_basis_points,
-            priority_fee: self.priority_fee,
-            lookup_table_key: self.lookup_table_key,
-            recent_blockhash: self.recent_blockhash,
-            data_size_limit: self.data_size_limit,
-            wait_transaction_confirmed: self.wait_transaction_confirmed,
-            protocol_params: self.protocol_params,
-        }
-    }
-}
-
-impl SellParams {
-    /// Convert to SellWithTipParams
-    /// Transforms basic sell parameters into MEV-enabled parameters
-    pub fn with_tip(self, swqos_clients: Vec<Arc<SwqosClient>>) -> SellWithTipParams {
-        SellWithTipParams {
-            rpc: self.rpc,
-            swqos_clients,
-            payer: self.payer,
-            mint: self.mint,
-            token_amount: self.token_amount,
-            slippage_basis_points: self.slippage_basis_points,
-            priority_fee: self.priority_fee,
-            lookup_table_key: self.lookup_table_key,
-            recent_blockhash: self.recent_blockhash,
-            wait_transaction_confirmed: self.wait_transaction_confirmed,
-            protocol_params: self.protocol_params,
-        }
     }
 }
