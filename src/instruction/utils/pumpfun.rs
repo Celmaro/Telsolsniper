@@ -139,7 +139,7 @@ pub mod accounts {
     pub const GLOBAL_VOLUME_ACCUMULATOR_META: once_cell::sync::Lazy<
         solana_sdk::instruction::AccountMeta,
     > = once_cell::sync::Lazy::new(|| {
-        solana_sdk::instruction::AccountMeta::new_readonly(
+        solana_sdk::instruction::AccountMeta::new(
             get_global_volume_accumulator_pda().unwrap(),
             false,
         )

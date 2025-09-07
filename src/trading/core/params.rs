@@ -177,7 +177,7 @@ impl PumpSwapParams {
         let pool_data = crate::instruction::utils::pumpswap::fetch_pool(rpc, pool_address).await?;
         let (pool_base_token_reserves, pool_quote_token_reserves) =
             crate::instruction::utils::pumpswap::get_token_balances(&pool_data, rpc).await?;
-        let creator = pool_data.creator;
+        let creator = pool_data.coin_creator;
         let coin_creator_vault_ata = crate::instruction::utils::pumpswap::coin_creator_vault_ata(
             creator,
             pool_data.quote_mint,
