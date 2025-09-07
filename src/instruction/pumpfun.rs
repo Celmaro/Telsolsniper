@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::instruction::Instruction;
+use solana_sdk::{instruction::Instruction, signer::Signer};
 use spl_associated_token_account::{
     get_associated_token_address, instruction::create_associated_token_account,
 };
@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer};
+use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey};
 
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
@@ -85,14 +85,43 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &accounts::TOKEN_PROGRAM,
         ));
 
+        // Create buy instruction data
+        let mut buy_data = Vec::with_capacity(8 + 8 + 8);
+        buy_data.extend_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // discriminator
+        buy_data.extend_from_slice(&buy_token_amount.to_le_bytes());
+        buy_data.extend_from_slice(&max_sol_cost.to_le_bytes());
+
         // Create buy instruction
-        instructions.push(buy(
-            params.payer.as_ref(),
-            &params.mint,
-            &bonding_curve.account,
-            &creator_vault_pda,
-            &FEE_RECIPIENT,
-            Buy { _amount: buy_token_amount, _max_sol_cost: max_sol_cost },
+        instructions.push(Instruction::new_with_bytes(
+            accounts::PUMPFUN,
+            &buy_data,
+            vec![
+                AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
+                AccountMeta::new(FEE_RECIPIENT, false),
+                AccountMeta::new_readonly(params.mint, false),
+                AccountMeta::new(bonding_curve.account, false),
+                AccountMeta::new(
+                    get_associated_token_address(&bonding_curve.account, &params.mint),
+                    false,
+                ),
+                AccountMeta::new(
+                    get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                    false,
+                ),
+                AccountMeta::new(params.payer.pubkey(), true),
+                AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
+                AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
+                AccountMeta::new(creator_vault_pda, false),
+                AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
+                AccountMeta::new_readonly(accounts::PUMPFUN, false),
+                AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
+                AccountMeta::new(
+                    get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
+                    false,
+                ),
+                AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
+                AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
+            ],
         ));
 
         Ok(instructions)
@@ -137,12 +166,37 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
 
-        let mut instructions = vec![sell(
-            params.payer.as_ref(),
-            &params.mint,
-            &creator_vault_pda,
-            &FEE_RECIPIENT,
-            Sell { _amount: token_amount, _min_sol_output: min_sol_output },
+        // Create sell instruction data
+        let mut sell_data = Vec::with_capacity(8 + 8 + 8);
+        sell_data.extend_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]); // discriminator
+        sell_data.extend_from_slice(&token_amount.to_le_bytes());
+        sell_data.extend_from_slice(&min_sol_output.to_le_bytes());
+
+        let bonding_curve = get_bonding_curve_pda(&params.mint).unwrap();
+
+        // Create sell instruction
+        let mut instructions = vec![Instruction::new_with_bytes(
+            accounts::PUMPFUN,
+            &sell_data,
+            vec![
+                AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
+                AccountMeta::new(FEE_RECIPIENT, false),
+                AccountMeta::new_readonly(params.mint, false),
+                AccountMeta::new(bonding_curve, false),
+                AccountMeta::new(get_associated_token_address(&bonding_curve, &params.mint), false),
+                AccountMeta::new(
+                    get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                    false,
+                ),
+                AccountMeta::new(params.payer.pubkey(), true),
+                AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
+                AccountMeta::new(creator_vault_pda, false),
+                AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
+                AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
+                AccountMeta::new_readonly(accounts::PUMPFUN, false),
+                AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
+                AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
+            ],
         )];
 
         // If selling all tokens, close the account
@@ -158,96 +212,4 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
 
         Ok(instructions)
     }
-}
-
-pub struct Buy {
-    pub _amount: u64,
-    pub _max_sol_cost: u64,
-}
-
-impl Buy {
-    pub fn data(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(8 + 8 + 8);
-        data.extend_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // discriminator
-        data.extend_from_slice(&self._amount.to_le_bytes());
-        data.extend_from_slice(&self._max_sol_cost.to_le_bytes());
-        data
-    }
-}
-
-pub struct Sell {
-    pub _amount: u64,
-    pub _min_sol_output: u64,
-}
-
-impl Sell {
-    pub fn data(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(8 + 8 + 8);
-        data.extend_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]); // discriminator
-        data.extend_from_slice(&self._amount.to_le_bytes());
-        data.extend_from_slice(&self._min_sol_output.to_le_bytes());
-        data
-    }
-}
-
-pub fn buy(
-    payer: &Keypair,
-    mint: &Pubkey,
-    bonding_curve_pda: &Pubkey,
-    creator_vault_pda: &Pubkey,
-    fee_recipient: &Pubkey,
-    args: Buy,
-) -> Instruction {
-    Instruction::new_with_bytes(
-        accounts::PUMPFUN,
-        &args.data(),
-        vec![
-            AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
-            AccountMeta::new(*fee_recipient, false),
-            AccountMeta::new_readonly(*mint, false),
-            AccountMeta::new(*bonding_curve_pda, false),
-            AccountMeta::new(get_associated_token_address(bonding_curve_pda, mint), false),
-            AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
-            AccountMeta::new(payer.pubkey(), true),
-            AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
-            AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new(*creator_vault_pda, false),
-            AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
-            AccountMeta::new_readonly(accounts::PUMPFUN, false),
-            AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
-            AccountMeta::new(get_user_volume_accumulator_pda(&payer.pubkey()).unwrap(), false),
-            AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-            AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
-        ],
-    )
-}
-
-pub fn sell(
-    payer: &Keypair,
-    mint: &Pubkey,
-    creator_vault_pda: &Pubkey,
-    fee_recipient: &Pubkey,
-    args: Sell,
-) -> Instruction {
-    let bonding_curve: Pubkey = get_bonding_curve_pda(mint).unwrap();
-    Instruction::new_with_bytes(
-        accounts::PUMPFUN,
-        &args.data(),
-        vec![
-            AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
-            AccountMeta::new(*fee_recipient, false),
-            AccountMeta::new_readonly(*mint, false),
-            AccountMeta::new(bonding_curve, false),
-            AccountMeta::new(get_associated_token_address(&bonding_curve, mint), false),
-            AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
-            AccountMeta::new(payer.pubkey(), true),
-            AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
-            AccountMeta::new(*creator_vault_pda, false),
-            AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
-            AccountMeta::new_readonly(accounts::PUMPFUN, false),
-            AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-            AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
-        ],
-    )
 }

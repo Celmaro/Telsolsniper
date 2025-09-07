@@ -35,78 +35,18 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        // Build instructions based on whether account information is provided
+        // Build instructions based on account information
+        let pool = protocol_params.pool;
         let base_mint = protocol_params.base_mint;
         let quote_mint = protocol_params.quote_mint;
         let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
         let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
-        let coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
-        let coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
+        let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
+        let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
+        let auto_handle_wsol = protocol_params.auto_handle_wsol;
+        let base_token_program = protocol_params.base_token_program;
+        let quote_token_program = protocol_params.quote_token_program;
 
-        self.build_buy_instructions_with_accounts(
-            params,
-            protocol_params.pool,
-            base_mint,
-            quote_mint,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            coin_creator_vault_ata,
-            coin_creator_vault_authority,
-            protocol_params.auto_handle_wsol,
-            protocol_params.base_token_program,
-            protocol_params.quote_token_program,
-        )
-        .await
-    }
-
-    async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
-        // Get PumpSwap specific parameters
-        let protocol_params = params
-            .protocol_params
-            .as_any()
-            .downcast_ref::<PumpSwapParams>()
-            .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
-        // Build instructions based on whether account information is provided
-        let base_mint = protocol_params.base_mint;
-        let quote_mint = protocol_params.quote_mint;
-        let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
-        let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
-        let coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
-        let coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
-
-        self.build_sell_instructions_with_accounts(
-            params,
-            protocol_params.pool,
-            base_mint,
-            quote_mint,
-            pool_base_token_reserves,
-            pool_quote_token_reserves,
-            coin_creator_vault_ata,
-            coin_creator_vault_authority,
-            protocol_params.auto_handle_wsol,
-            protocol_params.base_token_program,
-            protocol_params.quote_token_program,
-        )
-        .await
-    }
-}
-
-impl PumpSwapInstructionBuilder {
-    /// Build buy instructions with provided account information
-    async fn build_buy_instructions_with_accounts(
-        &self,
-        params: &BuyParams,
-        pool: Pubkey,
-        base_mint: Pubkey,
-        quote_mint: Pubkey,
-        pool_base_token_reserves: u64,
-        pool_quote_token_reserves: u64,
-        params_coin_creator_vault_ata: Pubkey,
-        params_coin_creator_vault_authority: Pubkey,
-        auto_handle_wsol: bool,
-        base_token_program: Pubkey,
-        quote_token_program: Pubkey,
-    ) -> Result<Vec<Instruction>> {
         if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
             return Err(anyhow!("Invalid base mint and quote mint"));
         }
@@ -310,21 +250,26 @@ impl PumpSwapInstructionBuilder {
         Ok(instructions)
     }
 
-    /// Build sell instructions with provided account information
-    async fn build_sell_instructions_with_accounts(
-        &self,
-        params: &SellParams,
-        pool: Pubkey,
-        base_mint: Pubkey,
-        quote_mint: Pubkey,
-        pool_base_token_reserves: u64,
-        pool_quote_token_reserves: u64,
-        params_coin_creator_vault_ata: Pubkey,
-        params_coin_creator_vault_authority: Pubkey,
-        auto_handle_wsol: bool,
-        base_token_program: Pubkey,
-        quote_token_program: Pubkey,
-    ) -> Result<Vec<Instruction>> {
+    async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        // Get PumpSwap specific parameters
+        let protocol_params = params
+            .protocol_params
+            .as_any()
+            .downcast_ref::<PumpSwapParams>()
+            .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
+
+        // Build instructions based on account information
+        let pool = protocol_params.pool;
+        let base_mint = protocol_params.base_mint;
+        let quote_mint = protocol_params.quote_mint;
+        let pool_base_token_reserves = protocol_params.pool_base_token_reserves;
+        let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
+        let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
+        let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
+        let auto_handle_wsol = protocol_params.auto_handle_wsol;
+        let base_token_program = protocol_params.base_token_program;
+        let quote_token_program = protocol_params.quote_token_program;
+
         if base_mint != accounts::WSOL_TOKEN_ACCOUNT && quote_mint != accounts::WSOL_TOKEN_ACCOUNT {
             return Err(anyhow!("Invalid base mint and quote mint"));
         }
@@ -503,3 +448,4 @@ impl PumpSwapInstructionBuilder {
         Ok(instructions)
     }
 }
+

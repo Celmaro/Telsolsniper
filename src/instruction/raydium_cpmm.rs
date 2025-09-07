@@ -26,20 +26,6 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
-        self.build_buy_instructions_with_accounts(params).await
-    }
-
-    async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
-        self.build_sell_instructions_with_accounts(params).await
-    }
-}
-
-impl RaydiumCpmmInstructionBuilder {
-    /// Build buy instructions with provided account information
-    async fn build_buy_instructions_with_accounts(
-        &self,
-        params: &BuyParams,
-    ) -> Result<Vec<Instruction>> {
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -160,11 +146,7 @@ impl RaydiumCpmmInstructionBuilder {
         Ok(instructions)
     }
 
-    /// Build sell instructions with provided account information
-    async fn build_sell_instructions_with_accounts(
-        &self,
-        params: &SellParams,
-    ) -> Result<Vec<Instruction>> {
+    async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
         let protocol_params = params
             .protocol_params
             .as_any()

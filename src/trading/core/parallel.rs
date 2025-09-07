@@ -69,7 +69,7 @@ pub async fn parallel_execute_with_tips(
             let transaction = build_transaction(
                 payer,
                 &priority_fee,
-                (*instructions).clone(),
+                instructions.as_ref().clone(),
                 lookup_table_key,
                 recent_blockhash,
                 data_size_limit,
