@@ -1,5 +1,5 @@
-pub mod price;
 pub mod calc;
+pub mod price;
 
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
 use crate::trading;
@@ -62,7 +62,7 @@ impl SolanaTrade {
 
     #[inline]
     pub fn get_pumpfun_token_buy_price(&self, amount: u64, trade_info: &PumpFunTradeEvent) -> u64 {
-        trading::pumpfun::common::get_buy_price(amount, trade_info)
+        crate::instruction::utils::pumpfun::get_buy_price(amount, trade_info)
     }
 
     #[inline]
@@ -71,7 +71,8 @@ impl SolanaTrade {
         mint: &Pubkey,
     ) -> Result<f64, anyhow::Error> {
         let (bonding_curve, _) =
-            trading::pumpfun::common::fetch_bonding_curve_account(&self.rpc, mint).await?;
+            crate::instruction::utils::pumpfun::fetch_bonding_curve_account(&self.rpc, mint)
+                .await?;
 
         let virtual_sol_reserves = bonding_curve.virtual_sol_reserves;
         let virtual_token_reserves = bonding_curve.virtual_token_reserves;
@@ -85,7 +86,8 @@ impl SolanaTrade {
         mint: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
         let (bonding_curve, _) =
-            trading::pumpfun::common::fetch_bonding_curve_account(&self.rpc, mint).await?;
+            crate::instruction::utils::pumpfun::fetch_bonding_curve_account(&self.rpc, mint)
+                .await?;
 
         let actual_sol_reserves = bonding_curve.real_sol_reserves;
 
@@ -95,7 +97,8 @@ impl SolanaTrade {
     #[inline]
     pub async fn get_pumpfun_token_creator(&self, mint: &Pubkey) -> Result<Pubkey, anyhow::Error> {
         let (bonding_curve, _) =
-            trading::pumpfun::common::fetch_bonding_curve_account(&self.rpc, mint).await?;
+            crate::instruction::utils::pumpfun::fetch_bonding_curve_account(&self.rpc, mint)
+                .await?;
 
         let creator = bonding_curve.creator;
 
@@ -109,10 +112,10 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<f64, anyhow::Error> {
-        let pool = trading::pumpswap::common::fetch_pool(&self.rpc, pool_address).await?;
+        let pool = crate::instruction::utils::pumpswap::fetch_pool(&self.rpc, pool_address).await?;
 
         let (base_amount, quote_amount) =
-            trading::pumpswap::common::get_token_balances(&pool, &self.rpc).await?;
+            crate::instruction::utils::pumpswap::get_token_balances(&pool, &self.rpc).await?;
 
         // Calculate price using constant product formula (x * y = k)
         // Price = quote_amount / base_amount
@@ -130,10 +133,10 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
-        let pool = trading::pumpswap::common::fetch_pool(&self.rpc, pool_address).await?;
+        let pool = crate::instruction::utils::pumpswap::fetch_pool(&self.rpc, pool_address).await?;
 
         let (_, quote_amount) =
-            trading::pumpswap::common::get_token_balances(&pool, &self.rpc).await?;
+            crate::instruction::utils::pumpswap::get_token_balances(&pool, &self.rpc).await?;
 
         Ok(quote_amount)
     }
@@ -143,10 +146,10 @@ impl SolanaTrade {
         &self,
         pool_address: &Pubkey,
     ) -> Result<u64, anyhow::Error> {
-        let pool = trading::pumpswap::common::fetch_pool(&self.rpc, pool_address).await?;
+        let pool = crate::instruction::utils::pumpswap::fetch_pool(&self.rpc, pool_address).await?;
 
         let (base_amount, _) =
-            trading::pumpswap::common::get_token_balances(&pool, &self.rpc).await?;
+            crate::instruction::utils::pumpswap::get_token_balances(&pool, &self.rpc).await?;
 
         Ok(base_amount)
     }

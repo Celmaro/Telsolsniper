@@ -21,7 +21,7 @@ use sol_trade_sdk::{
     SolanaTrade,
 };
 use sol_trade_sdk::{
-    constants::pumpswap::accounts,
+    instruction::utils::pumpswap::accounts,
     solana_streamer_sdk::streaming::event_parser::{
         common::filter::EventTypeFilter, protocols::pumpswap::PumpSwapBuyEvent,
     },

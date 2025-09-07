@@ -5,10 +5,8 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::{
-        raydium_amm_v4::{accounts, SWAP_BASE_IN_DISCRIMINATOR},
-        trade::trade::DEFAULT_SLIPPAGE,
-    },
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    instruction::utils::raydium_amm_v4::{accounts, SWAP_BASE_IN_DISCRIMINATOR},
     trading::core::{
         params::{BuyParams, RaydiumAmmV4Params, SellParams},
         traits::InstructionBuilder,

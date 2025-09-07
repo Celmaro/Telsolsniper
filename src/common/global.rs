@@ -23,10 +23,16 @@
 //! - `creator_fee`: Fee for creators
 //! - `fee_recipients`: Array of fee recipient accounts
 
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use serde::{Serialize, Deserialize};
 
-use crate::constants::pumpfun::global_constants::*;
+use crate::instruction::utils::pumpfun::global_constants::{
+    AUTHORITY, CREATOR_FEE, ENABLE_MIGRATE, FEE_BASIS_POINTS, FEE_RECIPIENT, GLOBAL_ACCOUNT,
+    INITIAL_REAL_TOKEN_RESERVES, INITIAL_VIRTUAL_SOL_RESERVES, INITIAL_VIRTUAL_TOKEN_RESERVES,
+    POOL_MIGRATION_FEE, PUMPFUN_AMM_FEE_1, PUMPFUN_AMM_FEE_2, PUMPFUN_AMM_FEE_3, PUMPFUN_AMM_FEE_4,
+    PUMPFUN_AMM_FEE_5, PUMPFUN_AMM_FEE_6, PUMPFUN_AMM_FEE_7, TOKEN_TOTAL_SUPPLY,
+    WITHDRAW_AUTHORITY,
+};
 
 /// Represents the global configuration account for token pricing and fees
 #[derive(Debug, Clone, Serialize, Deserialize)]

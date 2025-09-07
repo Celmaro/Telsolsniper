@@ -1,4 +1,4 @@
-use crate::constants::raydium_cpmm::accounts::{
+use crate::instruction::utils::raydium_cpmm::accounts::{
     CREATOR_FEE_RATE, FEE_RATE_DENOMINATOR_VALUE, FUND_FEE_RATE, PROTOCOL_FEE_RATE, TRADE_FEE_RATE,
 };
 
@@ -176,7 +176,8 @@ pub fn compute_swap_amount(
         true,
     );
 
-    let min_amount_out = ((swap_result.output_amount as f64) * (1.0 - (slippage_basis_points as f64) / 10000.0)) as u64;
+    let min_amount_out = ((swap_result.output_amount as f64)
+        * (1.0 - (slippage_basis_points as f64) / 10000.0)) as u64;
 
     let all_trade = swap_result.input_amount == amount_in;
 

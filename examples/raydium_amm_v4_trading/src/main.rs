@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use sol_trade_sdk::{constants::raydium_amm_v4::accounts, solana_streamer_sdk::{match_event, streaming::event_parser::protocols::raydium_amm_v4::RaydiumAmmV4SwapEvent}, trading::common::get_multi_token_balances};
+use sol_trade_sdk::{instruction::utils::raydium_amm_v4::{accounts, fetch_amm_info}, solana_streamer_sdk::{match_event, streaming::event_parser::protocols::raydium_amm_v4::RaydiumAmmV4SwapEvent}, trading::common::get_multi_token_balances};
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::common::filter::EventTypeFilter;
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use sol_trade_sdk::solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::parser::RAYDIUM_AMM_V4_PROGRAM_ID;
@@ -131,9 +131,7 @@ async fn raydium_amm_v4_copy_trade_with_grpc(trade_info: RaydiumAmmV4SwapEvent) 
     let slippage_basis_points = Some(100);
     let recent_blockhash = client.rpc.get_latest_blockhash().await?;
 
-    let amm_info =
-        sol_trade_sdk::trading::raydium_amm_v4::common::fetch_amm_info(&client.rpc, trade_info.amm)
-            .await?;
+    let amm_info = fetch_amm_info(&client.rpc, trade_info.amm).await?;
     let (coin_reserve, pc_reserve) =
         get_multi_token_balances(&client.rpc, &amm_info.token_coin, &amm_info.token_pc).await?;
     let mint_pubkey = if amm_info.pc_mint == accounts::WSOL_TOKEN_ACCOUNT {

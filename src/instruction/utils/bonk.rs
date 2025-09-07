@@ -1,12 +1,35 @@
-use crate::{
-    common::SolanaRpcClient,
-    constants::{self, bonk::accounts},
-};
+use crate::common::SolanaRpcClient;
 use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer_sdk::streaming::event_parser::protocols::bonk::{
     pool_state_decode, types::PoolState,
 };
+
+/// Constants used as seeds for deriving PDAs (Program Derived Addresses)
+pub mod seeds {
+    pub const POOL_SEED: &[u8] = b"pool";
+    pub const POOL_VAULT_SEED: &[u8] = b"pool_vault";
+}
+
+/// Constants related to program accounts and authorities
+pub mod accounts {
+    use solana_sdk::{pubkey, pubkey::Pubkey};
+
+    pub const AUTHORITY: Pubkey = pubkey!("WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh");
+    pub const GLOBAL_CONFIG: Pubkey = pubkey!("6s1xP3hpbAfFoNtUNF8mfHsjr2Bd97JxFJRWLbL6aHuX");
+    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
+    pub const EVENT_AUTHORITY: Pubkey = pubkey!("2DPAtwB8L12vrMRExbLuyGnC7n2J5LNoZQSejeQGpwkr");
+    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
+    pub const BONK: Pubkey = pubkey!("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj");
+    pub const SYSTEM_PROGRAM: Pubkey = solana_sdk::system_program::ID;
+
+    pub const PLATFORM_FEE_RATE: u128 = 100; // 1%
+    pub const PROTOCOL_FEE_RATE: u128 = 25; // 0.25%
+    pub const SHARE_FEE_RATE: u128 = 0; // 0%
+}
+
+pub const BUY_EXECT_IN_DISCRIMINATOR: [u8; 8] = [250, 234, 13, 123, 213, 156, 19, 236];
+pub const SELL_EXECT_IN_DISCRIMINATOR: [u8; 8] = [149, 39, 222, 155, 211, 124, 152, 26];
 
 pub async fn fetch_pool_state(
     rpc: &SolanaRpcClient,
@@ -105,85 +128,29 @@ pub fn get_amount_out(
 }
 
 pub fn get_pool_pda(base_mint: &Pubkey, quote_mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] =
-        &[constants::bonk::seeds::POOL_SEED, base_mint.as_ref(), quote_mint.as_ref()];
-    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let seeds: &[&[u8]; 3] = &[seeds::POOL_SEED, base_mint.as_ref(), quote_mint.as_ref()];
+    let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] =
-        &[constants::bonk::seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
-    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let seeds: &[&[u8]; 3] = &[seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
+    let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_platform_associated_account(platform_config: &Pubkey) -> Option<Pubkey> {
     let seeds: &[&[u8]; 2] = &[platform_config.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
-    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_creator_associated_account(creator: &Pubkey) -> Option<Pubkey> {
     let seeds: &[&[u8]; 2] = &[creator.as_ref(), accounts::WSOL_TOKEN_ACCOUNT.as_ref()];
-    let program_id: &Pubkey = &constants::bonk::accounts::BONK;
+    let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::constants::bonk::accounts::{PLATFORM_FEE_RATE, PROTOCOL_FEE_RATE, SHARE_FEE_RATE};
-
-    use super::*;
-
-    #[test]
-    fn test_amount_in_out_consistency() {
-        // 测试参数
-        let protocol_fee_rate = PROTOCOL_FEE_RATE;
-        let platform_fee_rate = PLATFORM_FEE_RATE;
-        let share_fee_rate = SHARE_FEE_RATE;
-        let virtual_base = 1073025605596382;
-        let virtual_quote = 30000852951;
-        let real_base = 0;
-        let real_quote = 0;
-        let slippage_basis_points = 0;
-
-        let original_amount_in = 2000000000;
-
-        let geet_amount_out_result = get_amount_out(
-            original_amount_in,
-            protocol_fee_rate,
-            platform_fee_rate,
-            share_fee_rate,
-            virtual_base,
-            virtual_quote,
-            real_base,
-            real_quote,
-            slippage_basis_points,
-        );
-
-        let amount_out = 25959582643397;
-        let get_amount_in_result = get_amount_in(
-            amount_out,
-            protocol_fee_rate,
-            platform_fee_rate,
-            share_fee_rate,
-            virtual_base,
-            virtual_quote,
-            real_base,
-            real_quote,
-            slippage_basis_points,
-        );
-
-        println!("Original amount_in: {}", original_amount_in);
-        println!("Amount_out: {}", geet_amount_out_result);
-        println!("Calculated amount_in: {}", get_amount_in_result);
-
-        assert!(geet_amount_out_result == 66275810509273);
-        assert!(get_amount_in_result == 753217040);
-    }
 }

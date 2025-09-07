@@ -17,7 +17,7 @@ use sol_trade_sdk::{
     SolanaTrade,
 };
 use sol_trade_sdk::{
-    constants::raydium_cpmm::accounts,
+    instruction::utils::raydium_cpmm::accounts,
     solana_streamer_sdk::streaming::event_parser::protocols::raydium_cpmm::parser::RAYDIUM_CPMM_PROGRAM_ID,
 };
 use sol_trade_sdk::{

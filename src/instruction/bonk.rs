@@ -5,12 +5,12 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::{
-        bonk::{accounts, BUY_EXECT_IN_DISCRIMINATOR, SELL_EXECT_IN_DISCRIMINATOR},
-        trade::trade::DEFAULT_SLIPPAGE,
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    instruction::utils::bonk::{
+        accounts, get_pool_pda, get_vault_pda, BUY_EXECT_IN_DISCRIMINATOR,
+        SELL_EXECT_IN_DISCRIMINATOR,
     },
     trading::{
-        bonk::common::{get_pool_pda, get_vault_pda},
         common::utils::get_token_balance,
         core::{
             params::{BonkParams, BuyParams, SellParams},

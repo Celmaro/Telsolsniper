@@ -5,16 +5,14 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::{
-        raydium_cpmm::{accounts, SWAP_BASE_IN_DISCRIMINATOR},
-        trade::trade::DEFAULT_SLIPPAGE,
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    instruction::utils::raydium_cpmm::{
+        accounts, get_observation_state_pda, get_pool_pda, get_vault_pda,
+        SWAP_BASE_IN_DISCRIMINATOR,
     },
-    trading::{
-        core::{
-            params::{BuyParams, RaydiumCpmmParams, SellParams},
-            traits::InstructionBuilder,
-        },
-        raydium_cpmm::common::{get_observation_state_pda, get_pool_pda, get_vault_pda},
+    trading::core::{
+        params::{BuyParams, RaydiumCpmmParams, SellParams},
+        traits::InstructionBuilder,
     },
     utils::calc::raydium_cpmm::compute_swap_amount,
 };

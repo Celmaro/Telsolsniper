@@ -1,7 +1,7 @@
 use super::common::{
     calculate_with_slippage_buy, calculate_with_slippage_sell, ceil_div, compute_fee,
 };
-use crate::constants::pumpswap::accounts::{
+use crate::instruction::utils::pumpswap::accounts::{
     COIN_CREATOR_FEE_BASIS_POINTS, LP_FEE_BASIS_POINTS, PROTOCOL_FEE_BASIS_POINTS,
 };
 use solana_sdk::pubkey::Pubkey;

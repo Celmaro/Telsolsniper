@@ -1,4 +1,4 @@
-use crate::constants::bonk::accounts;
+use crate::instruction::utils::bonk::accounts;
 
 /// Calculates the amount of tokens to receive when buying with SOL
 ///

@@ -5,19 +5,15 @@ use spl_associated_token_account::instruction::create_associated_token_account_i
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants::{
-        pumpswap::{accounts, BUY_DISCRIMINATOR, SELL_DISCRIMINATOR},
-        trade::trade::DEFAULT_SLIPPAGE,
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    instruction::utils::pumpswap::{
+        accounts, coin_creator_vault_ata, fee_recipient_ata, get_fee_config_pda,
+        get_global_volume_accumulator_pda, get_user_volume_accumulator_pda, BUY_DISCRIMINATOR,
+        SELL_DISCRIMINATOR,
     },
-    trading::{
-        core::{
-            params::{BuyParams, PumpSwapParams, SellParams},
-            traits::InstructionBuilder,
-        },
-        pumpswap::common::{
-            coin_creator_vault_ata, coin_creator_vault_authority, fee_recipient_ata,
-            get_fee_config_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
-        },
+    trading::core::{
+        params::{BuyParams, PumpSwapParams, SellParams},
+        traits::InstructionBuilder,
     },
     utils::calc::pumpswap::{buy_quote_input_internal, sell_base_input_internal},
 };

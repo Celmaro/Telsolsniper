@@ -1,8 +1,8 @@
 use solana_streamer_sdk::streaming::event_parser::protocols::bonk::types::PoolState;
 
-use crate::constants::{
-    bonk::accounts::WSOL_TOKEN_ACCOUNT,
-    decimals::{DEFAULT_TOKEN_DECIMALS, SOL_DECIMALS},
+use crate::{
+    constants::decimals::{DEFAULT_TOKEN_DECIMALS, SOL_DECIMALS},
+    instruction::utils::bonk::accounts::WSOL_TOKEN_ACCOUNT,
 };
 
 /// Calculate the token price in WSOL based on pool state

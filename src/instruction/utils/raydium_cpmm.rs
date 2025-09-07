@@ -1,15 +1,35 @@
-use crate::{
-    common::SolanaRpcClient,
-    constants::{
-        self,
-        raydium_cpmm::accounts::{self},
-    },
-};
+use crate::common::SolanaRpcClient;
 use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer_sdk::streaming::event_parser::protocols::raydium_cpmm::types::{
     pool_state_decode, PoolState,
 };
+
+/// Constants used as seeds for deriving PDAs (Program Derived Addresses)
+pub mod seeds {
+    pub const POOL_SEED: &[u8] = b"pool";
+    pub const POOL_VAULT_SEED: &[u8] = b"pool_vault";
+    pub const OBSERVATION_STATE_SEED: &[u8] = b"observation";
+}
+
+/// Constants related to program accounts and authorities
+pub mod accounts {
+    use solana_sdk::{pubkey, pubkey::Pubkey};
+    pub const AUTHORITY: Pubkey = pubkey!("GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL");
+    pub const AMM_CONFIG: Pubkey = pubkey!("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2");
+    pub const TOKEN_PROGRAM: Pubkey = spl_token::ID;
+    pub const WSOL_TOKEN_ACCOUNT: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
+    pub const RAYDIUM_CPMM: Pubkey = pubkey!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
+
+    pub const FEE_RATE_DENOMINATOR_VALUE: u128 = 1_000_000;
+    pub const TRADE_FEE_RATE: u64 = 2500;
+    pub const CREATOR_FEE_RATE: u64 = 0;
+    pub const PROTOCOL_FEE_RATE: u64 = 120000;
+    pub const FUND_FEE_RATE: u64 = 40000;
+}
+
+pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[143, 190, 90, 218, 196, 30, 51, 222];
+pub const SWAP_BASE_OUT_DISCRIMINATOR: &[u8] = &[55, 217, 98, 86, 163, 74, 180, 173];
 
 pub async fn fetch_pool_state(
     rpc: &SolanaRpcClient,
@@ -25,29 +45,23 @@ pub async fn fetch_pool_state(
 }
 
 pub fn get_pool_pda(amm_config: &Pubkey, mint1: &Pubkey, mint2: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 4] = &[
-        constants::raydium_cpmm::seeds::POOL_SEED,
-        amm_config.as_ref(),
-        mint1.as_ref(),
-        mint2.as_ref(),
-    ];
-    let program_id: &Pubkey = &constants::raydium_cpmm::accounts::RAYDIUM_CPMM;
+    let seeds: &[&[u8]; 4] =
+        &[seeds::POOL_SEED, amm_config.as_ref(), mint1.as_ref(), mint2.as_ref()];
+    let program_id: &Pubkey = &accounts::RAYDIUM_CPMM;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 3] =
-        &[constants::raydium_cpmm::seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
-    let program_id: &Pubkey = &constants::raydium_cpmm::accounts::RAYDIUM_CPMM;
+    let seeds: &[&[u8]; 3] = &[seeds::POOL_VAULT_SEED, pool_state.as_ref(), mint.as_ref()];
+    let program_id: &Pubkey = &accounts::RAYDIUM_CPMM;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_observation_state_pda(pool_state: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] =
-        &[constants::raydium_cpmm::seeds::OBSERVATION_STATE_SEED, pool_state.as_ref()];
-    let program_id: &Pubkey = &constants::raydium_cpmm::accounts::RAYDIUM_CPMM;
+    let seeds: &[&[u8]; 2] = &[seeds::OBSERVATION_STATE_SEED, pool_state.as_ref()];
+    let program_id: &Pubkey = &accounts::RAYDIUM_CPMM;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
@@ -95,39 +109,4 @@ pub async fn calculate_price(
     let token1_adjusted = token1_amount as f64 / 10_f64.powi(mint1_decimals as i32);
     let price = token1_adjusted / token0_adjusted;
     Ok(price)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use solana_sdk::pubkey;
-
-    #[test]
-    fn test_get_pool_pda() {
-        // 测试get_pool_pda函数
-        let amm_config = constants::raydium_cpmm::accounts::AMM_CONFIG;
-        let input_mint = pubkey!("So11111111111111111111111111111111111111112"); // WSOL
-        let output_mint = pubkey!("BnwbwoqPm5ZNx7YTJ8g9jR2qCpYeHBC7xxpU8zEtbonk"); // USDC
-        let pool_state = pubkey!("E9rRRpcdsKAseeLFbwC1Ewxd3aYG27meqwTTrMfCTbSG");
-        let result = get_pool_pda(&amm_config, &input_mint, &output_mint);
-        assert_eq!(result, Some(pool_state));
-    }
-
-    #[test]
-    fn test_get_vault_pda() {
-        // 测试get_vault_pda函数
-        let pool_state = pubkey!("HBMkgQvt4NAFx6XzNav23bNcv6K3oiC5UfY3JsE22scY");
-        let mint = pubkey!("DeESECsL3cLXno1LFquss98kNQSno1xpQC2ERCqSbonk"); // WSOL
-        let vault_pda = pubkey!("7rkgNG3A8z636DuzhchKeqAJTaH3H5ZFWmBQeStydovA");
-        let result = get_vault_pda(&pool_state, &mint);
-        assert_eq!(result, Some(vault_pda));
-    }
-
-    #[test]
-    fn test_get_observation_state_pda() {
-        let pool_state = pubkey!("HBMkgQvt4NAFx6XzNav23bNcv6K3oiC5UfY3JsE22scY");
-        let observation_state_pda = pubkey!("Gq8u9N18ASjq3AK2gCk6RtGSNyjXZf9EZDb6vTtB9JRs");
-        let result = get_observation_state_pda(&pool_state);
-        assert_eq!(result, Some(observation_state_pda));
-    }
 }

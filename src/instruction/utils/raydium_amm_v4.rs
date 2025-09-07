@@ -1,14 +1,10 @@
-//! Constants used by the crate.
-//!
-//! This module contains various constants used throughout the crate, including:
-//!
-//! - Seeds for deriving Program Derived Addresses (PDAs)
-//! - Program account addresses and public keys
-//!
-//! The constants are organized into submodules for better organization:
-//!
-//! - `seeds`: Contains seed values used for PDA derivation
-//! - `accounts`: Contains important program account addresses
+use anyhow::anyhow;
+use solana_sdk::pubkey::Pubkey;
+use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::types::{
+    amm_info_decode, AmmInfo,
+};
+
+use crate::common::SolanaRpcClient;
 
 /// Constants used as seeds for deriving PDAs (Program Derived Addresses)
 pub mod seeds {
@@ -31,3 +27,10 @@ pub mod accounts {
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[9];
 pub const SWAP_BASE_OUT_DISCRIMINATOR: &[u8] = &[11];
+
+pub async fn fetch_amm_info(rpc: &SolanaRpcClient, amm: Pubkey) -> Result<AmmInfo, anyhow::Error> {
+    let amm_info = rpc.get_account_data(&amm).await?;
+    let amm_info =
+        amm_info_decode(&amm_info).ok_or_else(|| anyhow!("Failed to decode amm info"))?;
+    Ok(amm_info)
+}

@@ -6,9 +6,10 @@ use spl_associated_token_account::{
 use spl_token::instruction::close_account;
 
 use crate::{
-    constants,
-    trading::pumpfun::common::{
-        get_bonding_curve_pda, get_fee_config_pda, get_global_volume_accumulator_pda, get_user_volume_accumulator_pda
+    instruction::utils::pumpfun::{
+        accounts, get_bonding_curve_pda, get_creator_vault_pda, get_fee_config_pda,
+        get_global_volume_accumulator_pda, get_user_volume_accumulator_pda,
+        global_constants::{self, FEE_RECIPIENT},
     },
     utils::calc::{
         common::{calculate_with_slippage_buy, calculate_with_slippage_sell},
@@ -19,13 +20,11 @@ use crate::{
 use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer};
 
 use crate::{
-    constants::pumpfun::global_constants::FEE_RECIPIENT,
     constants::trade::trade::DEFAULT_SLIPPAGE,
     trading::core::{
         params::{BuyParams, PumpFunParams, SellParams},
         traits::InstructionBuilder,
     },
-    trading::pumpfun::common::get_creator_vault_pda,
 };
 
 /// Instruction builder for PumpFun protocol
@@ -58,9 +57,9 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             Pubkey::default()
         } else {
             // Fast check against cached default creator vault
-            static DEFAULT_CREATOR_VAULT: std::sync::LazyLock<Option<Pubkey>> = 
+            static DEFAULT_CREATOR_VAULT: std::sync::LazyLock<Option<Pubkey>> =
                 std::sync::LazyLock::new(|| get_creator_vault_pda(&Pubkey::default()));
-            
+
             if Some(creator_vault_pda) == *DEFAULT_CREATOR_VAULT {
                 Pubkey::default()
             } else {
@@ -83,7 +82,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
-            &constants::pumpfun::accounts::TOKEN_PROGRAM,
+            &accounts::TOKEN_PROGRAM,
         ));
 
         // Create buy instruction
@@ -200,25 +199,25 @@ pub fn buy(
     args: Buy,
 ) -> Instruction {
     Instruction::new_with_bytes(
-        constants::pumpfun::accounts::PUMPFUN,
+        accounts::PUMPFUN,
         &args.data(),
         vec![
-            AccountMeta::new_readonly(constants::pumpfun::global_constants::GLOBAL_ACCOUNT, false),
+            AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
             AccountMeta::new(*fee_recipient, false),
             AccountMeta::new_readonly(*mint, false),
             AccountMeta::new(*bonding_curve_pda, false),
             AccountMeta::new(get_associated_token_address(bonding_curve_pda, mint), false),
             AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
             AccountMeta::new(payer.pubkey(), true),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::SYSTEM_PROGRAM, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::TOKEN_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
             AccountMeta::new(*creator_vault_pda, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
+            AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
+            AccountMeta::new_readonly(accounts::PUMPFUN, false),
             AccountMeta::new(get_global_volume_accumulator_pda().unwrap(), false),
             AccountMeta::new(get_user_volume_accumulator_pda(&payer.pubkey()).unwrap(), false),
             AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::FEE_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
         ],
     )
 }
@@ -232,23 +231,23 @@ pub fn sell(
 ) -> Instruction {
     let bonding_curve: Pubkey = get_bonding_curve_pda(mint).unwrap();
     Instruction::new_with_bytes(
-        constants::pumpfun::accounts::PUMPFUN,
+        accounts::PUMPFUN,
         &args.data(),
         vec![
-            AccountMeta::new_readonly(constants::pumpfun::global_constants::GLOBAL_ACCOUNT, false),
+            AccountMeta::new_readonly(global_constants::GLOBAL_ACCOUNT, false),
             AccountMeta::new(*fee_recipient, false),
             AccountMeta::new_readonly(*mint, false),
             AccountMeta::new(bonding_curve, false),
             AccountMeta::new(get_associated_token_address(&bonding_curve, mint), false),
             AccountMeta::new(get_associated_token_address(&payer.pubkey(), mint), false),
             AccountMeta::new(payer.pubkey(), true),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::SYSTEM_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::SYSTEM_PROGRAM, false),
             AccountMeta::new(*creator_vault_pda, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::TOKEN_PROGRAM, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::EVENT_AUTHORITY, false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::PUMPFUN, false),
+            AccountMeta::new_readonly(accounts::TOKEN_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::EVENT_AUTHORITY, false),
+            AccountMeta::new_readonly(accounts::PUMPFUN, false),
             AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false),
-            AccountMeta::new_readonly(constants::pumpfun::accounts::FEE_PROGRAM, false),
+            AccountMeta::new_readonly(accounts::FEE_PROGRAM, false),
         ],
     )
 }

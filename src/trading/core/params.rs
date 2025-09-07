@@ -10,20 +10,9 @@ use std::sync::Arc;
 use super::traits::ProtocolParams;
 use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::{PriorityFee, SolanaRpcClient};
-use crate::constants::bonk::accounts::{
-    self, PLATFORM_FEE_RATE, PROTOCOL_FEE_RATE, SHARE_FEE_RATE,
-};
 use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
-use crate::trading::bonk::common::{
-    get_amount_in, get_amount_in_net, get_amount_out, get_creator_associated_account,
-    get_platform_associated_account,
-};
 use crate::trading::common::get_multi_token_balances;
-use crate::trading::pumpswap::common::{
-    coin_creator_vault_ata, coin_creator_vault_authority, get_token_balances,
-};
-use crate::trading::raydium_cpmm::common::get_pool_token_balances;
 /// Buy parameters
 #[derive(Clone)]
 pub struct BuyParams {
@@ -185,24 +174,28 @@ impl PumpSwapParams {
         rpc: &SolanaRpcClient,
         pool_address: &Pubkey,
     ) -> Result<Self, anyhow::Error> {
-        let pool_data = crate::trading::pumpswap::common::fetch_pool(rpc, pool_address).await?;
+        let pool_data = crate::instruction::utils::pumpswap::fetch_pool(rpc, pool_address).await?;
         let (pool_base_token_reserves, pool_quote_token_reserves) =
-            get_token_balances(&pool_data, rpc).await?;
+            crate::instruction::utils::pumpswap::get_token_balances(&pool_data, rpc).await?;
         let creator = pool_data.creator;
-        let coin_creator_vault_ata = coin_creator_vault_ata(creator, pool_data.quote_mint);
-        let coin_creator_vault_authority = coin_creator_vault_authority(creator);
+        let coin_creator_vault_ata = crate::instruction::utils::pumpswap::coin_creator_vault_ata(
+            creator,
+            pool_data.quote_mint,
+        );
+        let coin_creator_vault_authority =
+            crate::instruction::utils::pumpswap::coin_creator_vault_authority(creator);
 
         let base_token_program_ata =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool_address,
                 &pool_data.base_mint,
-                &accounts::TOKEN_PROGRAM,
+                &crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM,
             );
         let quote_token_program_ata =
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &pool_address,
                 &pool_data.quote_mint,
-                &accounts::TOKEN_PROGRAM,
+                &crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM,
             );
 
         Ok(Self {
@@ -214,12 +207,12 @@ impl PumpSwapParams {
             coin_creator_vault_ata: coin_creator_vault_ata,
             coin_creator_vault_authority: coin_creator_vault_authority,
             base_token_program: if pool_data.pool_base_token_account == base_token_program_ata {
-                accounts::TOKEN_PROGRAM
+                crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM
             } else {
                 spl_token_2022::ID
             },
             quote_token_program: if pool_data.pool_quote_token_account == quote_token_program_ata {
-                accounts::TOKEN_PROGRAM
+                crate::instruction::utils::pumpswap::accounts::TOKEN_PROGRAM
             } else {
                 spl_token_2022::ID
             },
@@ -291,11 +284,11 @@ impl BonkParams {
         let amount_in = if trade_info.metadata.event_type == EventType::BonkBuyExactIn {
             trade_info.amount_in
         } else {
-            get_amount_in(
+            crate::instruction::utils::bonk::get_amount_in(
                 trade_info.amount_out,
-                PROTOCOL_FEE_RATE,
-                PLATFORM_FEE_RATE,
-                SHARE_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::PROTOCOL_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::PLATFORM_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::SHARE_FEE_RATE,
                 DEFAULT_VIRTUAL_BASE,
                 DEFAULT_VIRTUAL_QUOTE,
                 0,
@@ -303,15 +296,18 @@ impl BonkParams {
                 0,
             )
         };
-        let real_quote =
-            get_amount_in_net(amount_in, PROTOCOL_FEE_RATE, PLATFORM_FEE_RATE, SHARE_FEE_RATE)
-                as u128;
+        let real_quote = crate::instruction::utils::bonk::get_amount_in_net(
+            amount_in,
+            crate::instruction::utils::bonk::accounts::PROTOCOL_FEE_RATE,
+            crate::instruction::utils::bonk::accounts::PLATFORM_FEE_RATE,
+            crate::instruction::utils::bonk::accounts::SHARE_FEE_RATE,
+        ) as u128;
         let amount_out = if trade_info.metadata.event_type == EventType::BonkBuyExactIn {
-            get_amount_out(
+            crate::instruction::utils::bonk::get_amount_out(
                 trade_info.amount_in,
-                PROTOCOL_FEE_RATE,
-                PLATFORM_FEE_RATE,
-                SHARE_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::PROTOCOL_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::PLATFORM_FEE_RATE,
+                crate::instruction::utils::bonk::accounts::SHARE_FEE_RATE,
                 DEFAULT_VIRTUAL_BASE,
                 DEFAULT_VIRTUAL_QUOTE,
                 0,
@@ -339,14 +335,20 @@ impl BonkParams {
         rpc: &SolanaRpcClient,
         mint: &Pubkey,
     ) -> Result<Self, anyhow::Error> {
-        let pool_address =
-            crate::trading::bonk::common::get_pool_pda(mint, &accounts::WSOL_TOKEN_ACCOUNT)
-                .unwrap();
-        let pool_data = crate::trading::bonk::common::fetch_pool_state(rpc, &pool_address).await?;
+        let pool_address = crate::instruction::utils::bonk::get_pool_pda(
+            mint,
+            &crate::instruction::utils::bonk::accounts::WSOL_TOKEN_ACCOUNT,
+        )
+        .unwrap();
+        let pool_data =
+            crate::instruction::utils::bonk::fetch_pool_state(rpc, &pool_address).await?;
         let token_account = rpc.get_account(&pool_data.base_mint).await?;
         let platform_associated_account =
-            get_platform_associated_account(&pool_data.platform_config);
-        let creator_associated_account = get_creator_associated_account(&pool_data.creator);
+            crate::instruction::utils::bonk::get_platform_associated_account(
+                &pool_data.platform_config,
+            );
+        let creator_associated_account =
+            crate::instruction::utils::bonk::get_creator_associated_account(&pool_data.creator);
         let platform_associated_account = platform_associated_account.unwrap();
         let creator_associated_account = creator_associated_account.unwrap();
         Ok(Self {
@@ -399,10 +401,15 @@ impl RaydiumCpmmParams {
         pool_address: &Pubkey,
     ) -> Result<Self, anyhow::Error> {
         let pool =
-            crate::trading::raydium_cpmm::common::fetch_pool_state(rpc, pool_address).await?;
+            crate::instruction::utils::raydium_cpmm::fetch_pool_state(rpc, pool_address).await?;
         let (token0_balance, token1_balance) =
-            get_pool_token_balances(rpc, pool_address, &pool.token0_mint, &pool.token1_mint)
-                .await?;
+            crate::instruction::utils::raydium_cpmm::get_pool_token_balances(
+                rpc,
+                pool_address,
+                &pool.token0_mint,
+                &pool.token1_mint,
+            )
+            .await?;
         Ok(Self {
             base_mint: pool.token0_mint,
             quote_mint: pool.token1_mint,
@@ -469,7 +476,7 @@ impl RaydiumAmmV4Params {
         rpc: &SolanaRpcClient,
         amm: Pubkey,
     ) -> Result<Self, anyhow::Error> {
-        let amm_info = crate::trading::raydium_amm_v4::common::fetch_amm_info(rpc, amm).await?;
+        let amm_info = crate::instruction::utils::raydium_amm_v4::fetch_amm_info(rpc, amm).await?;
         let (coin_reserve, pc_reserve) =
             get_multi_token_balances(rpc, &amm_info.token_coin, &amm_info.token_pc).await?;
         Ok(Self {

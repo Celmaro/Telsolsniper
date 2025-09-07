@@ -1,6 +1,6 @@
 use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::types::BondingCurve;
 
-use crate::constants::pumpfun::global_constants::{LAMPORTS_PER_SOL, SCALE};
+use crate::instruction::utils::pumpfun::global_constants::{LAMPORTS_PER_SOL, SCALE};
 
 /// Calculate the token price in SOL based on virtual reserves
 ///

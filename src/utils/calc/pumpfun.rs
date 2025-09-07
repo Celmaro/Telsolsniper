@@ -1,7 +1,7 @@
 use solana_sdk::{native_token::sol_str_to_lamports, pubkey::Pubkey};
 
 use crate::{
-    constants::pumpfun::global_constants::{CREATOR_FEE, FEE_BASIS_POINTS},
+    instruction::utils::pumpfun::global_constants::{CREATOR_FEE, FEE_BASIS_POINTS},
     utils::calc::common::compute_fee,
 };
 
