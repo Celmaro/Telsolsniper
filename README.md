@@ -13,7 +13,7 @@ A comprehensive Rust SDK for seamless interaction with Solana DEX trading progra
 6. **Event Subscription**: Subscribe to PumpFun, PumpSwap, Bonk, Raydium CPMM, and Raydium AMM V4 program trading events
 7. **Yellowstone gRPC**: Subscribe to program events using Yellowstone gRPC
 8. **ShredStream Support**: Subscribe to program events using ShredStream
-9. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, FlashBlock, BlockRazor, Node1, and other services
+9. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, FlashBlock, BlockRazor, Node1, Astralane and other services
 10. **Concurrent Trading**: Send transactions using multiple MEV services simultaneously; the fastest succeeds while others fail
 11. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
 12. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
@@ -119,6 +119,7 @@ When configuring SWQOS services, note the different parameter requirements for e
 - **FlashBlock**: The first parameter is API Token, Add community TG admin [xyz_0xfnzero](https://t.me/xyz_0xfnzero) to get a free key and instantly speed up your trading (with tip refunds available)!
 - **BlockRazor**: The first parameter is API Token, Add official TG support to get a free key and instantly accelerate your trades!
 - **Node1**: The first parameter is API Token, Add the official TG support at https://t.me/node1_me to get a free key and instantly accelerate your trades!
+- **Astralane**: The first parameter is API Token
 
 #### Custom URL Support
 
@@ -202,6 +203,7 @@ let trade_config = TradeConfig {
 - **FlashBlock**: High-speed transaction execution with API key authentication - [Official Documentation](https://doc.flashblock.trade/)
 - **BlockRazor**: High-speed transaction execution with API key authentication - [Official Documentation](https://blockrazor.gitbook.io/blockrazor/)
 - **Node1**: High-speed transaction execution with API key authentication - [Official Documentation](https://node1.me/docs.html) 
+- **Astralane**: Blockchain network acceleration
 
 ## New Architecture Features
 

@@ -8,6 +8,7 @@ pub mod bloxroute;
 pub mod node1;
 pub mod flashblock;
 pub mod blockrazor;
+pub mod astralane;
 
 use std::sync::Arc;
 
@@ -26,7 +27,8 @@ use crate::{
         SWQOS_ENDPOINTS_ZERO_SLOT, 
         SWQOS_ENDPOINTS_NODE1, 
         SWQOS_ENDPOINTS_FLASHBLOCK,
-        SWQOS_ENDPOINTS_BLOCKRAZOR
+        SWQOS_ENDPOINTS_BLOCKRAZOR,
+        SWQOS_ENDPOINTS_ASTRALANE
     }, 
     swqos::{
         bloxroute::BloxrouteClient, 
@@ -37,7 +39,8 @@ use crate::{
         zeroslot::ZeroSlotClient, 
         node1::Node1Client, 
         flashblock::FlashBlockClient,
-        blockrazor::BlockRazorClient
+        blockrazor::BlockRazorClient,
+        astralane::AstralaneClient
     }
 };
 
@@ -75,6 +78,7 @@ pub enum SwqosType {
     Node1,
     FlashBlock,
     BlockRazor,
+    Astralane,
     Default,
 }
 
@@ -111,6 +115,7 @@ pub enum SwqosConfig {
     Node1(String, SwqosRegion, Option<String>),
     FlashBlock(String, SwqosRegion, Option<String>),
     BlockRazor(String, SwqosRegion, Option<String>),
+    Astralane(String, SwqosRegion, Option<String>),
 }
 
 impl SwqosConfig {
@@ -128,6 +133,7 @@ impl SwqosConfig {
             SwqosType::Node1 => SWQOS_ENDPOINTS_NODE1[region as usize].to_string(),
             SwqosType::FlashBlock => SWQOS_ENDPOINTS_FLASHBLOCK[region as usize].to_string(),
             SwqosType::BlockRazor => SWQOS_ENDPOINTS_BLOCKRAZOR[region as usize].to_string(),
+            SwqosType::Astralane => SWQOS_ENDPOINTS_ASTRALANE[region as usize].to_string(),
             SwqosType::Default => "".to_string(),
         }
     }
@@ -205,6 +211,15 @@ impl SwqosConfig {
                     auth_token
                 );
                 Arc::new(blockrazor_client)
+            },
+            SwqosConfig::Astralane(auth_token, region, url) => {
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Astralane, region, url);
+                let astralane_client = AstralaneClient::new(
+                    rpc_url.clone(),
+                    endpoint.to_string(),
+                    auth_token
+                );
+                Arc::new(astralane_client)
             },
             SwqosConfig::Default(endpoint) => {
                 let rpc = SolanaRpcClient::new_with_commitment(
