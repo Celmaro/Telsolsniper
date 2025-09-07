@@ -31,6 +31,7 @@ use swqos::SwqosClient;
 pub struct SolanaTrade {
     pub payer: Arc<Keypair>,
     pub rpc: Arc<SolanaRpcClient>,
+    pub rpc_client: Vec<Arc<SwqosClient>>,
     pub swqos_clients: Vec<Arc<SwqosClient>>,
     pub priority_fee: PriorityFee,
     pub trade_config: TradeConfig,
@@ -44,6 +45,7 @@ impl Clone for SolanaTrade {
         Self {
             payer: self.payer.clone(),
             rpc: self.rpc.clone(),
+            rpc_client: self.rpc_client.clone(),
             swqos_clients: self.swqos_clients.clone(),
             priority_fee: self.priority_fee.clone(),
             trade_config: self.trade_config.clone(),
@@ -75,9 +77,16 @@ impl SolanaTrade {
 
         let rpc = Arc::new(SolanaRpcClient::new_with_commitment(rpc_url.clone(), commitment));
 
+        let rpc_client = SwqosConfig::get_swqos_client(
+            rpc_url.clone(),
+            commitment,
+            SwqosConfig::Default(rpc_url),
+        );
+
         let instance = Self {
             payer,
             rpc,
+            rpc_client: vec![rpc_client],
             swqos_clients,
             priority_fee,
             trade_config: trade_config.clone(),
@@ -285,10 +294,11 @@ impl SolanaTrade {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
+        let _swqos_clients =
+            if !with_tip { self.rpc_client.clone() } else { self.swqos_clients.clone() };
+
         // Execute sell based on tip preference
-        executor
-            .sell_with_tip(sell_params, self.swqos_clients.clone(), self.middleware_manager.clone())
-            .await
+        executor.sell_with_tip(sell_params, _swqos_clients, self.middleware_manager.clone()).await
     }
 
     /// Execute a sell order for a percentage of the specified token amount

@@ -28,6 +28,7 @@ members = [
     "examples/raydium_amm_v4_trading",
     "examples/address_lookup",
     "examples/nonce_cache",
+    "examples/pumpswap_direct_trading",
 ]
 
 [lib]
