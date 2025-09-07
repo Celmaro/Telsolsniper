@@ -47,9 +47,9 @@ impl FlashBlockClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = Client::builder()
-            .pool_idle_timeout(Duration::from_secs(60))
+            .pool_idle_timeout(Duration::from_secs(30))
             .pool_max_idle_per_host(64)
-            .tcp_keepalive(Some(Duration::from_secs(1200)))
+            .tcp_keepalive(Some(Duration::from_secs(30)))
             .http2_keep_alive_interval(Duration::from_secs(15))
             .timeout(Duration::from_secs(10))
             .connect_timeout(Duration::from_secs(5))
@@ -75,6 +75,8 @@ impl FlashBlockClient {
             .body(request_body)
             .header("Authorization", &self.auth_token)
             .header("Content-Type", "application/json")
+            .header("Connection", "keep-alive")
+            .header("Keep-Alive", "timeout=30, max=1000")
             .send()
             .await?
             .text()
