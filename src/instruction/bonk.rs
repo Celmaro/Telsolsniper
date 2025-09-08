@@ -1,9 +1,3 @@
-use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, signer::Signer};
-use solana_system_interface::instruction::transfer;
-use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
-use spl_token::instruction::close_account;
-
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::bonk::{
@@ -21,6 +15,12 @@ use crate::{
         get_buy_token_amount_from_sol_amount, get_sell_sol_amount_from_token_amount,
     },
 };
+use anyhow::{anyhow, Result};
+use solana_sdk::{
+    instruction::{AccountMeta, Instruction},
+    pubkey::Pubkey,
+    signer::Signer,
+};
 
 /// Instruction builder for Bonk protocol
 pub struct BonkInstructionBuilder;
@@ -37,7 +37,11 @@ impl InstructionBuilder for BonkInstructionBuilder {
             .downcast_ref::<BonkParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
 
-        let pool_state = get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
+        let pool_state = if protocol_params.pool_state == Pubkey::default() {
+            get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
+        } else {
+            protocol_params.pool_state
+        };
 
         // Create user token accounts
         let user_base_token_account =
@@ -54,9 +58,16 @@ impl InstructionBuilder for BonkInstructionBuilder {
             );
 
         // Get pool token accounts
-        let base_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
-        let quote_vault_account =
-            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
+        let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
+            get_vault_pda(&pool_state, &params.mint).unwrap()
+        } else {
+            protocol_params.base_vault
+        };
+        let quote_vault_account = if protocol_params.quote_vault == Pubkey::default() {
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
+        } else {
+            protocol_params.quote_vault
+        };
 
         let virtual_base = protocol_params.virtual_base;
         let virtual_quote = protocol_params.virtual_quote;
@@ -74,36 +85,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
         );
 
-        let mut instructions = vec![];
+        let mut instructions = Vec::with_capacity(6);
 
         if protocol_params.auto_handle_wsol {
-            // Handle wSOL
-            instructions.push(
-                // Create wSOL ATA account if it doesn't exist
-                create_associated_token_account_idempotent(
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &crate::constants::WSOL_TOKEN_ACCOUNT,
-                    &crate::constants::TOKEN_PROGRAM,
-                ),
-            );
-            instructions.push(
-                // Transfer SOL to wSOL ATA account
-                transfer(&params.payer.pubkey(), &user_quote_token_account, amount_in),
-            );
-
-            // Sync wSOL balance
-            instructions.push(
-                spl_token::instruction::sync_native(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &user_quote_token_account,
-                )
-                .unwrap(),
-            );
+            instructions
+                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
         // Create user's base token account
-        instructions.push(create_associated_token_account_idempotent(
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
@@ -111,59 +101,38 @@ impl InstructionBuilder for BonkInstructionBuilder {
         ));
 
         // Create buy instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META,     // Authority (readonly)
-            accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.platform_config,
-                false,
-            ), // Platform Config (readonly)
-            solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
-            solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // User Base Token
-            solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
-            solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
-            solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
-            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Quote Token Mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.mint_token_program,
-                false,
-            ), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META,      // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META,            // Event Authority (readonly)
-            accounts::BONK_META,                       // Program (readonly)
-            crate::constants::SYSTEM_PROGRAM_META,     // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new(
-                protocol_params.platform_associated_account,
-                false,
-            ), // Platform Associated Account
-            solana_sdk::instruction::AccountMeta::new(
-                protocol_params.creator_associated_account,
-                false,
-            ), // Creator Associated Account
+        let accounts: [AccountMeta; 18] = [
+            AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
+            accounts::AUTHORITY_META,                      // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META,                  // Global Config (readonly)
+            AccountMeta::new_readonly(protocol_params.platform_config, false), // Platform Config (readonly)
+            AccountMeta::new(pool_state, false),                               // Pool State
+            AccountMeta::new(user_base_token_account, false),                  // User Base Token
+            AccountMeta::new(user_quote_token_account, false),                 // User Quote Token
+            AccountMeta::new(base_vault_account, false),                       // Base Vault
+            AccountMeta::new(quote_vault_account, false),                      // Quote Vault
+            AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META,     // Quote Token Mint (readonly)
+            AccountMeta::new_readonly(protocol_params.mint_token_program, false), // Base Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,       // Event Authority (readonly)
+            accounts::BONK_META,                  // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META, // System Program (readonly)
+            AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
+            AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
         ];
         // Create instruction data
-        let mut data = vec![];
-        data.extend_from_slice(&BUY_EXECT_IN_DISCRIMINATOR);
-        data.extend_from_slice(&amount_in.to_le_bytes());
-        data.extend_from_slice(&minimum_amount_out.to_le_bytes());
-        data.extend_from_slice(&share_fee_rate.to_le_bytes());
+        let mut data = [0u8; 32];
+        data[..8].copy_from_slice(&BUY_EXECT_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&amount_in.to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
+        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
-        instructions.push(Instruction { program_id: accounts::BONK, accounts, data });
+        instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 
         if protocol_params.auto_handle_wsol {
             // Close wSOL ATA account, reclaim rent
-            instructions.push(
-                spl_token::instruction::close_account(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &user_quote_token_account,
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &[],
-                )
-                .unwrap(),
-            );
+            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)
@@ -195,7 +164,11 @@ impl InstructionBuilder for BonkInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        let pool_state = get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
+        let pool_state = if protocol_params.pool_state == Pubkey::default() {
+            get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
+        } else {
+            protocol_params.pool_state
+        };
 
         let virtual_base = protocol_params.virtual_base;
         let virtual_quote = protocol_params.virtual_quote;
@@ -214,90 +187,73 @@ impl InstructionBuilder for BonkInstructionBuilder {
 
         // Create user token accounts
         let user_base_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                 &params.payer.pubkey(),
                 &params.mint,
                 &protocol_params.mint_token_program,
             );
-        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &crate::constants::WSOL_TOKEN_ACCOUNT,
-        );
+        let user_quote_token_account =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                &params.payer.pubkey(),
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
+            );
 
         // Get pool token accounts
-        let base_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
-        let quote_vault_account =
-            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
+        let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
+            get_vault_pda(&pool_state, &params.mint).unwrap()
+        } else {
+            protocol_params.base_vault
+        };
+        let quote_vault_account = if protocol_params.quote_vault == Pubkey::default() {
+            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
+        } else {
+            protocol_params.quote_vault
+        };
 
         let share_fee_rate: u64 = 0;
 
-        let mut instructions = vec![];
+        let mut instructions = Vec::with_capacity(3);
 
         // Handle wSOL
         instructions.push(
             // Create wSOL ATA account if it doesn't exist
-            create_associated_token_account_idempotent(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &crate::constants::WSOL_TOKEN_ACCOUNT,
-                &crate::constants::TOKEN_PROGRAM,
-            ),
+            crate::trading::common::create_wsol_ata(&params.payer.pubkey()),
         );
 
         // Create sell instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META,     // Authority (readonly)
-            accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.platform_config,
-                false,
-            ), // Platform Config (readonly)
-            solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
-            solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // User Base Token
-            solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // User Quote Token
-            solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
-            solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
-            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Quote Token Mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                protocol_params.mint_token_program,
-                false,
-            ), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META,      // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META,            // Event Authority (readonly)
-            accounts::BONK_META,                       // Program (readonly)
-            crate::constants::SYSTEM_PROGRAM_META,     // System Program (readonly)
-            solana_sdk::instruction::AccountMeta::new(
-                protocol_params.platform_associated_account,
-                false,
-            ), // Platform Associated Account
-            solana_sdk::instruction::AccountMeta::new(
-                protocol_params.creator_associated_account,
-                false,
-            ), // Creator Associated Account
+        let accounts: [AccountMeta; 18] = [
+            AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
+            accounts::AUTHORITY_META,                      // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META,                  // Global Config (readonly)
+            AccountMeta::new_readonly(protocol_params.platform_config, false), // Platform Config (readonly)
+            AccountMeta::new(pool_state, false),                               // Pool State
+            AccountMeta::new(user_base_token_account, false),                  // User Base Token
+            AccountMeta::new(user_quote_token_account, false),                 // User Quote Token
+            AccountMeta::new(base_vault_account, false),                       // Base Vault
+            AccountMeta::new(quote_vault_account, false),                      // Quote Vault
+            AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META,     // Quote Token Mint (readonly)
+            AccountMeta::new_readonly(protocol_params.mint_token_program, false), // Base Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,       // Event Authority (readonly)
+            accounts::BONK_META,                  // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META, // System Program (readonly)
+            AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
+            AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
         ];
 
         // Create instruction data
-        let mut data = vec![];
-        data.extend_from_slice(&SELL_EXECT_IN_DISCRIMINATOR);
-        data.extend_from_slice(&amount.to_le_bytes());
-        data.extend_from_slice(&minimum_amount_out.to_le_bytes());
-        data.extend_from_slice(&share_fee_rate.to_le_bytes());
+        let mut data = [0u8; 32];
+        data[..8].copy_from_slice(&SELL_EXECT_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&amount.to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
+        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
-        instructions.push(Instruction { program_id: accounts::BONK, accounts, data });
+        instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 
         if protocol_params.auto_handle_wsol {
-            instructions.push(
-                close_account(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &user_quote_token_account,
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &[&params.payer.pubkey()],
-                )
-                .unwrap(),
-            );
+            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)

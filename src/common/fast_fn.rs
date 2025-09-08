@@ -26,6 +26,8 @@ pub enum InstructionCacheKey {
         mint: Pubkey,
         token_program: Pubkey,
     },
+    /// Close wSOL Account
+    CloseWsolAccount { payer: Pubkey, wsol_token_account: Pubkey },
 }
 
 /// 全局指令缓存，用于存储常用指令
@@ -106,6 +108,8 @@ pub enum PdaCacheKey {
     PumpFunUserVolume(Pubkey),
     PumpFunBondingCurve(Pubkey),
     PumpFunCreatorVault(Pubkey),
+    BonkPool(Pubkey, Pubkey),
+    BonkVault(Pubkey, Pubkey),
 }
 
 /// 全局 PDA 缓存，用于存储计算结果
@@ -190,5 +194,29 @@ pub fn get_associated_token_address_with_program_id_fast(
 // --------------------- 初始化账号 ---------------------
 
 pub fn fast_init(payer: &Pubkey) {
+    // 获取 PumpFun 用户量累加器 PDA
     crate::instruction::utils::pumpfun::get_user_volume_accumulator_pda(payer);
+    // 获取 wSOL ATA 地址
+    let wsol_token_account = get_associated_token_address_with_program_id_fast(
+        payer,
+        &crate::constants::WSOL_TOKEN_ACCOUNT,
+        &crate::constants::TOKEN_PROGRAM,
+    );
+    // 获取 Close wSOL Account 指令
+    get_cached_instruction(
+        crate::common::fast_fn::InstructionCacheKey::CloseWsolAccount {
+            payer: *payer,
+            wsol_token_account,
+        },
+        || {
+            spl_token::instruction::close_account(
+                &crate::constants::TOKEN_PROGRAM,
+                &wsol_token_account,
+                &payer,
+                &payer,
+                &[],
+            )
+            .unwrap()
+        },
+    );
 }
