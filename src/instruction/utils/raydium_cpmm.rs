@@ -77,10 +77,10 @@ pub fn get_observation_state_pda(pool_state: &Pubkey) -> Option<Pubkey> {
     pda.map(|pubkey| pubkey.0)
 }
 
-/// 获取池子中两个代币的余额
+/// Get the balances of two tokens in the pool
 ///
-/// # 返回值
-/// 返回 token0_balance, token1_balance
+/// # Returns
+/// Returns token0_balance, token1_balance
 pub async fn get_pool_token_balances(
     rpc: &SolanaRpcClient,
     pool_state: &Pubkey,
@@ -92,20 +92,20 @@ pub async fn get_pool_token_balances(
     let token1_vault = get_vault_pda(pool_state, token1_mint).unwrap();
     let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
 
-    // 解析余额字符串为 u64
+    // Parse balance string to u64
     let token0_amount =
-        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("解析 token0 余额失败: {}", e))?;
+        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
 
     let token1_amount =
-        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("解析 token1 余额失败: {}", e))?;
+        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
 
     Ok((token0_amount, token1_amount))
 }
 
-/// 计算代币价格 (token1/token0)
+/// Calculate token price (token1/token0)
 ///
-/// # 返回值
-/// 返回 token1 相对于 token0 的价格
+/// # Returns
+/// Returns the price of token1 relative to token0
 pub async fn calculate_price(
     token0_amount: u64,
     token1_amount: u64,
@@ -113,25 +113,25 @@ pub async fn calculate_price(
     mint1_decimals: u8,
 ) -> Result<f64, anyhow::Error> {
     if token0_amount == 0 {
-        return Err(anyhow!("Token0 余额为零，无法计算价格"));
+        return Err(anyhow!("Token0 balance is zero, cannot calculate price"));
     }
-    // 考虑小数位精度
+    // Consider decimal precision
     let token0_adjusted = token0_amount as f64 / 10_f64.powi(mint0_decimals as i32);
     let token1_adjusted = token1_amount as f64 / 10_f64.powi(mint1_decimals as i32);
     let price = token1_adjusted / token0_adjusted;
     Ok(price)
 }
 
-/// 获取 vault 账户地址的辅助函数
+/// Helper function to get vault account address
 ///
-/// # 参数
-/// - `pool_state`: 池子状态账户地址
-/// - `token_mint`: 代币 mint 地址
-/// - `protocol_params`: 协议参数
-/// - `is_wsol`: 是否为 wSOL 代币
+/// # Parameters
+/// - `pool_state`: Pool state account address
+/// - `token_mint`: Token mint address
+/// - `protocol_params`: Protocol parameters
+/// - `is_wsol`: Whether it's a wSOL token
 ///
-/// # 返回值
-/// 返回对应的 vault 账户地址
+/// # Returns
+/// Returns the corresponding vault account address
 pub fn get_vault_account(
     pool_state: &Pubkey,
     token_mint: &Pubkey,
@@ -139,7 +139,7 @@ pub fn get_vault_account(
     is_wsol: bool,
 ) -> Pubkey {
     if is_wsol {
-        // 如果是 wSOL，检查是否为 base mint
+        // If it's wSOL, check if it's the base mint
         if protocol_params.base_mint == crate::constants::WSOL_TOKEN_ACCOUNT
             && protocol_params.base_vault != Pubkey::default()
         {
@@ -152,7 +152,7 @@ pub fn get_vault_account(
             get_vault_pda(pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
         }
     } else {
-        // 对于其他代币，检查是否为 base 或 quote mint
+        // For other tokens, check if it's the base or quote mint
         if *token_mint == protocol_params.base_mint
             && protocol_params.base_vault != Pubkey::default()
         {

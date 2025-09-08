@@ -40,7 +40,7 @@ pub mod accounts {
     pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
         pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
-    // PumpSwap 协议费用接收者
+    // PumpSwap protocol fee recipient
     pub const PROTOCOL_FEE_RECIPIENT: Pubkey =
         pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
@@ -192,9 +192,9 @@ pub async fn find_by_base_mint(
     rpc: &SolanaRpcClient,
     base_mint: &Pubkey,
 ) -> Result<(Pubkey, Pool), anyhow::Error> {
-    // 使用getProgramAccounts查找给定mint的池子
+    // Use getProgramAccounts to find pools for the given mint
     let filters = vec![
-        // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
+        // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool account size
         solana_rpc_client_api::filter::RpcFilterType::Memcmp(
             solana_client::rpc_filter::Memcmp::new_base58_encoded(43, &base_mint.to_bytes()),
         ),
@@ -228,9 +228,9 @@ pub async fn find_by_quote_mint(
     rpc: &SolanaRpcClient,
     quote_mint: &Pubkey,
 ) -> Result<(Pubkey, Pool), anyhow::Error> {
-    // 使用getProgramAccounts查找给定mint的池子
+    // Use getProgramAccounts to find pools for the given mint
     let filters = vec![
-        // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool账户的大小
+        // solana_rpc_client_api::filter::RpcFilterType::DataSize(211), // Pool account size
         solana_rpc_client_api::filter::RpcFilterType::Memcmp(
             solana_client::rpc_filter::Memcmp::new_base58_encoded(75, &quote_mint.to_bytes()),
         ),

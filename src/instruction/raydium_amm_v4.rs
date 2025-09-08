@@ -19,6 +19,9 @@ pub struct RaydiumAmmV4InstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
@@ -28,8 +31,10 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             .downcast_ref::<RaydiumAmmV4Params>()
             .ok_or_else(|| anyhow!("Invalid protocol params for RaydiumCpmm"))?;
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let is_base_in = protocol_params.coin_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
-
         let amount_in: u64 = params.sol_amount;
         let swap_result = compute_swap_amount(
             protocol_params.coin_reserve,
@@ -39,21 +44,6 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
         let minimum_amount_out = swap_result.min_amount_out;
-
-        let mut instructions = Vec::with_capacity(6);
-
-        if protocol_params.auto_handle_wsol {
-            // Handle wSOL
-            instructions
-                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
-        }
-
-        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-            &params.payer.pubkey(),
-            &params.payer.pubkey(),
-            &params.mint,
-            &crate::constants::TOKEN_PROGRAM,
-        ));
 
         let user_source_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
@@ -67,6 +57,23 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
                 &params.mint,
                 &crate::constants::TOKEN_PROGRAM,
             );
+
+        // ========================================
+        // Build instructions
+        // ========================================
+        let mut instructions = Vec::with_capacity(6);
+
+        if protocol_params.auto_handle_wsol {
+            instructions
+                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
+        }
+
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            &params.payer.pubkey(),
+            &params.payer.pubkey(),
+            &params.mint,
+            &crate::constants::TOKEN_PROGRAM,
+        ));
 
         // Create buy instruction
         let accounts: [AccountMeta; 17] = [
@@ -109,6 +116,9 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -119,6 +129,9 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             return Err(anyhow!("Token amount is not set"));
         }
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let is_base_in = protocol_params.pc_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
         let swap_result = compute_swap_amount(
             protocol_params.coin_reserve,
@@ -128,19 +141,6 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
         let minimum_amount_out = swap_result.min_amount_out;
-
-        let mut instructions = Vec::with_capacity(3);
-
-        // Handle wSOL
-        instructions.push(
-            // Create wSOL ATA account if it doesn't exist
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &crate::constants::WSOL_TOKEN_ACCOUNT,
-                &crate::constants::TOKEN_PROGRAM,
-            ),
-        );
 
         let user_source_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
@@ -154,6 +154,18 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
                 &crate::constants::TOKEN_PROGRAM,
             );
+
+        // ========================================
+        // Build instructions
+        // ========================================
+        let mut instructions = Vec::with_capacity(3);
+
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            &params.payer.pubkey(),
+            &params.payer.pubkey(),
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::TOKEN_PROGRAM,
+        ));
 
         // Create buy instruction
         let accounts: [AccountMeta; 17] = [
@@ -180,11 +192,6 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         data[..1].copy_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
         data[1..9].copy_from_slice(&params.token_amount.unwrap_or(0).to_le_bytes());
         data[9..17].copy_from_slice(&minimum_amount_out.to_le_bytes());
-
-        // let mut data = vec![];
-        // data.extend_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
-        // data.extend_from_slice(&amount_in.to_le_bytes());
-        // data.extend_from_slice(&minimum_amount_out.to_le_bytes());
 
         instructions.push(Instruction::new_with_bytes(
             accounts::RAYDIUM_AMM_V4,

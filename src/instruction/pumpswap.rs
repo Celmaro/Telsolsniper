@@ -23,7 +23,9 @@ pub struct PumpSwapInstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for PumpSwapInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
-        // Get PumpSwap specific parameters
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -34,7 +36,6 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             return Err(anyhow!("Amount cannot be zero"));
         }
 
-        // Build instructions based on account information
         let pool = protocol_params.pool;
         let base_mint = protocol_params.base_mint;
         let quote_mint = protocol_params.quote_mint;
@@ -54,15 +55,17 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             return Err(anyhow!("Invalid base mint and quote mint"));
         }
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let quote_mint_is_wsol = quote_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
-
-        let mut token_amount = 0;
-        let mut sol_amount = 0;
-
         let mut creator = Pubkey::default();
         if params_coin_creator_vault_authority != accounts::DEFAULT_COIN_CREATOR_VAULT_AUTHORITY {
             creator = params_coin_creator_vault_authority;
         }
+
+        let mut token_amount = 0;
+        let mut sol_amount = 0;
         if quote_mint_is_wsol {
             let result = buy_quote_input_internal(
                 params.sol_amount,
@@ -91,7 +94,6 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             sol_amount = params.sol_amount;
         }
 
-        // Create user token accounts
         let user_base_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                 &params.payer.pubkey(),
@@ -104,7 +106,11 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 &quote_mint,
                 &quote_token_program,
             );
+        let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
 
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(6);
 
         if auto_handle_wsol {
@@ -112,15 +118,12 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), sol_amount));
         }
 
-        // Create user's base token account
         instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             if quote_mint_is_wsol { &base_mint } else { &quote_mint },
             if quote_mint_is_wsol { &base_token_program } else { &quote_token_program },
         ));
-
-        let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
 
         // Create buy instruction
         let mut accounts = Vec::with_capacity(23);
@@ -184,14 +187,15 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
-        // Get PumpSwap specific parameters
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
             .downcast_ref::<PumpSwapParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpSwap"))?;
 
-        // Build instructions based on account information
         let pool = protocol_params.pool;
         let base_mint = protocol_params.base_mint;
         let quote_mint = protocol_params.quote_mint;
@@ -214,16 +218,17 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             return Err(anyhow!("Token amount is not set"));
         }
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let quote_mint_is_wsol = quote_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
-
-        let mut token_amount = 0;
-        let mut sol_amount = 0;
-
         let mut creator = Pubkey::default();
         if params_coin_creator_vault_authority != accounts::DEFAULT_COIN_CREATOR_VAULT_AUTHORITY {
             creator = params_coin_creator_vault_authority;
         }
 
+        let mut token_amount = 0;
+        let mut sol_amount = 0;
         if quote_mint_is_wsol {
             let result = sell_base_input_internal(
                 params.token_amount.unwrap(),
@@ -253,7 +258,6 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         }
 
         let fee_recipient_ata = fee_recipient_ata(accounts::FEE_RECIPIENT, quote_mint);
-
         let user_base_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                 &params.payer.pubkey(),
@@ -267,18 +271,17 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 &quote_token_program,
             );
 
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        // Insert wSOL
-        instructions.push(
-            // Create wSOL ATA account if it doesn't exist
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &crate::constants::WSOL_TOKEN_ACCOUNT,
-                &crate::constants::TOKEN_PROGRAM,
-            ),
-        );
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            &params.payer.pubkey(),
+            &params.payer.pubkey(),
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::TOKEN_PROGRAM,
+        ));
 
         // Create sell instruction
         let mut accounts = Vec::with_capacity(23);

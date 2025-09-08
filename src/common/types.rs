@@ -38,9 +38,9 @@ pub struct PriorityFee {
     pub tip_unit_price: u64,
     pub rpc_unit_limit: u32,
     pub rpc_unit_price: u64,
-    // 与 swqos 顺序一致 (Matches the order of swqos)
+    // Matches the order of swqos
     pub buy_tip_fees: Vec<f64>,
-    // 与 swqos 顺序一致 (Matches the order of swqos)
+    // Matches the order of swqos
     pub sell_tip_fees: Vec<f64>,
 }
 
@@ -51,9 +51,9 @@ impl Default for PriorityFee {
             tip_unit_price: DEFAULT_TIP_UNIT_PRICE,
             rpc_unit_limit: DEFAULT_RPC_UNIT_LIMIT,
             rpc_unit_price: DEFAULT_RPC_UNIT_PRICE,
-            // 与 swqos 顺序一致 (Matches the order of swqos)
+            // Matches the order of swqos
             buy_tip_fees: vec![DEFAULT_BUY_TIP_FEE],
-            // 与 swqos 顺序一致 (Matches the order of swqos)
+            // Matches the order of swqos
             sell_tip_fees: vec![DEFAULT_SELL_TIP_FEE],
         }
     }

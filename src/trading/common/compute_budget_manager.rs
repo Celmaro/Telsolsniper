@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use smallvec::SmallVec;
 use solana_sdk::{compute_budget::ComputeBudgetInstruction, instruction::Instruction};
 
-/// 缓存键，包含计算预算指令的所有参数
+/// Cache key containing all parameters for compute budget instructions
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ComputeBudgetCacheKey {
     data_size_limit: u32,
@@ -13,8 +13,8 @@ struct ComputeBudgetCacheKey {
     is_buy: bool,
 }
 
-/// 全局缓存，存储计算预算指令
-/// 使用 DashMap 提供高性能的无锁并发访问
+/// Global cache storing compute budget instructions
+/// Uses DashMap for high-performance lock-free concurrent access
 static COMPUTE_BUDGET_CACHE: Lazy<DashMap<ComputeBudgetCacheKey, SmallVec<[Instruction; 3]>>> =
     Lazy::new(|| DashMap::new());
 
@@ -31,15 +31,15 @@ pub fn compute_budget_instructions(
         (priority_fee.tip_unit_price, priority_fee.tip_unit_limit)
     };
 
-    // 创建缓存键
+    // Create cache key
     let cache_key = ComputeBudgetCacheKey { data_size_limit, unit_price, unit_limit, is_buy };
 
-    // 先尝试从缓存中获取
+    // Try to get from cache first
     if let Some(cached_insts) = COMPUTE_BUDGET_CACHE.get(&cache_key) {
         return cached_insts.clone();
     }
 
-    // 缓存未命中，生成新的指令
+    // Cache miss, generate new instructions
     let mut insts = SmallVec::<[Instruction; 3]>::new();
 
     if is_buy {
@@ -51,7 +51,7 @@ pub fn compute_budget_instructions(
         ComputeBudgetInstruction::set_compute_unit_limit(unit_limit),
     ]);
 
-    // 将结果存入缓存
+    // Store result in cache
     let insts_clone = insts.clone();
     COMPUTE_BUDGET_CACHE.insert(cache_key, insts_clone);
 

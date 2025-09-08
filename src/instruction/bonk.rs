@@ -28,6 +28,9 @@ pub struct BonkInstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for BonkInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
@@ -43,7 +46,20 @@ impl InstructionBuilder for BonkInstructionBuilder {
             protocol_params.pool_state
         };
 
-        // Create user token accounts
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
+        let amount_in: u64 = params.sol_amount;
+        let share_fee_rate: u64 = 0;
+        let minimum_amount_out: u64 = get_buy_token_amount_from_sol_amount(
+            amount_in,
+            protocol_params.virtual_base,
+            protocol_params.virtual_quote,
+            protocol_params.real_base,
+            protocol_params.real_quote,
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
+        );
+
         let user_base_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                 &params.payer.pubkey(),
@@ -57,7 +73,6 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 &crate::constants::TOKEN_PROGRAM,
             );
 
-        // Get pool token accounts
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
             get_vault_pda(&pool_state, &params.mint).unwrap()
         } else {
@@ -69,22 +84,9 @@ impl InstructionBuilder for BonkInstructionBuilder {
             protocol_params.quote_vault
         };
 
-        let virtual_base = protocol_params.virtual_base;
-        let virtual_quote = protocol_params.virtual_quote;
-        let real_base = protocol_params.real_base;
-        let real_quote = protocol_params.real_quote;
-
-        let amount_in: u64 = params.sol_amount;
-        let share_fee_rate: u64 = 0;
-        let minimum_amount_out: u64 = get_buy_token_amount_from_sol_amount(
-            amount_in,
-            virtual_base,
-            virtual_quote,
-            real_base,
-            real_quote,
-            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
-        );
-
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(6);
 
         if protocol_params.auto_handle_wsol {
@@ -92,7 +94,6 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
-        // Create user's base token account
         instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
@@ -100,7 +101,12 @@ impl InstructionBuilder for BonkInstructionBuilder {
             &protocol_params.mint_token_program,
         ));
 
-        // Create buy instruction
+        let mut data = [0u8; 32];
+        data[..8].copy_from_slice(&BUY_EXECT_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&amount_in.to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
+        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
+
         let accounts: [AccountMeta; 18] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
@@ -121,17 +127,10 @@ impl InstructionBuilder for BonkInstructionBuilder {
             AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
             AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
         ];
-        // Create instruction data
-        let mut data = [0u8; 32];
-        data[..8].copy_from_slice(&BUY_EXECT_IN_DISCRIMINATOR);
-        data[8..16].copy_from_slice(&amount_in.to_le_bytes());
-        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
-        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 
         if protocol_params.auto_handle_wsol {
-            // Close wSOL ATA account, reclaim rent
             instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
@@ -139,6 +138,9 @@ impl InstructionBuilder for BonkInstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         if params.rpc.is_none() {
             return Err(anyhow!("RPC is not set"));
         }
@@ -151,7 +153,6 @@ impl InstructionBuilder for BonkInstructionBuilder {
 
         let rpc = params.rpc.as_ref().unwrap().clone();
 
-        // Get token balance
         let mut amount = params.token_amount;
         if params.token_amount.is_none() || params.token_amount.unwrap_or(0) == 0 {
             let balance_u64 =
@@ -170,22 +171,19 @@ impl InstructionBuilder for BonkInstructionBuilder {
             protocol_params.pool_state
         };
 
-        let virtual_base = protocol_params.virtual_base;
-        let virtual_quote = protocol_params.virtual_quote;
-        let real_base = protocol_params.real_base;
-        let real_quote = protocol_params.real_quote;
-
-        // Calculate expected SOL amount
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
+        let share_fee_rate: u64 = 0;
         let minimum_amount_out: u64 = get_sell_sol_amount_from_token_amount(
             amount,
-            virtual_base,
-            virtual_quote,
-            real_base,
-            real_quote,
+            protocol_params.virtual_base,
+            protocol_params.virtual_quote,
+            protocol_params.real_base,
+            protocol_params.real_quote,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
         );
 
-        // Create user token accounts
         let user_base_token_account =
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                 &params.payer.pubkey(),
@@ -199,7 +197,6 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 &crate::constants::TOKEN_PROGRAM,
             );
 
-        // Get pool token accounts
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
             get_vault_pda(&pool_state, &params.mint).unwrap()
         } else {
@@ -211,17 +208,19 @@ impl InstructionBuilder for BonkInstructionBuilder {
             protocol_params.quote_vault
         };
 
-        let share_fee_rate: u64 = 0;
-
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        // Handle wSOL
-        instructions.push(
-            // Create wSOL ATA account if it doesn't exist
-            crate::trading::common::create_wsol_ata(&params.payer.pubkey()),
-        );
+        instructions.push(crate::trading::common::create_wsol_ata(&params.payer.pubkey()));
 
-        // Create sell instruction
+        let mut data = [0u8; 32];
+        data[..8].copy_from_slice(&SELL_EXECT_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&amount.to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
+        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
+
         let accounts: [AccountMeta; 18] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
@@ -242,13 +241,6 @@ impl InstructionBuilder for BonkInstructionBuilder {
             AccountMeta::new(protocol_params.platform_associated_account, false), // Platform Associated Account
             AccountMeta::new(protocol_params.creator_associated_account, false), // Creator Associated Account
         ];
-
-        // Create instruction data
-        let mut data = [0u8; 32];
-        data[..8].copy_from_slice(&SELL_EXECT_IN_DISCRIMINATOR);
-        data[8..16].copy_from_slice(&amount.to_le_bytes());
-        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
-        data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 

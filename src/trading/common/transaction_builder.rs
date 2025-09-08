@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{common::PriorityFee, trading::MiddlewareManager};
 
-/// 构建标准的RPC交易
+/// Build standard RPC transaction
 pub async fn build_transaction(
     payer: Arc<Keypair>,
     priority_fee: &PriorityFee,
@@ -35,14 +35,14 @@ pub async fn build_transaction(
 ) -> Result<VersionedTransaction, anyhow::Error> {
     let mut instructions = Vec::with_capacity(business_instructions.len() + 5);
 
-    // 添加nonce指令
+    // Add nonce instruction
     if is_buy {
         if let Err(e) = add_nonce_instruction(&mut instructions, payer.as_ref()) {
             return Err(e);
         }
     }
 
-    // 添加计算预算指令
+    // Add compute budget instructions
     instructions.extend(compute_budget_instructions(
         priority_fee,
         data_size_limit,
@@ -50,10 +50,10 @@ pub async fn build_transaction(
         is_buy,
     ));
 
-    // 添加业务指令
+    // Add business instructions
     instructions.extend(business_instructions);
 
-    // 添加小费转账指令
+    // Add tip transfer instruction
     if with_tip {
         instructions.push(transfer(
             &payer.pubkey(),
@@ -62,14 +62,14 @@ pub async fn build_transaction(
         ));
     }
 
-    // 获取交易使用的blockhash
+    // Get blockhash for transaction
     let blockhash =
         if is_buy { get_transaction_blockhash(recent_blockhash) } else { recent_blockhash };
 
-    // 获取地址查找表账户
+    // Get address lookup table accounts
     let address_lookup_table_accounts = get_address_lookup_table_accounts(lookup_table_key).await;
 
-    // 构建交易
+    // Build transaction
     build_versioned_transaction(
         payer,
         instructions,
@@ -82,7 +82,7 @@ pub async fn build_transaction(
     .await
 }
 
-/// 构建版本化交易的底层函数
+/// Low-level function for building versioned transactions
 async fn build_versioned_transaction(
     payer: Arc<Keypair>,
     instructions: Vec<Instruction>,

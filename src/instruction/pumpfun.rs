@@ -26,7 +26,9 @@ pub struct PumpFunInstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for PumpFunInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
-        // Get PumpFun specific parameters
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -38,14 +40,12 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         }
 
         let bonding_curve = &protocol_params.bonding_curve;
-
-        let max_sol_cost = calculate_with_slippage_buy(
-            params.sol_amount,
-            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
-        );
         let creator_vault_pda = protocol_params.creator_vault;
         let creator = get_creator(&creator_vault_pda);
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let buy_token_amount = get_buy_token_amount_from_sol_amount(
             bonding_curve.virtual_token_reserves as u128,
             bonding_curve.virtual_sol_reserves as u128,
@@ -54,6 +54,39 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.sol_amount,
         );
 
+        let max_sol_cost = calculate_with_slippage_buy(
+            params.sol_amount,
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+        );
+
+        let bonding_curve_addr = if bonding_curve.account == Pubkey::default() {
+            get_bonding_curve_pda(&params.mint).unwrap()
+        } else {
+            bonding_curve.account
+        };
+
+        let associated_bonding_curve =
+            if protocol_params.associated_bonding_curve == Pubkey::default() {
+                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                    &bonding_curve_addr,
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                )
+            } else {
+                protocol_params.associated_bonding_curve
+            };
+
+        let user_token_account = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            &params.payer.pubkey(),
+            &params.mint,
+            &crate::constants::TOKEN_PROGRAM,
+        );
+
+        let user_volume_accumulator = get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap();
+
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
@@ -64,42 +97,18 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             &crate::constants::TOKEN_PROGRAM,
         ));
 
-        // Create buy instruction data
         let mut buy_data = [0u8; 24];
-        buy_data[..8].copy_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]);
+        buy_data[..8].copy_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // Method ID
         buy_data[8..16].copy_from_slice(&buy_token_amount.to_le_bytes());
         buy_data[16..24].copy_from_slice(&max_sol_cost.to_le_bytes());
-
-        let bonding_curve = if bonding_curve.account == Pubkey::default() {
-            get_bonding_curve_pda(&params.mint).unwrap()
-        } else {
-            bonding_curve.account
-        };
-        let associated_bonding_curve =
-            if protocol_params.associated_bonding_curve == Pubkey::default() {
-                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-                    &bonding_curve,
-                    &params.mint,
-                    &crate::constants::TOKEN_PROGRAM,
-                )
-            } else {
-                protocol_params.associated_bonding_curve
-            };
 
         let accounts: [AccountMeta; 16] = [
             global_constants::GLOBAL_ACCOUNT_META,
             global_constants::FEE_RECIPIENT_META,
             AccountMeta::new_readonly(params.mint, false),
-            AccountMeta::new(bonding_curve, false),
+            AccountMeta::new(bonding_curve_addr, false),
             AccountMeta::new(associated_bonding_curve, false),
-            AccountMeta::new(
-                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-                    &params.payer.pubkey(),
-                    &params.mint,
-                    &crate::constants::TOKEN_PROGRAM,
-                ),
-                false,
-            ),
+            AccountMeta::new(user_token_account, false),
             AccountMeta::new(params.payer.pubkey(), true),
             crate::constants::SYSTEM_PROGRAM_META,
             crate::constants::TOKEN_PROGRAM_META,
@@ -107,15 +116,11 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             accounts::EVENT_AUTHORITY_META,
             accounts::PUMPFUN_META,
             accounts::GLOBAL_VOLUME_ACCUMULATOR_META,
-            AccountMeta::new(
-                get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
-                false,
-            ),
+            AccountMeta::new(user_volume_accumulator, false),
             accounts::FEE_CONFIG_META,
             accounts::FEE_PROGRAM_META,
         ];
 
-        // Create buy instruction
         instructions.push(Instruction::new_with_bytes(
             accounts::PUMPFUN,
             &buy_data,
@@ -126,14 +131,14 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
-        // Get PumpFun specific parameters
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
             .downcast_ref::<PumpFunParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for PumpFun"))?;
-
-        let bonding_curve = &protocol_params.bonding_curve;
 
         let token_amount = if let Some(amount) = params.token_amount {
             if amount == 0 {
@@ -143,40 +148,36 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             return Err(anyhow!("Amount token is required"));
         };
-        let ata = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-            &params.payer.pubkey(),
-            &params.mint,
-            &crate::constants::TOKEN_PROGRAM,
-        );
+
+        let bonding_curve = &protocol_params.bonding_curve;
         let creator_vault_pda = protocol_params.creator_vault;
         let creator = get_creator(&creator_vault_pda);
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let sol_amount = get_sell_sol_amount_from_token_amount(
             bonding_curve.virtual_token_reserves as u128,
             bonding_curve.virtual_sol_reserves as u128,
             creator,
             token_amount,
         );
+
         let min_sol_output = calculate_with_slippage_sell(
             sol_amount,
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
 
-        // Create sell instruction data
-        let mut sell_data = [0u8; 24];
-        sell_data[..8].copy_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]);
-        sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
-        sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
-
-        let bonding_curve = if bonding_curve.account == Pubkey::default() {
+        let bonding_curve_addr = if bonding_curve.account == Pubkey::default() {
             get_bonding_curve_pda(&params.mint).unwrap()
         } else {
             bonding_curve.account
         };
+
         let associated_bonding_curve =
             if protocol_params.associated_bonding_curve == Pubkey::default() {
                 crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-                    &bonding_curve,
+                    &bonding_curve_addr,
                     &params.mint,
                     &crate::constants::TOKEN_PROGRAM,
                 )
@@ -184,20 +185,29 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                 protocol_params.associated_bonding_curve
             };
 
+        let user_token_account = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            &params.payer.pubkey(),
+            &params.mint,
+            &crate::constants::TOKEN_PROGRAM,
+        );
+
+        // ========================================
+        // Build instructions
+        // ========================================
+        let mut instructions = Vec::with_capacity(2);
+
+        let mut sell_data = [0u8; 24];
+        sell_data[..8].copy_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]); // Method ID
+        sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
+        sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
+
         let accounts: [AccountMeta; 14] = [
             global_constants::GLOBAL_ACCOUNT_META,
             global_constants::FEE_RECIPIENT_META,
             AccountMeta::new_readonly(params.mint, false),
-            AccountMeta::new(bonding_curve, false),
+            AccountMeta::new(bonding_curve_addr, false),
             AccountMeta::new(associated_bonding_curve, false),
-            AccountMeta::new(
-                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-                    &params.payer.pubkey(),
-                    &params.mint,
-                    &crate::constants::TOKEN_PROGRAM,
-                ),
-                false,
-            ),
+            AccountMeta::new(user_token_account, false),
             AccountMeta::new(params.payer.pubkey(), true),
             crate::constants::SYSTEM_PROGRAM_META,
             AccountMeta::new(creator_vault_pda, false),
@@ -208,15 +218,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             accounts::FEE_PROGRAM_META,
         ];
 
-        // Create sell instruction
-        let mut instructions =
-            vec![Instruction::new_with_bytes(accounts::PUMPFUN, &sell_data, accounts.to_vec())];
+        instructions.push(Instruction::new_with_bytes(
+            accounts::PUMPFUN,
+            &sell_data,
+            accounts.to_vec(),
+        ));
 
-        // If selling all tokens, close the account
+        // Optional: Close token account
         if protocol_params.close_token_account_when_sell.unwrap_or(false) {
             instructions.push(close_account(
                 &crate::constants::TOKEN_PROGRAM,
-                &ata,
+                &user_token_account,
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &[&params.payer.pubkey()],

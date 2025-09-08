@@ -24,6 +24,9 @@ pub struct RaydiumCpmmInstructionBuilder;
 #[async_trait::async_trait]
 impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
     async fn build_buy_instructions(&self, params: &BuyParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         if params.sol_amount == 0 {
             return Err(anyhow!("Amount cannot be zero"));
         }
@@ -44,12 +47,25 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             protocol_params.pool_state
         };
 
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let is_base_in = protocol_params.base_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
         let mint_token_program = if is_base_in {
             protocol_params.quote_token_program
         } else {
             protocol_params.base_token_program
         };
+
+        let amount_in: u64 = params.sol_amount;
+        let result = compute_swap_amount(
+            protocol_params.base_reserve,
+            protocol_params.quote_reserve,
+            is_base_in,
+            amount_in,
+            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
+        );
+        let minimum_amount_out = result.min_amount_out;
 
         let wsol_token_account = get_associated_token_address_with_program_id_fast(
             &params.payer.pubkey(),
@@ -62,7 +78,6 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             &mint_token_program,
         );
 
-        // Get pool token accounts
         let wsol_vault_account = get_vault_account(
             &pool_state,
             &crate::constants::WSOL_TOKEN_ACCOUNT,
@@ -78,16 +93,9 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             protocol_params.observation_state
         };
 
-        let amount_in: u64 = params.sol_amount;
-        let result = compute_swap_amount(
-            protocol_params.base_reserve,
-            protocol_params.quote_reserve,
-            is_base_in,
-            amount_in,
-            params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
-        );
-        let minimum_amount_out = result.min_amount_out;
-
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(6);
 
         if protocol_params.auto_handle_wsol {
@@ -139,6 +147,9 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
     }
 
     async fn build_sell_instructions(&self, params: &SellParams) -> Result<Vec<Instruction>> {
+        // ========================================
+        // Parameter validation and basic data preparation
+        // ========================================
         let protocol_params = params
             .protocol_params
             .as_any()
@@ -149,6 +160,20 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             return Err(anyhow!("Token amount is not set"));
         }
 
+        let pool_state = if protocol_params.pool_state == Pubkey::default() {
+            get_pool_pda(
+                &accounts::AMM_CONFIG,
+                &protocol_params.base_mint,
+                &protocol_params.quote_mint,
+            )
+            .unwrap()
+        } else {
+            protocol_params.pool_state
+        };
+
+        // ========================================
+        // Trade calculation and account address preparation
+        // ========================================
         let is_base_in = protocol_params.base_mint == params.mint;
         let mint_token_program = if is_base_in {
             protocol_params.base_token_program
@@ -165,17 +190,6 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         )
         .min_amount_out;
 
-        let pool_state = if protocol_params.pool_state == Pubkey::default() {
-            get_pool_pda(
-                &accounts::AMM_CONFIG,
-                &protocol_params.base_mint,
-                &protocol_params.quote_mint,
-            )
-            .unwrap()
-        } else {
-            protocol_params.pool_state
-        };
-
         let wsol_token_account = get_associated_token_address_with_program_id_fast(
             &params.payer.pubkey(),
             &crate::constants::WSOL_TOKEN_ACCOUNT,
@@ -187,7 +201,6 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             &mint_token_program,
         );
 
-        // Get pool token accounts
         let wsol_vault_account = get_vault_account(
             &pool_state,
             &crate::constants::WSOL_TOKEN_ACCOUNT,
@@ -203,18 +216,17 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             protocol_params.observation_state
         };
 
+        // ========================================
+        // Build instructions
+        // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        // Handle wSOL
-        instructions.push(
-            // Create wSOL ATA account if it doesn't exist
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &crate::constants::WSOL_TOKEN_ACCOUNT,
-                &crate::constants::TOKEN_PROGRAM,
-            ),
-        );
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            &params.payer.pubkey(),
+            &params.payer.pubkey(),
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::TOKEN_PROGRAM,
+        ));
 
         // Create sell instruction
         let accounts: [AccountMeta; 13] = [

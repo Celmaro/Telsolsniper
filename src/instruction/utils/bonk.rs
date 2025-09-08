@@ -95,18 +95,18 @@ pub fn get_amount_in(
 ) -> u64 {
     let amount_out_u128 = amount_out as u128;
 
-    // 考虑滑点，实际需要的输出金额更高
+    // Consider slippage, actual required output amount is higher
     let amount_out_with_slippage = amount_out_u128 * 10000 / (10000 - slippage_basis_points);
 
     let input_reserve = virtual_quote.checked_add(real_quote).unwrap();
     let output_reserve = virtual_base.checked_sub(real_base).unwrap();
 
-    // 根据 AMM 公式反推: amount_in_net = (amount_out * input_reserve) / (output_reserve - amount_out)
+    // Reverse calculate using AMM formula: amount_in_net = (amount_out * input_reserve) / (output_reserve - amount_out)
     let numerator = amount_out_with_slippage.checked_mul(input_reserve).unwrap();
     let denominator = output_reserve.checked_sub(amount_out_with_slippage).unwrap();
     let amount_in_net = numerator.checked_div(denominator).unwrap();
 
-    // 计算总费用率
+    // Calculate total fee rate
     let total_fee_rate = protocol_fee_rate + platform_fee_rate + share_fee_rate;
 
     let amount_in = amount_in_net * 10000 / (10000 - total_fee_rate);
