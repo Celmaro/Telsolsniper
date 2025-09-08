@@ -1,3 +1,4 @@
+use parking_lot::Mutex;
 use solana_hash::Hash;
 use solana_sdk::account_utils::StateMut;
 use solana_sdk::nonce::state::Versions;
@@ -5,7 +6,7 @@ use solana_sdk::nonce::State;
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer_sdk::common::SolanaRpcClient;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use tracing::error;
 
 /// NonceInfo structure to store nonce-related information
@@ -54,7 +55,7 @@ impl NonceCache {
 
     /// Get a copy of NonceInfo
     pub fn get_nonce_info(&self) -> NonceInfo {
-        let nonce_info = self.nonce_info.lock().unwrap();
+        let nonce_info = self.nonce_info.lock();
         NonceInfo {
             nonce_account: nonce_info.nonce_account,
             current_nonce: nonce_info.current_nonce,
@@ -71,7 +72,7 @@ impl NonceCache {
         next_buy_time: Option<i64>,
         used: Option<bool>,
     ) {
-        let mut current = self.nonce_info.lock().unwrap();
+        let mut current = self.nonce_info.lock();
 
         // Only update the passed fields
         if let Some(account) = nonce_account {

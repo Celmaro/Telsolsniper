@@ -1,8 +1,5 @@
+use crate::common::{global::GlobalAccount, SolanaRpcClient};
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
-use crate::{
-    common::{bonding_curve::BondingCurveAccount, global::GlobalAccount, SolanaRpcClient},
-    constants::{self, trade::trade::DEFAULT_SLIPPAGE},
-};
 use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, sync::Arc};
@@ -10,12 +7,6 @@ use tokio::sync::RwLock;
 
 /// Constants used as seeds for deriving PDAs (Program Derived Addresses)
 pub mod seeds {
-    /// Seed for the global state PDA
-    pub const GLOBAL_SEED: &[u8] = b"global";
-
-    /// Seed for the mint authority PDA
-    pub const MINT_AUTHORITY_SEED: &[u8] = b"mint-authority";
-
     /// Seed for bonding curve PDAs
     pub const BONDING_CURVE_SEED: &[u8] = b"bonding-curve";
 
@@ -115,9 +106,9 @@ pub mod accounts {
     pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 
     pub const GLOBAL_VOLUME_ACCUMULATOR: Pubkey =
-        pubkey!("Hq2wp8uJ9jCPsYgNHex8RtqdvMPfVGoYwjvF1ATiwn2Y"); // get_global_volume_accumulator_pda().unwrap();
+        pubkey!("Hq2wp8uJ9jCPsYgNHex8RtqdvMPfVGoYwjvF1ATiwn2Y");
 
-    pub const FEE_CONFIG: Pubkey = pubkey!("8Wf5TiAheLUqBrKXeYg2JtAFFMWtKdG2BSFgqUcPVwTt"); // get_fee_config_pda().unwrap();
+    pub const FEE_CONFIG: Pubkey = pubkey!("8Wf5TiAheLUqBrKXeYg2JtAFFMWtKdG2BSFgqUcPVwTt");
 
     // META
     pub const PUMPFUN_META: solana_sdk::instruction::AccountMeta =
@@ -167,27 +158,16 @@ lazy_static::lazy_static! {
 }
 
 #[inline]
-pub fn get_global_pda() -> Pubkey {
-    static GLOBAL_PDA: once_cell::sync::Lazy<Pubkey> = once_cell::sync::Lazy::new(|| {
-        Pubkey::find_program_address(&[seeds::GLOBAL_SEED], &accounts::PUMPFUN).0
-    });
-    *GLOBAL_PDA
-}
-
-#[inline]
-pub fn get_mint_authority_pda() -> Pubkey {
-    static MINT_AUTHORITY_PDA: once_cell::sync::Lazy<Pubkey> = once_cell::sync::Lazy::new(|| {
-        Pubkey::find_program_address(&[seeds::MINT_AUTHORITY_SEED], &accounts::PUMPFUN).0
-    });
-    *MINT_AUTHORITY_PDA
-}
-
-#[inline]
 pub fn get_bonding_curve_pda(mint: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[seeds::BONDING_CURVE_SEED, mint.as_ref()];
-    let program_id: &Pubkey = &accounts::PUMPFUN;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
+    crate::common::fast_fn::get_cached_pda(
+        crate::common::fast_fn::PdaCacheKey::PumpFunBondingCurve(*mint),
+        || {
+            let seeds: &[&[u8]; 2] = &[seeds::BONDING_CURVE_SEED, mint.as_ref()];
+            let program_id: &Pubkey = &accounts::PUMPFUN;
+            let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+            pda.map(|pubkey| pubkey.0)
+        },
+    )
 }
 
 #[inline]
@@ -208,60 +188,28 @@ pub fn get_creator(creator_vault_pda: &Pubkey) -> Pubkey {
 
 #[inline]
 pub fn get_creator_vault_pda(creator: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[seeds::CREATOR_VAULT_SEED, creator.as_ref()];
-    let program_id: &Pubkey = &accounts::PUMPFUN;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
+    crate::common::fast_fn::get_cached_pda(
+        crate::common::fast_fn::PdaCacheKey::PumpFunCreatorVault(*creator),
+        || {
+            let seeds: &[&[u8]; 2] = &[seeds::CREATOR_VAULT_SEED, creator.as_ref()];
+            let program_id: &Pubkey = &accounts::PUMPFUN;
+            let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+            pda.map(|pubkey| pubkey.0)
+        },
+    )
 }
 
 #[inline]
 pub fn get_user_volume_accumulator_pda(user: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[seeds::USER_VOLUME_ACCUMULATOR_SEED, user.as_ref()];
-    let program_id: &Pubkey = &accounts::PUMPFUN;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
-}
-
-#[inline]
-pub fn get_global_volume_accumulator_pda() -> Option<Pubkey> {
-    let seeds: &[&[u8]; 1] = &[seeds::GLOBAL_VOLUME_ACCUMULATOR_SEED];
-    let program_id: &Pubkey = &accounts::PUMPFUN;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
-}
-
-#[inline]
-pub fn get_fee_config_pda() -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[seeds::FEE_CONFIG_SEED, accounts::PUMPFUN.as_ref()];
-    let program_id: &Pubkey = &accounts::FEE_PROGRAM;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
-}
-
-#[inline]
-pub fn get_metadata_pda(mint: &Pubkey) -> Pubkey {
-    Pubkey::find_program_address(
-        &[seeds::METADATA_SEED, accounts::MPL_TOKEN_METADATA.as_ref(), mint.as_ref()],
-        &accounts::MPL_TOKEN_METADATA,
+    crate::common::fast_fn::get_cached_pda(
+        crate::common::fast_fn::PdaCacheKey::PumpFunUserVolume(*user),
+        || {
+            let seeds: &[&[u8]; 2] = &[seeds::USER_VOLUME_ACCUMULATOR_SEED, user.as_ref()];
+            let program_id: &Pubkey = &accounts::PUMPFUN;
+            let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+            pda.map(|pubkey| pubkey.0)
+        },
     )
-    .0
-}
-
-#[inline]
-pub async fn get_global_account(/*rpc: &SolanaRpcClient*/
-) -> Result<Arc<GlobalAccount>, anyhow::Error> {
-    let global_account = GlobalAccount::new();
-    let global_account = Arc::new(global_account);
-    Ok(global_account)
-}
-
-#[inline]
-pub async fn get_initial_buy_price(
-    global_account: &Arc<GlobalAccount>,
-    amount_sol: u64,
-) -> Result<u64, anyhow::Error> {
-    let buy_amount = global_account.get_initial_buy_price(amount_sol);
-    Ok(buy_amount)
 }
 
 #[inline]
@@ -281,25 +229,6 @@ pub async fn fetch_bonding_curve_account(
         .map_err(|e| anyhow::anyhow!("Failed to deserialize bonding curve account: {}", e))?;
 
     Ok((Arc::new(bonding_curve), bonding_curve_pda))
-}
-
-#[inline]
-pub async fn init_bonding_curve_account(
-    mint: &Pubkey,
-    dev_buy_token: u64,
-    dev_sol_cost: u64,
-    creator: Pubkey,
-) -> Result<Arc<BondingCurveAccount>, anyhow::Error> {
-    let bonding_curve =
-        BondingCurveAccount::from_dev_trade(mint, dev_buy_token, dev_sol_cost, creator);
-    let bonding_curve = Arc::new(bonding_curve);
-    Ok(bonding_curve)
-}
-
-#[inline]
-pub fn get_buy_amount_with_slippage(amount_sol: u64, slippage_basis_points: Option<u64>) -> u64 {
-    let slippage = slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE);
-    amount_sol + (amount_sol * slippage / 10000)
 }
 
 #[inline]

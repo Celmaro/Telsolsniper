@@ -30,10 +30,6 @@ pub mod seeds {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
 
-    use crate::instruction::utils::pumpswap::{
-        get_fee_config_pda, get_global_volume_accumulator_pda,
-    };
-
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 

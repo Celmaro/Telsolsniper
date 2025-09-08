@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, signer::Signer};
-use spl_associated_token_account::{
-    get_associated_token_address, instruction::create_associated_token_account,
+use crate::{
+    constants::trade::trade::DEFAULT_SLIPPAGE,
+    trading::core::{
+        params::{BuyParams, PumpFunParams, SellParams},
+        traits::InstructionBuilder,
+    },
 };
-use spl_token::instruction::close_account;
-
 use crate::{
     instruction::utils::pumpfun::{
         accounts, get_bonding_curve_pda, get_creator, get_user_volume_accumulator_pda,
@@ -15,16 +15,10 @@ use crate::{
         pumpfun::{get_buy_token_amount_from_sol_amount, get_sell_sol_amount_from_token_amount},
     },
 };
-
+use anyhow::{anyhow, Result};
 use solana_sdk::instruction::AccountMeta;
-
-use crate::{
-    constants::trade::trade::DEFAULT_SLIPPAGE,
-    trading::core::{
-        params::{BuyParams, PumpFunParams, SellParams},
-        traits::InstructionBuilder,
-    },
-};
+use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer};
+use spl_token::instruction::close_account;
 
 /// Instruction builder for PumpFun protocol
 pub struct PumpFunInstructionBuilder;
@@ -63,7 +57,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
-        instructions.push(create_associated_token_account(
+        instructions.push(crate::common::fast_fn::create_associated_token_account_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
@@ -76,17 +70,30 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         buy_data[8..16].copy_from_slice(&buy_token_amount.to_le_bytes());
         buy_data[16..24].copy_from_slice(&max_sol_cost.to_le_bytes());
 
+        let bonding_curve = if bonding_curve.account == Pubkey::default() {
+            get_bonding_curve_pda(&params.mint).unwrap()
+        } else {
+            bonding_curve.account
+        };
+        let associated_bonding_curve = if protocol_params.associated_bonding_curve
+            == Pubkey::default()
+        {
+            crate::common::fast_fn::get_associated_token_address_fast(&bonding_curve, &params.mint)
+        } else {
+            protocol_params.associated_bonding_curve
+        };
+
         let accounts: [AccountMeta; 16] = [
             global_constants::GLOBAL_ACCOUNT_META,
             global_constants::FEE_RECIPIENT_META,
             AccountMeta::new_readonly(params.mint, false),
-            AccountMeta::new(bonding_curve.account, false),
+            AccountMeta::new(bonding_curve, false),
+            AccountMeta::new(associated_bonding_curve, false),
             AccountMeta::new(
-                get_associated_token_address(&bonding_curve.account, &params.mint),
-                false,
-            ),
-            AccountMeta::new(
-                get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                crate::common::fast_fn::get_associated_token_address_fast(
+                    &params.payer.pubkey(),
+                    &params.mint,
+                ),
                 false,
             ),
             AccountMeta::new(params.payer.pubkey(), true),
@@ -132,7 +139,10 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             return Err(anyhow!("Amount token is required"));
         };
-        let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
+        let ata = crate::common::fast_fn::get_associated_token_address_fast(
+            &params.payer.pubkey(),
+            &params.mint,
+        );
         let creator_vault_pda = protocol_params.creator_vault;
         let creator = get_creator(&creator_vault_pda);
 
@@ -153,16 +163,30 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
         sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
 
-        let bonding_curve = get_bonding_curve_pda(&params.mint).unwrap();
+        let bonding_curve = if bonding_curve.account == Pubkey::default() {
+            get_bonding_curve_pda(&params.mint).unwrap()
+        } else {
+            bonding_curve.account
+        };
+        let associated_bonding_curve = if protocol_params.associated_bonding_curve
+            == Pubkey::default()
+        {
+            crate::common::fast_fn::get_associated_token_address_fast(&bonding_curve, &params.mint)
+        } else {
+            protocol_params.associated_bonding_curve
+        };
 
         let accounts: [AccountMeta; 14] = [
             global_constants::GLOBAL_ACCOUNT_META,
             global_constants::FEE_RECIPIENT_META,
             AccountMeta::new_readonly(params.mint, false),
             AccountMeta::new(bonding_curve, false),
-            AccountMeta::new(get_associated_token_address(&bonding_curve, &params.mint), false),
+            AccountMeta::new(associated_bonding_curve, false),
             AccountMeta::new(
-                get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                crate::common::fast_fn::get_associated_token_address_fast(
+                    &params.payer.pubkey(),
+                    &params.mint,
+                ),
                 false,
             ),
             AccountMeta::new(params.payer.pubkey(), true),

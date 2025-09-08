@@ -50,6 +50,7 @@ pub struct SellParams {
 #[derive(Clone)]
 pub struct PumpFunParams {
     pub bonding_curve: Arc<BondingCurveAccount>,
+    pub associated_bonding_curve: Pubkey,
     pub creator_vault: Pubkey,
     /// Whether to close token account when selling, only effective during sell operations
     pub close_token_account_when_sell: Option<bool>,
@@ -59,6 +60,7 @@ impl PumpFunParams {
     pub fn immediate_sell(creator_vault: Pubkey, close_token_account_when_sell: bool) -> Self {
         Self {
             bonding_curve: Arc::new(BondingCurveAccount { ..Default::default() }),
+            associated_bonding_curve: Pubkey::default(),
             creator_vault: creator_vault,
             close_token_account_when_sell: Some(close_token_account_when_sell),
         }
@@ -76,6 +78,7 @@ impl PumpFunParams {
         );
         Self {
             bonding_curve: Arc::new(bonding_curve),
+            associated_bonding_curve: event.associated_bonding_curve,
             creator_vault: event.creator_vault,
             close_token_account_when_sell: close_token_account_when_sell,
         }
@@ -88,6 +91,7 @@ impl PumpFunParams {
         let bonding_curve = BondingCurveAccount::from_trade(event);
         Self {
             bonding_curve: Arc::new(bonding_curve),
+            associated_bonding_curve: event.associated_bonding_curve,
             creator_vault: event.creator_vault,
             close_token_account_when_sell: close_token_account_when_sell,
         }

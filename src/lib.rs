@@ -5,6 +5,7 @@ pub mod protos;
 pub mod swqos;
 pub mod trading;
 pub mod utils;
+use solana_sdk::signer::Signer;
 pub use solana_streamer_sdk;
 
 use crate::constants::trade::trade::DEFAULT_SLIPPAGE;
@@ -24,8 +25,8 @@ use common::{PriorityFee, SolanaRpcClient, TradeConfig};
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use solana_sdk::hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
+use parking_lot::Mutex;
 use std::sync::Arc;
-use std::sync::Mutex;
 use swqos::SwqosClient;
 
 pub struct SolanaTrade {
@@ -57,6 +58,8 @@ impl Clone for SolanaTrade {
 impl SolanaTrade {
     #[inline]
     pub async fn new(payer: Arc<Keypair>, trade_config: TradeConfig) -> Self {
+        crate::common::fast_fn::fast_init(&payer.try_pubkey().unwrap());
+
         if CryptoProvider::get_default().is_none() {
             let _ = default_provider()
                 .install_default()
@@ -93,7 +96,7 @@ impl SolanaTrade {
             middleware_manager: None,
         };
 
-        let mut current = INSTANCE.lock().unwrap();
+        let mut current = INSTANCE.lock();
         *current = Some(Arc::new(instance.clone()));
 
         instance
@@ -111,7 +114,7 @@ impl SolanaTrade {
 
     /// Get the current instance
     pub fn get_instance() -> Arc<Self> {
-        let instance = INSTANCE.lock().unwrap();
+        let instance = INSTANCE.lock();
         instance
             .as_ref()
             .expect("PumpFun instance not initialized. Please call new() first.")

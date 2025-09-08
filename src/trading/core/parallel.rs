@@ -32,14 +32,14 @@ pub async fn parallel_execute_with_tips(
         && (swqos_clients.len() > priority_fee.buy_tip_fees.len()
             || priority_fee.buy_tip_fees.is_empty())
     {
-        return Err(anyhow!("Number of tip clients exceeds the configured buy tip fees"));
+        return Err(anyhow!("Number of tip clients exceeds the configured buy tip fees. Please configure buy_tip_fees to match swqos_clients"));
     }
     if !is_buy
         && !with_tip
         && (swqos_clients.len() > priority_fee.sell_tip_fees.len()
             || priority_fee.sell_tip_fees.is_empty())
     {
-        return Err(anyhow!("Number of tip clients exceeds the configured sell tip fees"));
+        return Err(anyhow!("Number of tip clients exceeds the configured sell tip fees. Please configure sell_tip_fees to match swqos_clients"));
     }
 
     let instructions = Arc::new(instructions);
@@ -82,7 +82,11 @@ pub async fn parallel_execute_with_tips(
             )
             .await?;
 
-            println!("Building transaction instructions: {:?} {:?}", swqos_type, start.elapsed());
+            println!(
+                "[{:?}] - Building transaction instructions: {:?}",
+                swqos_type,
+                start.elapsed()
+            );
 
             start = Instant::now();
 
@@ -93,7 +97,11 @@ pub async fn parallel_execute_with_tips(
                 )
                 .await?;
 
-            println!("Submitting transaction instructions: {:?} {:?}", swqos_type, start.elapsed());
+            println!(
+                "[{:?}] - Submitting transaction instructions: {:?}",
+                swqos_type,
+                start.elapsed()
+            );
 
             Ok::<(), anyhow::Error>(())
         });

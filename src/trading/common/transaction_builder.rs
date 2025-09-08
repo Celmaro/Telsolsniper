@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use super::{
     address_lookup_manager::get_address_lookup_table_accounts,
-    compute_budget_manager::add_compute_budget_instructions,
+    compute_budget_manager::compute_budget_instructions,
     nonce_manager::{add_nonce_instruction, get_transaction_blockhash},
 };
 use crate::{common::PriorityFee, trading::MiddlewareManager};
@@ -43,7 +43,12 @@ pub async fn build_transaction(
     }
 
     // 添加计算预算指令
-    add_compute_budget_instructions(&mut instructions, priority_fee, data_size_limit, true, is_buy);
+    instructions.extend(compute_budget_instructions(
+        priority_fee,
+        data_size_limit,
+        !with_tip,
+        is_buy,
+    ));
 
     // 添加业务指令
     instructions.extend(business_instructions);
@@ -102,9 +107,8 @@ async fn build_versioned_transaction(
         &address_lookup_table_accounts,
         blockhash,
     )?;
-
-    let versioned_message: VersionedMessage = VersionedMessage::V0(v0_message.clone());
-    let transaction = VersionedTransaction::try_new(versioned_message, &[payer.as_ref()])?;
-
-    Ok(transaction)
+    let versioned_msg = VersionedMessage::V0(v0_message);
+    let msg_bytes = versioned_msg.serialize();
+    let signature = payer.try_sign_message(&msg_bytes).expect("sign failed");
+    Ok(VersionedTransaction { signatures: vec![signature], message: versioned_msg })
 }
