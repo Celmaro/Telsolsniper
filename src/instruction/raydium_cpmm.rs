@@ -1,13 +1,8 @@
-use anyhow::{anyhow, Result};
-use solana_sdk::{instruction::Instruction, signer::Signer};
-use solana_system_interface::instruction::transfer;
-use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
-use spl_token::instruction::close_account;
-
 use crate::{
+    common::fast_fn::get_associated_token_address_with_program_id_fast,
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::raydium_cpmm::{
-        accounts, get_observation_state_pda, get_pool_pda, get_vault_pda,
+        accounts, get_observation_state_pda, get_pool_pda, get_vault_account,
         SWAP_BASE_IN_DISCRIMINATOR,
     },
     trading::core::{
@@ -15,6 +10,12 @@ use crate::{
         traits::InstructionBuilder,
     },
     utils::calc::raydium_cpmm::compute_swap_amount,
+};
+use anyhow::{anyhow, Result};
+use solana_sdk::{
+    instruction::{AccountMeta, Instruction},
+    pubkey::Pubkey,
+    signer::Signer,
 };
 
 /// Instruction builder for RaydiumCpmm protocol
@@ -32,12 +33,16 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             .downcast_ref::<RaydiumCpmmParams>()
             .ok_or_else(|| anyhow!("Invalid protocol params for RaydiumCpmm"))?;
 
-        let pool_state = get_pool_pda(
-            &accounts::AMM_CONFIG,
-            &protocol_params.base_mint,
-            &protocol_params.quote_mint,
-        )
-        .unwrap();
+        let pool_state = if protocol_params.pool_state == Pubkey::default() {
+            get_pool_pda(
+                &accounts::AMM_CONFIG,
+                &protocol_params.base_mint,
+                &protocol_params.quote_mint,
+            )
+            .unwrap()
+        } else {
+            protocol_params.pool_state
+        };
 
         let is_base_in = protocol_params.base_mint == crate::constants::WSOL_TOKEN_ACCOUNT;
         let mint_token_program = if is_base_in {
@@ -46,23 +51,32 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
             protocol_params.base_token_program
         };
 
-        let wsol_token_account = spl_associated_token_account::get_associated_token_address(
+        let wsol_token_account = get_associated_token_address_with_program_id_fast(
             &params.payer.pubkey(),
             &crate::constants::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::TOKEN_PROGRAM,
         );
-        let mint_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(
-                &params.payer.pubkey(),
-                &params.mint,
-                &mint_token_program,
-            );
+        let mint_token_account = get_associated_token_address_with_program_id_fast(
+            &params.payer.pubkey(),
+            &params.mint,
+            &mint_token_program,
+        );
 
         // Get pool token accounts
-        let wsol_vault_account =
-            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
-        let mint_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
+        let wsol_vault_account = get_vault_account(
+            &pool_state,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
+            protocol_params,
+            true,
+        );
+        let mint_vault_account =
+            get_vault_account(&pool_state, &params.mint, protocol_params, false);
 
-        let observation_state_account = get_observation_state_pda(&pool_state).unwrap();
+        let observation_state_account = if protocol_params.observation_state == Pubkey::default() {
+            get_observation_state_pda(&pool_state).unwrap()
+        } else {
+            protocol_params.observation_state
+        };
 
         let amount_in: u64 = params.sol_amount;
         let result = compute_swap_amount(
@@ -74,35 +88,14 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         );
         let minimum_amount_out = result.min_amount_out;
 
-        let mut instructions = vec![];
+        let mut instructions = Vec::with_capacity(6);
 
         if protocol_params.auto_handle_wsol {
-            // Handle wSOL
-            instructions.push(
-                // Create wSOL ATA account if it doesn't exist
-                create_associated_token_account_idempotent(
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &crate::constants::WSOL_TOKEN_ACCOUNT,
-                    &crate::constants::TOKEN_PROGRAM,
-                ),
-            );
-            instructions.push(
-                // Transfer SOL to wSOL ATA account
-                transfer(&params.payer.pubkey(), &wsol_token_account, amount_in),
-            );
-
-            // Sync wSOL balance
-            instructions.push(
-                spl_token::instruction::sync_native(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &wsol_token_account,
-                )
-                .unwrap(),
-            );
+            instructions
+                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
-        instructions.push(create_associated_token_account_idempotent(
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
@@ -110,41 +103,36 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         ));
 
         // Create buy instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META,          // Authority (readonly)
-            accounts::AMM_CONFIG_META, // Amm Config (readonly)
-            solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
-            solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Input Token Account
-            solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Output Token Account
-            solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Input Vault Account
-            solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Output Vault Account
-            crate::constants::TOKEN_PROGRAM_META, // Input Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Output Token Program (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Input token mint (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Output token mint (readonly)
-            solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
+        let accounts: [AccountMeta; 13] = [
+            AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
+            accounts::AUTHORITY_META,                      // Authority (readonly)
+            accounts::AMM_CONFIG_META,                     // Amm Config (readonly)
+            AccountMeta::new(pool_state, false),           // Pool State
+            AccountMeta::new(wsol_token_account, false),   // Input Token Account
+            AccountMeta::new(mint_token_account, false),   // Output Token Account
+            AccountMeta::new(wsol_vault_account, false),   // Input Vault Account
+            AccountMeta::new(mint_vault_account, false),   // Output Vault Account
+            crate::constants::TOKEN_PROGRAM_META,          // Input Token Program (readonly)
+            AccountMeta::new_readonly(mint_token_program, false), // Output Token Program (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META,     // Input token mint (readonly)
+            AccountMeta::new_readonly(params.mint, false), // Output token mint (readonly)
+            AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
         // Create instruction data
-        let mut data = vec![];
-        data.extend_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
-        data.extend_from_slice(&amount_in.to_le_bytes());
-        data.extend_from_slice(&minimum_amount_out.to_le_bytes());
+        let mut data = [0u8; 24];
+        data[..8].copy_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&amount_in.to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
 
-        instructions.push(Instruction { program_id: accounts::RAYDIUM_CPMM, accounts, data });
+        instructions.push(Instruction::new_with_bytes(
+            accounts::RAYDIUM_CPMM,
+            &data,
+            accounts.to_vec(),
+        ));
 
         if protocol_params.auto_handle_wsol {
             // Close wSOL ATA account, reclaim rent
-            instructions.push(
-                spl_token::instruction::close_account(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &wsol_token_account,
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &[],
-                )
-                .unwrap(),
-            );
+            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)
@@ -177,37 +165,50 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         )
         .min_amount_out;
 
-        let pool_state = get_pool_pda(
-            &accounts::AMM_CONFIG,
-            &protocol_params.base_mint,
-            &protocol_params.quote_mint,
-        )
-        .unwrap();
+        let pool_state = if protocol_params.pool_state == Pubkey::default() {
+            get_pool_pda(
+                &accounts::AMM_CONFIG,
+                &protocol_params.base_mint,
+                &protocol_params.quote_mint,
+            )
+            .unwrap()
+        } else {
+            protocol_params.pool_state
+        };
 
-        let wsol_token_account = spl_associated_token_account::get_associated_token_address(
+        let wsol_token_account = get_associated_token_address_with_program_id_fast(
             &params.payer.pubkey(),
             &crate::constants::WSOL_TOKEN_ACCOUNT,
+            &crate::constants::TOKEN_PROGRAM,
         );
-        let mint_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(
-                &params.payer.pubkey(),
-                &params.mint,
-                &mint_token_program,
-            );
+        let mint_token_account = get_associated_token_address_with_program_id_fast(
+            &params.payer.pubkey(),
+            &params.mint,
+            &mint_token_program,
+        );
 
         // Get pool token accounts
-        let wsol_vault_account =
-            get_vault_pda(&pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
-        let mint_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
+        let wsol_vault_account = get_vault_account(
+            &pool_state,
+            &crate::constants::WSOL_TOKEN_ACCOUNT,
+            protocol_params,
+            true,
+        );
+        let mint_vault_account =
+            get_vault_account(&pool_state, &params.mint, protocol_params, false);
 
-        let observation_state_account = get_observation_state_pda(&pool_state).unwrap();
+        let observation_state_account = if protocol_params.observation_state == Pubkey::default() {
+            get_observation_state_pda(&pool_state).unwrap()
+        } else {
+            protocol_params.observation_state
+        };
 
-        let mut instructions = vec![];
+        let mut instructions = Vec::with_capacity(3);
 
         // Handle wSOL
         instructions.push(
             // Create wSOL ATA account if it doesn't exist
-            create_associated_token_account_idempotent(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
@@ -216,40 +217,36 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         );
 
         // Create sell instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META,          // Authority (readonly)
-            accounts::AMM_CONFIG_META, // Amm Config (readonly)
-            solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
-            solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Input Token Account
-            solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Output Token Account
-            solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Input Vault Account
-            solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Output Vault Account
-            solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Input Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META, // Output Token Program (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Input token mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Output token mint (readonly)
-            solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
+        let accounts: [AccountMeta; 13] = [
+            AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
+            accounts::AUTHORITY_META,                      // Authority (readonly)
+            accounts::AMM_CONFIG_META,                     // Amm Config (readonly)
+            AccountMeta::new(pool_state, false),           // Pool State
+            AccountMeta::new(mint_token_account, false),   // Input Token Account
+            AccountMeta::new(wsol_token_account, false),   // Output Token Account
+            AccountMeta::new(mint_vault_account, false),   // Input Vault Account
+            AccountMeta::new(wsol_vault_account, false),   // Output Vault Account
+            AccountMeta::new_readonly(mint_token_program, false), // Input Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META,          // Output Token Program (readonly)
+            AccountMeta::new_readonly(params.mint, false), // Input token mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META,     // Output token mint (readonly)
+            AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
         // Create instruction data
-        let mut data = vec![];
-        data.extend_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
-        data.extend_from_slice(&params.token_amount.unwrap_or(0).to_le_bytes());
-        data.extend_from_slice(&minimum_amount_out.to_le_bytes());
+        let mut data = [0u8; 24];
+        data[..8].copy_from_slice(&SWAP_BASE_IN_DISCRIMINATOR);
+        data[8..16].copy_from_slice(&params.token_amount.unwrap_or(0).to_le_bytes());
+        data[16..24].copy_from_slice(&minimum_amount_out.to_le_bytes());
 
-        instructions.push(Instruction { program_id: accounts::RAYDIUM_CPMM, accounts, data });
+        instructions.push(Instruction::new_with_bytes(
+            accounts::RAYDIUM_CPMM,
+            &data,
+            accounts.to_vec(),
+        ));
 
         if protocol_params.auto_handle_wsol {
-            instructions.push(
-                close_account(
-                    &crate::constants::TOKEN_PROGRAM,
-                    &wsol_token_account,
-                    &params.payer.pubkey(),
-                    &params.payer.pubkey(),
-                    &[&params.payer.pubkey()],
-                )
-                .unwrap(),
-            );
+            // Close wSOL ATA account, reclaim rent
+            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)

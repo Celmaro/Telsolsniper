@@ -1,4 +1,4 @@
-use crate::common::SolanaRpcClient;
+use crate::{common::SolanaRpcClient, trading::core::params::RaydiumCpmmParams};
 use anyhow::anyhow;
 use solana_sdk::pubkey::Pubkey;
 use solana_streamer_sdk::streaming::event_parser::protocols::raydium_cpmm::types::{
@@ -120,4 +120,49 @@ pub async fn calculate_price(
     let token1_adjusted = token1_amount as f64 / 10_f64.powi(mint1_decimals as i32);
     let price = token1_adjusted / token0_adjusted;
     Ok(price)
+}
+
+/// 获取 vault 账户地址的辅助函数
+///
+/// # 参数
+/// - `pool_state`: 池子状态账户地址
+/// - `token_mint`: 代币 mint 地址
+/// - `protocol_params`: 协议参数
+/// - `is_wsol`: 是否为 wSOL 代币
+///
+/// # 返回值
+/// 返回对应的 vault 账户地址
+pub fn get_vault_account(
+    pool_state: &Pubkey,
+    token_mint: &Pubkey,
+    protocol_params: &RaydiumCpmmParams,
+    is_wsol: bool,
+) -> Pubkey {
+    if is_wsol {
+        // 如果是 wSOL，检查是否为 base mint
+        if protocol_params.base_mint == crate::constants::WSOL_TOKEN_ACCOUNT
+            && protocol_params.base_vault != Pubkey::default()
+        {
+            protocol_params.base_vault
+        } else if protocol_params.quote_mint == crate::constants::WSOL_TOKEN_ACCOUNT
+            && protocol_params.quote_vault != Pubkey::default()
+        {
+            protocol_params.quote_vault
+        } else {
+            get_vault_pda(pool_state, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
+        }
+    } else {
+        // 对于其他代币，检查是否为 base 或 quote mint
+        if *token_mint == protocol_params.base_mint
+            && protocol_params.base_vault != Pubkey::default()
+        {
+            protocol_params.base_vault
+        } else if *token_mint == protocol_params.quote_mint
+            && protocol_params.quote_vault != Pubkey::default()
+        {
+            protocol_params.quote_vault
+        } else {
+            get_vault_pda(pool_state, token_mint).unwrap()
+        }
+    }
 }

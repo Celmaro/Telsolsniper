@@ -1,3 +1,9 @@
+use super::traits::ProtocolParams;
+use crate::common::bonding_curve::BondingCurveAccount;
+use crate::common::{PriorityFee, SolanaRpcClient};
+use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
+use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
+use crate::trading::common::get_multi_token_balances;
 use solana_hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
@@ -5,14 +11,8 @@ use solana_streamer_sdk::streaming::event_parser::protocols::pumpswap::{
     PumpSwapBuyEvent, PumpSwapSellEvent,
 };
 use solana_streamer_sdk::streaming::event_parser::protocols::raydium_amm_v4::types::AmmInfo;
+use solana_streamer_sdk::streaming::event_parser::protocols::raydium_cpmm::RaydiumCpmmSwapEvent;
 use std::sync::Arc;
-
-use super::traits::ProtocolParams;
-use crate::common::bonding_curve::BondingCurveAccount;
-use crate::common::{PriorityFee, SolanaRpcClient};
-use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
-use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
-use crate::trading::common::get_multi_token_balances;
 /// Buy parameters
 #[derive(Clone)]
 pub struct BuyParams {
@@ -405,6 +405,8 @@ impl ProtocolParams for BonkParams {
 /// Configuration parameters specific to Raydium CPMM trading protocol
 #[derive(Clone)]
 pub struct RaydiumCpmmParams {
+    /// Pool address
+    pub pool_state: Pubkey,
     /// Base token mint address
     pub base_mint: Pubkey,
     /// Quote token mint address
@@ -413,15 +415,41 @@ pub struct RaydiumCpmmParams {
     pub base_reserve: u64,
     /// Quote token reserve amount in the pool
     pub quote_reserve: u64,
+    /// Base token vault address
+    pub base_vault: Pubkey,
+    /// Quote token vault address
+    pub quote_vault: Pubkey,
     /// Base token program ID (usually spl_token::ID or spl_token_2022::ID)
     pub base_token_program: Pubkey,
     /// Quote token program ID (usually spl_token::ID or spl_token_2022::ID)
     pub quote_token_program: Pubkey,
+    /// Observation state account
+    pub observation_state: Pubkey,
     /// Whether to automatically handle wSOL wrapping and unwrapping
     pub auto_handle_wsol: bool,
 }
 
 impl RaydiumCpmmParams {
+    pub fn from_trade(
+        trade_info: RaydiumCpmmSwapEvent,
+        base_reserve: u64,
+        quote_reserve: u64,
+    ) -> Self {
+        Self {
+            pool_state: trade_info.pool_state,
+            base_mint: trade_info.input_token_mint,
+            quote_mint: trade_info.output_token_mint,
+            base_reserve: base_reserve,
+            quote_reserve: quote_reserve,
+            base_vault: trade_info.input_vault,
+            quote_vault: trade_info.output_vault,
+            base_token_program: trade_info.input_token_program,
+            quote_token_program: trade_info.output_token_program,
+            observation_state: trade_info.observation_state,
+            auto_handle_wsol: true,
+        }
+    }
+
     pub async fn from_pool_address_by_rpc(
         rpc: &SolanaRpcClient,
         pool_address: &Pubkey,
@@ -437,12 +465,16 @@ impl RaydiumCpmmParams {
             )
             .await?;
         Ok(Self {
+            pool_state: pool_address.clone(),
             base_mint: pool.token0_mint,
             quote_mint: pool.token1_mint,
             base_reserve: token0_balance,
             quote_reserve: token1_balance,
+            base_vault: pool.token0_vault,
+            quote_vault: pool.token1_vault,
             base_token_program: pool.token0_program,
             quote_token_program: pool.token1_program,
+            observation_state: pool.observation_key,
             auto_handle_wsol: true,
         })
     }
