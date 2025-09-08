@@ -6,7 +6,7 @@ use solana_sdk::{
     pubkey::Pubkey,
 };
 use spl_associated_token_account::{
-    get_associated_token_address, ID as ASSOCIATED_TOKEN_PROGRAM_ID,
+    get_associated_token_address_with_program_id, ID as ASSOCIATED_TOKEN_PROGRAM_ID,
 };
 use std::num::NonZeroUsize;
 
@@ -61,7 +61,7 @@ where
 
 // --------------------- Associated Token Account ---------------------
 
-pub fn create_associated_token_account_fast(
+pub fn create_associated_token_account_idempotent_fast(
     payer: &Pubkey,
     owner: &Pubkey,
     mint: &Pubkey,
@@ -78,7 +78,8 @@ pub fn create_associated_token_account_fast(
     // 使用缓存获取指令
     get_cached_instruction(cache_key, || {
         // 使用缓存的方式获取 Associated Token Address
-        let associated_token_address = get_associated_token_address_fast(owner, mint);
+        let associated_token_address =
+            get_associated_token_address_with_program_id_fast(owner, mint, token_program);
 
         // 创建 Associated Token Account 指令
         // 参考 spl_associated_token_account::instruction::create_associated_token_account 的实现
@@ -92,7 +93,7 @@ pub fn create_associated_token_account_fast(
                 crate::constants::SYSTEM_PROGRAM_META,
                 AccountMeta::new_readonly(*token_program, false), // Token程序（只读，非签名者）
             ],
-            data: vec![], // ATA创建指令不需要额外数据
+            data: vec![1],
         }
     })
 }
@@ -143,6 +144,7 @@ where
 struct AtaCacheKey {
     wallet_address: Pubkey,
     token_mint_address: Pubkey,
+    token_program_id: Pubkey,
 }
 
 /// 全局 ATA 缓存，用于存储 Associated Token Address 计算结果
@@ -150,12 +152,16 @@ static ATA_CACHE: Lazy<RwLock<CLruCache<AtaCacheKey, Pubkey>>> =
     Lazy::new(|| RwLock::new(CLruCache::new(NonZeroUsize::new(MAX_ATA_CACHE_SIZE).unwrap())));
 
 /// 获取缓存的 Associated Token Address，如果不存在则计算并缓存
-pub fn get_associated_token_address_fast(
+pub fn get_associated_token_address_with_program_id_fast(
     wallet_address: &Pubkey,
     token_mint_address: &Pubkey,
+    token_program_id: &Pubkey,
 ) -> Pubkey {
-    let cache_key =
-        AtaCacheKey { wallet_address: *wallet_address, token_mint_address: *token_mint_address };
+    let cache_key = AtaCacheKey {
+        wallet_address: *wallet_address,
+        token_mint_address: *token_mint_address,
+        token_program_id: *token_program_id,
+    };
 
     // 尝试从缓存中获取（使用读锁）
     {
@@ -166,7 +172,11 @@ pub fn get_associated_token_address_fast(
     }
 
     // 缓存未命中，计算新的 ATA
-    let ata = get_associated_token_address(wallet_address, token_mint_address);
+    let ata = get_associated_token_address_with_program_id(
+        wallet_address,
+        token_mint_address,
+        token_program_id,
+    );
 
     // 将计算结果存入缓存（使用写锁）
     {

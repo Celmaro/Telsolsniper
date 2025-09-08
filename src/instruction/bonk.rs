@@ -40,14 +40,18 @@ impl InstructionBuilder for BonkInstructionBuilder {
         let pool_state = get_pool_pda(&params.mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap();
 
         // Create user token accounts
-        let user_base_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &params.mint,
-        );
-        let user_quote_token_account = spl_associated_token_account::get_associated_token_address(
-            &params.payer.pubkey(),
-            &crate::constants::WSOL_TOKEN_ACCOUNT,
-        );
+        let user_base_token_account =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                &params.payer.pubkey(),
+                &params.mint,
+                &protocol_params.mint_token_program,
+            );
+        let user_quote_token_account =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                &params.payer.pubkey(),
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
+            );
 
         // Get pool token accounts
         let base_vault_account = get_vault_pda(&pool_state, &params.mint).unwrap();
@@ -109,7 +113,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // Create buy instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META, // Authority (readonly)
+            accounts::AUTHORITY_META,     // Authority (readonly)
             accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,
@@ -243,7 +247,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // Create sell instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META, // Authority (readonly)
+            accounts::AUTHORITY_META,     // Authority (readonly)
             accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,

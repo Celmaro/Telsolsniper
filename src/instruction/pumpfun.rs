@@ -57,7 +57,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
-        instructions.push(crate::common::fast_fn::create_associated_token_account_fast(
+        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
             &params.payer.pubkey(),
             &params.payer.pubkey(),
             &params.mint,
@@ -75,13 +75,16 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             bonding_curve.account
         };
-        let associated_bonding_curve = if protocol_params.associated_bonding_curve
-            == Pubkey::default()
-        {
-            crate::common::fast_fn::get_associated_token_address_fast(&bonding_curve, &params.mint)
-        } else {
-            protocol_params.associated_bonding_curve
-        };
+        let associated_bonding_curve =
+            if protocol_params.associated_bonding_curve == Pubkey::default() {
+                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                    &bonding_curve,
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                )
+            } else {
+                protocol_params.associated_bonding_curve
+            };
 
         let accounts: [AccountMeta; 16] = [
             global_constants::GLOBAL_ACCOUNT_META,
@@ -90,9 +93,10 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             AccountMeta::new(bonding_curve, false),
             AccountMeta::new(associated_bonding_curve, false),
             AccountMeta::new(
-                crate::common::fast_fn::get_associated_token_address_fast(
+                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                     &params.payer.pubkey(),
                     &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
                 false,
             ),
@@ -139,9 +143,10 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             return Err(anyhow!("Amount token is required"));
         };
-        let ata = crate::common::fast_fn::get_associated_token_address_fast(
+        let ata = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
             &params.payer.pubkey(),
             &params.mint,
+            &crate::constants::TOKEN_PROGRAM,
         );
         let creator_vault_pda = protocol_params.creator_vault;
         let creator = get_creator(&creator_vault_pda);
@@ -168,13 +173,16 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             bonding_curve.account
         };
-        let associated_bonding_curve = if protocol_params.associated_bonding_curve
-            == Pubkey::default()
-        {
-            crate::common::fast_fn::get_associated_token_address_fast(&bonding_curve, &params.mint)
-        } else {
-            protocol_params.associated_bonding_curve
-        };
+        let associated_bonding_curve =
+            if protocol_params.associated_bonding_curve == Pubkey::default() {
+                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+                    &bonding_curve,
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                )
+            } else {
+                protocol_params.associated_bonding_curve
+            };
 
         let accounts: [AccountMeta; 14] = [
             global_constants::GLOBAL_ACCOUNT_META,
@@ -183,9 +191,10 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             AccountMeta::new(bonding_curve, false),
             AccountMeta::new(associated_bonding_curve, false),
             AccountMeta::new(
-                crate::common::fast_fn::get_associated_token_address_fast(
+                crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
                     &params.payer.pubkey(),
                     &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
                 ),
                 false,
             ),
