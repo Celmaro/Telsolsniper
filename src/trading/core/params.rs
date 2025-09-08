@@ -126,6 +126,10 @@ pub struct PumpSwapParams {
     /// Quote token mint address
     /// The mint account address of the quote token in the trading pair, usually SOL or USDC
     pub quote_mint: Pubkey,
+    /// Pool base token account
+    pub pool_base_token_account: Pubkey,
+    /// Pool quote token account
+    pub pool_quote_token_account: Pubkey,
     /// Base token reserves in the pool
     pub pool_base_token_reserves: u64,
     /// Quote token reserves in the pool
@@ -149,6 +153,8 @@ impl PumpSwapParams {
             pool: event.pool,
             base_mint: event.base_mint,
             quote_mint: event.quote_mint,
+            pool_base_token_account: event.pool_base_token_account,
+            pool_quote_token_account: event.pool_quote_token_account,
             pool_base_token_reserves: event.pool_base_token_reserves,
             pool_quote_token_reserves: event.pool_quote_token_reserves,
             coin_creator_vault_ata: event.coin_creator_vault_ata,
@@ -164,6 +170,8 @@ impl PumpSwapParams {
             pool: event.pool,
             base_mint: event.base_mint,
             quote_mint: event.quote_mint,
+            pool_base_token_account: event.pool_base_token_account,
+            pool_quote_token_account: event.pool_quote_token_account,
             pool_base_token_reserves: event.pool_base_token_reserves,
             pool_quote_token_reserves: event.pool_quote_token_reserves,
             coin_creator_vault_ata: event.coin_creator_vault_ata,
@@ -206,6 +214,8 @@ impl PumpSwapParams {
             pool: pool_address.clone(),
             base_mint: pool_data.base_mint,
             quote_mint: pool_data.quote_mint,
+            pool_base_token_account: pool_data.pool_base_token_account,
+            pool_quote_token_account: pool_data.pool_quote_token_account,
             pool_base_token_reserves: pool_base_token_reserves,
             pool_quote_token_reserves: pool_quote_token_reserves,
             coin_creator_vault_ata: coin_creator_vault_ata,

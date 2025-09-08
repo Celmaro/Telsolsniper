@@ -110,6 +110,7 @@ pub enum PdaCacheKey {
     PumpFunCreatorVault(Pubkey),
     BonkPool(Pubkey, Pubkey),
     BonkVault(Pubkey, Pubkey),
+    PumpSwapUserVolume(Pubkey),
 }
 
 /// 全局 PDA 缓存，用于存储计算结果
@@ -196,6 +197,8 @@ pub fn get_associated_token_address_with_program_id_fast(
 pub fn fast_init(payer: &Pubkey) {
     // 获取 PumpFun 用户量累加器 PDA
     crate::instruction::utils::pumpfun::get_user_volume_accumulator_pda(payer);
+    // 获取 PumpSwap 用户量累加器 PDA
+    crate::instruction::utils::pumpswap::get_user_volume_accumulator_pda(payer);
     // 获取 wSOL ATA 地址
     let wsol_token_account = get_associated_token_address_with_program_id_fast(
         payer,

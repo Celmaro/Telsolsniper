@@ -1,7 +1,4 @@
-use crate::{
-    common::SolanaRpcClient,
-    constants::{self, TOKEN_PROGRAM},
-};
+use crate::{common::SolanaRpcClient, constants::TOKEN_PROGRAM};
 use anyhow::anyhow;
 use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::pubkey::Pubkey;
@@ -59,6 +56,9 @@ pub mod accounts {
         pubkey!("C2aFPdENg4A2HQsmrd5rTw5TaYBX5Ku887cWjbFKtZpw"); // get_global_volume_accumulator_pda().unwrap();
 
     pub const FEE_CONFIG: Pubkey = pubkey!("5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx"); // get_fee_config_pda().unwrap();
+
+    pub const DEFAULT_COIN_CREATOR_VAULT_AUTHORITY: Pubkey =
+        pubkey!("8N3GDaZ2iwN65oxVatKTLPNooAVUJTbfiVJ1ahyqwjSk");
 
     // META
 
@@ -149,7 +149,7 @@ pub(crate) fn coin_creator_vault_ata(coin_creator: Pubkey, quote_mint: Pubkey) -
 
 pub(crate) fn fee_recipient_ata(fee_recipient: Pubkey, quote_mint: Pubkey) -> Pubkey {
     let associated_token_fee_recipient =
-        spl_associated_token_account::get_associated_token_address_with_program_id(
+        crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
             &fee_recipient,
             &quote_mint,
             &TOKEN_PROGRAM,
@@ -158,10 +158,15 @@ pub(crate) fn fee_recipient_ata(fee_recipient: Pubkey, quote_mint: Pubkey) -> Pu
 }
 
 pub fn get_user_volume_accumulator_pda(user: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[&seeds::USER_VOLUME_ACCUMULATOR_SEED, user.as_ref()];
-    let program_id: &Pubkey = &&accounts::AMM_PROGRAM;
-    let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
-    pda.map(|pubkey| pubkey.0)
+    crate::common::fast_fn::get_cached_pda(
+        crate::common::fast_fn::PdaCacheKey::PumpSwapUserVolume(*user),
+        || {
+            let seeds: &[&[u8]; 2] = &[&seeds::USER_VOLUME_ACCUMULATOR_SEED, user.as_ref()];
+            let program_id: &Pubkey = &&accounts::AMM_PROGRAM;
+            let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+            pda.map(|pubkey| pubkey.0)
+        },
+    )
 }
 
 pub fn get_global_volume_accumulator_pda() -> Option<Pubkey> {
