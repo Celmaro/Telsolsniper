@@ -25,22 +25,26 @@ pub mod accounts {
     pub const SHARE_FEE_RATE: u128 = 0; // 0%
 
     // META
-    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
-        });
-    pub const GLOBAL_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_CONFIG, false)
-        });
-    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
-        });
-    pub const BONK_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(BONK, false)
-        });
+    pub const AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
+    pub const GLOBAL_CONFIG_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: GLOBAL_CONFIG,
+            is_signer: false,
+            is_writable: false,
+        };
+    pub const EVENT_AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: EVENT_AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
+    pub const BONK_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta { pubkey: BONK, is_signer: false, is_writable: false };
 }
 
 pub const BUY_EXECT_IN_DISCRIMINATOR: [u8; 8] = [250, 234, 13, 123, 213, 156, 19, 236];

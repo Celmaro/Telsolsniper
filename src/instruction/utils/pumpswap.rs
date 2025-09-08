@@ -51,9 +51,6 @@ pub mod accounts {
     pub const PROTOCOL_FEE_RECIPIENT: Pubkey =
         pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
 
-    /// Rent Sysvar ID
-    pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
-
     pub const AMM_PROGRAM: Pubkey = pubkey!("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
 
     pub const LP_FEE_BASIS_POINTS: u64 = 20;
@@ -62,52 +59,68 @@ pub mod accounts {
 
     pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 
+    pub const GLOBAL_VOLUME_ACCUMULATOR: Pubkey =
+        pubkey!("C2aFPdENg4A2HQsmrd5rTw5TaYBX5Ku887cWjbFKtZpw"); // get_global_volume_accumulator_pda().unwrap();
+
+    pub const FEE_CONFIG: Pubkey = pubkey!("5PHirr8joyTMp9JMm6nW7hNDVyEYdkzDqazxPD7RaTjx"); // get_fee_config_pda().unwrap();
+
     // META
 
-    pub const GLOBAL_ACCOUNT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_ACCOUNT, false)
-        });
+    pub const GLOBAL_ACCOUNT_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: GLOBAL_ACCOUNT,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const FEE_RECIPIENT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(FEE_RECIPIENT, false)
-        });
+    pub const FEE_RECIPIENT_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_RECIPIENT,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const ASSOCIATED_TOKEN_PROGRAM_META: once_cell::sync::Lazy<
-        solana_sdk::instruction::AccountMeta,
-    > = once_cell::sync::Lazy::new(|| {
-        solana_sdk::instruction::AccountMeta::new_readonly(ASSOCIATED_TOKEN_PROGRAM, false)
-    });
+    pub const ASSOCIATED_TOKEN_PROGRAM_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: ASSOCIATED_TOKEN_PROGRAM,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
-        });
+    pub const EVENT_AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: EVENT_AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const AMM_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(AMM_PROGRAM, false)
-        });
+    pub const AMM_PROGRAM_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: AMM_PROGRAM,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const GLOBAL_VOLUME_ACCUMULATOR_META: once_cell::sync::Lazy<
-        solana_sdk::instruction::AccountMeta,
-    > = once_cell::sync::Lazy::new(|| {
-        solana_sdk::instruction::AccountMeta::new(
-            get_global_volume_accumulator_pda().unwrap(),
-            false,
-        )
-    });
+    pub const GLOBAL_VOLUME_ACCUMULATOR_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: GLOBAL_VOLUME_ACCUMULATOR,
+            is_signer: false,
+            is_writable: true,
+        };
 
-    pub const FEE_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false)
-        });
+    pub const FEE_CONFIG_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_CONFIG,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const FEE_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(FEE_PROGRAM, false)
-        });
+    pub const FEE_PROGRAM_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_PROGRAM,
+            is_signer: false,
+            is_writable: false,
+        };
 }
 
 pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];

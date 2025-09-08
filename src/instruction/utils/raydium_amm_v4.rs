@@ -24,10 +24,12 @@ pub mod accounts {
 
     // META
 
-    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
-        });
+    pub const AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
 }
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[9];

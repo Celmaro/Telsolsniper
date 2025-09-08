@@ -112,16 +112,16 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         // Create buy instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META.clone(), // Authority (readonly)
-            accounts::AMM_CONFIG_META.clone(), // Amm Config (readonly)
+            accounts::AUTHORITY_META,          // Authority (readonly)
+            accounts::AMM_CONFIG_META, // Amm Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Input Token Account
             solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Output Token Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Output Vault Account
-            crate::constants::TOKEN_PROGRAM_META.clone(), // Input Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Input Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Output Token Program (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Input token mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Input token mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Output token mint (readonly)
             solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
@@ -218,17 +218,17 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         // Create sell instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META.clone(), // Authority (readonly)
-            accounts::AMM_CONFIG_META.clone(), // Amm Config (readonly)
+            accounts::AUTHORITY_META,          // Authority (readonly)
+            accounts::AMM_CONFIG_META, // Amm Config (readonly)
             solana_sdk::instruction::AccountMeta::new(pool_state, false), // Pool State
             solana_sdk::instruction::AccountMeta::new(mint_token_account, false), // Input Token Account
             solana_sdk::instruction::AccountMeta::new(wsol_token_account, false), // Output Token Account
             solana_sdk::instruction::AccountMeta::new(mint_vault_account, false), // Input Vault Account
             solana_sdk::instruction::AccountMeta::new(wsol_vault_account, false), // Output Vault Account
             solana_sdk::instruction::AccountMeta::new_readonly(mint_token_program, false), // Input Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META.clone(), // Output Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Output Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Input token mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Output token mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Output token mint (readonly)
             solana_sdk::instruction::AccountMeta::new(observation_state_account, false), // Observation State Account
         ];
         // Create instruction data

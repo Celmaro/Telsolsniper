@@ -175,21 +175,21 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let mut accounts = vec![
             solana_sdk::instruction::AccountMeta::new_readonly(pool, false), // pool_id (readonly)
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // user (signer)
-            accounts::GLOBAL_ACCOUNT_META.clone(),                           // global (readonly)
+            accounts::GLOBAL_ACCOUNT_META,                                   // global (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(base_mint, false), // base_mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_mint, false), // quote_mint (readonly)
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // user_base_token_account
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // user_quote_token_account
             solana_sdk::instruction::AccountMeta::new(pool_base_token_account, false), // pool_base_token_account
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
-            accounts::FEE_RECIPIENT_META.clone(), // fee_recipient (readonly)
+            accounts::FEE_RECIPIENT_META, // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
             solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
-            crate::constants::SYSTEM_PROGRAM_META.clone(), // System Program (readonly)
-            accounts::ASSOCIATED_TOKEN_PROGRAM_META.clone(), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
-            accounts::EVENT_AUTHORITY_META.clone(),          // event_authority (readonly)
-            accounts::AMM_PROGRAM_META.clone(),              // PUMP_AMM_PROGRAM_ID (readonly)
+            crate::constants::SYSTEM_PROGRAM_META, // System Program (readonly)
+            accounts::ASSOCIATED_TOKEN_PROGRAM_META, // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
+            accounts::EVENT_AUTHORITY_META,        // event_authority (readonly)
+            accounts::AMM_PROGRAM_META,    // PUMP_AMM_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
             solana_sdk::instruction::AccountMeta::new_readonly(
                 params_coin_creator_vault_authority,
@@ -197,14 +197,14 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             ), // coin_creator_vault_authority (readonly)
         ];
         if quote_mint_is_wsol {
-            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone());
+            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META);
             accounts.push(solana_sdk::instruction::AccountMeta::new(
                 get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
                 false,
             ));
         }
-        accounts.push(accounts::FEE_CONFIG_META.clone());
-        accounts.push(accounts::FEE_PROGRAM_META.clone());
+        accounts.push(accounts::FEE_CONFIG_META);
+        accounts.push(accounts::FEE_PROGRAM_META);
 
         // Create instruction data
         let mut data = vec![];
@@ -366,21 +366,21 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let mut accounts = vec![
             solana_sdk::instruction::AccountMeta::new_readonly(pool, false), // pool_id (readonly)
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // user (signer)
-            accounts::GLOBAL_ACCOUNT_META.clone(),                           // global (readonly)
+            accounts::GLOBAL_ACCOUNT_META,                                   // global (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(base_mint, false), // mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_mint, false), // WSOL_TOKEN_ACCOUNT (readonly)
             solana_sdk::instruction::AccountMeta::new(user_base_token_account, false), // user_base_token_account
             solana_sdk::instruction::AccountMeta::new(user_quote_token_account, false), // user_quote_token_account
             solana_sdk::instruction::AccountMeta::new(pool_base_token_account, false), // pool_base_token_account
             solana_sdk::instruction::AccountMeta::new(pool_quote_token_account, false), // pool_quote_token_account
-            accounts::FEE_RECIPIENT_META.clone(), // fee_recipient (readonly)
+            accounts::FEE_RECIPIENT_META, // fee_recipient (readonly)
             solana_sdk::instruction::AccountMeta::new(fee_recipient_ata, false), // fee_recipient_ata
             solana_sdk::instruction::AccountMeta::new_readonly(base_token_program, false), // TOKEN_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(quote_token_program, false), // TOKEN_PROGRAM_ID (readonly, duplicated as in JS)
-            crate::constants::SYSTEM_PROGRAM_META.clone(), // System Program (readonly)
-            accounts::ASSOCIATED_TOKEN_PROGRAM_META.clone(), // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
-            accounts::EVENT_AUTHORITY_META.clone(),          // event_authority (readonly)
-            accounts::AMM_PROGRAM_META.clone(),              // PUMP_AMM_PROGRAM_ID (readonly)
+            crate::constants::SYSTEM_PROGRAM_META, // System Program (readonly)
+            accounts::ASSOCIATED_TOKEN_PROGRAM_META, // ASSOCIATED_TOKEN_PROGRAM_ID (readonly)
+            accounts::EVENT_AUTHORITY_META,        // event_authority (readonly)
+            accounts::AMM_PROGRAM_META,    // PUMP_AMM_PROGRAM_ID (readonly)
             solana_sdk::instruction::AccountMeta::new(params_coin_creator_vault_ata, false), // coin_creator_vault_ata
             solana_sdk::instruction::AccountMeta::new_readonly(
                 params_coin_creator_vault_authority,
@@ -388,15 +388,15 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             ), // coin_creator_vault_authority (readonly)
         ];
         if !quote_mint_is_wsol {
-            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone());
+            accounts.push(accounts::GLOBAL_VOLUME_ACCUMULATOR_META);
             accounts.push(solana_sdk::instruction::AccountMeta::new(
                 get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
                 false,
             ));
         }
 
-        accounts.push(accounts::FEE_CONFIG_META.clone());
-        accounts.push(accounts::FEE_PROGRAM_META.clone());
+        accounts.push(accounts::FEE_CONFIG_META);
+        accounts.push(accounts::FEE_PROGRAM_META);
 
         // Create instruction data
         let mut data = vec![];

@@ -65,9 +65,14 @@ impl BondingCurveAccount {
         dev_sol_amount: u64,
         creator: Pubkey,
     ) -> Self {
+        let account = if mint != &Pubkey::default() {
+            get_bonding_curve_pda(mint).unwrap()
+        } else {
+            Pubkey::default()
+        };
         Self {
             discriminator: 0,
-            account: get_bonding_curve_pda(mint).unwrap(),
+            account: account,
             virtual_token_reserves: INITIAL_VIRTUAL_TOKEN_RESERVES - dev_token_amount,
             virtual_sol_reserves: INITIAL_VIRTUAL_SOL_RESERVES + dev_sol_amount,
             real_token_reserves: INITIAL_REAL_TOKEN_RESERVES - dev_token_amount,
@@ -79,9 +84,14 @@ impl BondingCurveAccount {
     }
 
     pub fn from_trade(event: &PumpFunTradeEvent) -> Self {
+        let account = if event.bonding_curve != Pubkey::default() {
+            event.bonding_curve
+        } else {
+            get_bonding_curve_pda(&event.mint).unwrap()
+        };
         Self {
             discriminator: 0,
-            account: get_bonding_curve_pda(&event.mint).unwrap(),
+            account: account,
             virtual_token_reserves: event.virtual_token_reserves,
             virtual_sol_reserves: event.virtual_sol_reserves,
             real_token_reserves: event.real_token_reserves,

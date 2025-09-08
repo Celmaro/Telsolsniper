@@ -109,8 +109,8 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // Create buy instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META.clone(), // Authority (readonly)
-            accounts::GLOBAL_CONFIG_META.clone(), // Global Config (readonly)
+            accounts::AUTHORITY_META, // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,
                 false,
@@ -121,15 +121,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Quote Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.mint_token_program,
                 false,
             ), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META.clone(),      // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META.clone(),            // Event Authority (readonly)
-            accounts::BONK_META.clone(),                       // Program (readonly)
-            crate::constants::SYSTEM_PROGRAM_META.clone(),     // System Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META,      // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,            // Event Authority (readonly)
+            accounts::BONK_META,                       // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META,     // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new(
                 protocol_params.platform_associated_account,
                 false,
@@ -243,8 +243,8 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // Create sell instruction
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
-            accounts::AUTHORITY_META.clone(), // Authority (readonly)
-            accounts::GLOBAL_CONFIG_META.clone(), // Global Config (readonly)
+            accounts::AUTHORITY_META, // Authority (readonly)
+            accounts::GLOBAL_CONFIG_META, // Global Config (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.platform_config,
                 false,
@@ -255,15 +255,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             solana_sdk::instruction::AccountMeta::new(base_vault_account, false), // Base Vault
             solana_sdk::instruction::AccountMeta::new(quote_vault_account, false), // Quote Vault
             solana_sdk::instruction::AccountMeta::new_readonly(params.mint, false), // Base Token Mint (readonly)
-            crate::constants::WSOL_TOKEN_ACCOUNT_META.clone(), // Quote Token Mint (readonly)
+            crate::constants::WSOL_TOKEN_ACCOUNT_META, // Quote Token Mint (readonly)
             solana_sdk::instruction::AccountMeta::new_readonly(
                 protocol_params.mint_token_program,
                 false,
             ), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META.clone(),      // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META.clone(),            // Event Authority (readonly)
-            accounts::BONK_META.clone(),                       // Program (readonly)
-            crate::constants::SYSTEM_PROGRAM_META.clone(),     // System Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META,      // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,            // Event Authority (readonly)
+            accounts::BONK_META,                       // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META,     // System Program (readonly)
             solana_sdk::instruction::AccountMeta::new(
                 protocol_params.platform_associated_account,
                 false,

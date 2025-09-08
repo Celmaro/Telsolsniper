@@ -51,7 +51,7 @@ pub mod global_constants {
 
     pub const POOL_MIGRATION_FEE: u64 = 15_000_001;
 
-    pub const CREATOR_FEE: u64 = 5;
+    pub const CREATOR_FEE: u64 = 30;
 
     pub const SCALE: u64 = 1_000_000; // 10^6 for token decimals
 
@@ -61,19 +61,21 @@ pub mod global_constants {
 
     /// Public key for the fee recipient
     pub const FEE_RECIPIENT: Pubkey = pubkey!("62qc2CNXwrYqQScmEdiZFFAnJR262PxWEuNQtxfafNgV");
-    /// Static AccountMeta for fee recipient (initialized once)
-    pub static FEE_RECIPIENT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new(FEE_RECIPIENT, false)
-        });
+    pub const FEE_RECIPIENT_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_RECIPIENT,
+            is_signer: false,
+            is_writable: true,
+        };
 
     /// Public key for the global PDA
     pub const GLOBAL_ACCOUNT: Pubkey = pubkey!("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf");
-    /// Static AccountMeta for global account (initialized once)
-    pub static GLOBAL_ACCOUNT_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(GLOBAL_ACCOUNT, false)
-        });
+    pub const GLOBAL_ACCOUNT_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: GLOBAL_ACCOUNT,
+            is_signer: false,
+            is_writable: false,
+        };
 
     /// Public key for the authority
     pub const AUTHORITY: Pubkey = pubkey!("FFWtrEQ4B4PKQoVuHYzZq8FabGkVatYzDpEVHsK5rrhF");
@@ -95,10 +97,6 @@ pub mod global_constants {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
 
-    use crate::instruction::utils::pumpfun::{
-        get_fee_config_pda, get_global_volume_accumulator_pda,
-    };
-
     /// Public key for the Pump.fun program
     pub const PUMPFUN: Pubkey = pubkey!("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P");
 
@@ -112,43 +110,50 @@ pub mod accounts {
     pub const ASSOCIATED_TOKEN_PROGRAM: Pubkey =
         pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
-    /// Rent Sysvar ID
-    pub const RENT: Pubkey = pubkey!("SysvarRent111111111111111111111111111111111");
-
     pub const AMM_PROGRAM: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 
     pub const FEE_PROGRAM: Pubkey = pubkey!("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ");
 
+    pub const GLOBAL_VOLUME_ACCUMULATOR: Pubkey =
+        pubkey!("Hq2wp8uJ9jCPsYgNHex8RtqdvMPfVGoYwjvF1ATiwn2Y"); // get_global_volume_accumulator_pda().unwrap();
+
+    pub const FEE_CONFIG: Pubkey = pubkey!("8Wf5TiAheLUqBrKXeYg2JtAFFMWtKdG2BSFgqUcPVwTt"); // get_fee_config_pda().unwrap();
+
     // META
+    pub const PUMPFUN_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: PUMPFUN,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const PUMPFUN_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(PUMPFUN, false)
-        });
+    pub const EVENT_AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: EVENT_AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const EVENT_AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(EVENT_AUTHORITY, false)
-        });
+    pub const FEE_PROGRAM_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_PROGRAM,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const FEE_PROGRAM_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(FEE_PROGRAM, false)
-        });
+    pub const GLOBAL_VOLUME_ACCUMULATOR_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: GLOBAL_VOLUME_ACCUMULATOR,
+            is_signer: false,
+            is_writable: true,
+        };
 
-    pub const GLOBAL_VOLUME_ACCUMULATOR_META: once_cell::sync::Lazy<
-        solana_sdk::instruction::AccountMeta,
-    > = once_cell::sync::Lazy::new(|| {
-        solana_sdk::instruction::AccountMeta::new(
-            get_global_volume_accumulator_pda().unwrap(),
-            false,
-        )
-    });
-
-    pub const FEE_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(get_fee_config_pda().unwrap(), false)
-        });
+    pub const FEE_CONFIG_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: FEE_CONFIG,
+            is_signer: false,
+            is_writable: false,
+        };
 }
 
 pub struct Symbol;
@@ -183,6 +188,22 @@ pub fn get_bonding_curve_pda(mint: &Pubkey) -> Option<Pubkey> {
     let program_id: &Pubkey = &accounts::PUMPFUN;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
+}
+
+#[inline]
+pub fn get_creator(creator_vault_pda: &Pubkey) -> Pubkey {
+    if creator_vault_pda.eq(&Pubkey::default()) {
+        Pubkey::default()
+    } else {
+        // Fast check against cached default creator vault
+        static DEFAULT_CREATOR_VAULT: std::sync::LazyLock<Option<Pubkey>> =
+            std::sync::LazyLock::new(|| get_creator_vault_pda(&Pubkey::default()));
+        if creator_vault_pda.eq(&DEFAULT_CREATOR_VAULT.unwrap()) {
+            Pubkey::default()
+        } else {
+            *creator_vault_pda
+        }
+    }
 }
 
 #[inline]

@@ -7,7 +7,7 @@ use spl_token::instruction::close_account;
 
 use crate::{
     instruction::utils::pumpfun::{
-        accounts, get_bonding_curve_pda, get_creator_vault_pda, get_user_volume_accumulator_pda,
+        accounts, get_bonding_curve_pda, get_creator, get_user_volume_accumulator_pda,
         global_constants::{self},
     },
     utils::calc::{
@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey};
+use solana_sdk::instruction::AccountMeta;
 
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
@@ -50,21 +50,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
         );
         let creator_vault_pda = protocol_params.creator_vault;
-
-        // Optimize creator lookup - avoid PDA calculation if not default
-        let creator = if creator_vault_pda == Pubkey::default() {
-            Pubkey::default()
-        } else {
-            // Fast check against cached default creator vault
-            static DEFAULT_CREATOR_VAULT: std::sync::LazyLock<Option<Pubkey>> =
-                std::sync::LazyLock::new(|| get_creator_vault_pda(&Pubkey::default()));
-
-            if Some(creator_vault_pda) == *DEFAULT_CREATOR_VAULT {
-                Pubkey::default()
-            } else {
-                creator_vault_pda
-            }
-        };
+        let creator = get_creator(&creator_vault_pda);
 
         let buy_token_amount = get_buy_token_amount_from_sol_amount(
             bonding_curve.virtual_token_reserves as u128,
@@ -85,42 +71,44 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         ));
 
         // Create buy instruction data
-        let mut buy_data = Vec::with_capacity(8 + 8 + 8);
-        buy_data.extend_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // discriminator
-        buy_data.extend_from_slice(&buy_token_amount.to_le_bytes());
-        buy_data.extend_from_slice(&max_sol_cost.to_le_bytes());
+        let mut buy_data = [0u8; 24];
+        buy_data[..8].copy_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]);
+        buy_data[8..16].copy_from_slice(&buy_token_amount.to_le_bytes());
+        buy_data[16..24].copy_from_slice(&max_sol_cost.to_le_bytes());
+
+        let accounts: [AccountMeta; 16] = [
+            global_constants::GLOBAL_ACCOUNT_META,
+            global_constants::FEE_RECIPIENT_META,
+            AccountMeta::new_readonly(params.mint, false),
+            AccountMeta::new(bonding_curve.account, false),
+            AccountMeta::new(
+                get_associated_token_address(&bonding_curve.account, &params.mint),
+                false,
+            ),
+            AccountMeta::new(
+                get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                false,
+            ),
+            AccountMeta::new(params.payer.pubkey(), true),
+            crate::constants::SYSTEM_PROGRAM_META,
+            crate::constants::TOKEN_PROGRAM_META,
+            AccountMeta::new(creator_vault_pda, false),
+            accounts::EVENT_AUTHORITY_META,
+            accounts::PUMPFUN_META,
+            accounts::GLOBAL_VOLUME_ACCUMULATOR_META,
+            AccountMeta::new(
+                get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
+                false,
+            ),
+            accounts::FEE_CONFIG_META,
+            accounts::FEE_PROGRAM_META,
+        ];
 
         // Create buy instruction
         instructions.push(Instruction::new_with_bytes(
             accounts::PUMPFUN,
             &buy_data,
-            vec![
-                global_constants::GLOBAL_ACCOUNT_META.clone(),
-                global_constants::FEE_RECIPIENT_META.clone(),
-                AccountMeta::new_readonly(params.mint, false),
-                AccountMeta::new(bonding_curve.account, false),
-                AccountMeta::new(
-                    get_associated_token_address(&bonding_curve.account, &params.mint),
-                    false,
-                ),
-                AccountMeta::new(
-                    get_associated_token_address(&params.payer.pubkey(), &params.mint),
-                    false,
-                ),
-                AccountMeta::new(params.payer.pubkey(), true),
-                crate::constants::SYSTEM_PROGRAM_META.clone(),
-                crate::constants::TOKEN_PROGRAM_META.clone(),
-                AccountMeta::new(creator_vault_pda, false),
-                accounts::EVENT_AUTHORITY_META.clone(),
-                accounts::PUMPFUN_META.clone(),
-                accounts::GLOBAL_VOLUME_ACCUMULATOR_META.clone(),
-                AccountMeta::new(
-                    get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap(),
-                    false,
-                ),
-                accounts::FEE_CONFIG_META.clone(),
-                accounts::FEE_PROGRAM_META.clone(),
-            ],
+            accounts.to_vec(),
         ));
 
         Ok(instructions)
@@ -144,15 +132,9 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         } else {
             return Err(anyhow!("Amount token is required"));
         };
-        let creator_vault_pda = protocol_params.creator_vault;
         let ata = get_associated_token_address(&params.payer.pubkey(), &params.mint);
-
-        let mut creator = Pubkey::default();
-        if let Some(default_creator_ata) = get_creator_vault_pda(&creator) {
-            if default_creator_ata != creator_vault_pda {
-                creator = creator_vault_pda;
-            }
-        }
+        let creator_vault_pda = protocol_params.creator_vault;
+        let creator = get_creator(&creator_vault_pda);
 
         let sol_amount = get_sell_sol_amount_from_token_amount(
             bonding_curve.virtual_token_reserves as u128,
@@ -166,37 +148,36 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         );
 
         // Create sell instruction data
-        let mut sell_data = Vec::with_capacity(8 + 8 + 8);
-        sell_data.extend_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]); // discriminator
-        sell_data.extend_from_slice(&token_amount.to_le_bytes());
-        sell_data.extend_from_slice(&min_sol_output.to_le_bytes());
+        let mut sell_data = [0u8; 24];
+        sell_data[..8].copy_from_slice(&[51, 230, 133, 164, 1, 127, 131, 173]);
+        sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
+        sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
 
         let bonding_curve = get_bonding_curve_pda(&params.mint).unwrap();
 
+        let accounts: [AccountMeta; 14] = [
+            global_constants::GLOBAL_ACCOUNT_META,
+            global_constants::FEE_RECIPIENT_META,
+            AccountMeta::new_readonly(params.mint, false),
+            AccountMeta::new(bonding_curve, false),
+            AccountMeta::new(get_associated_token_address(&bonding_curve, &params.mint), false),
+            AccountMeta::new(
+                get_associated_token_address(&params.payer.pubkey(), &params.mint),
+                false,
+            ),
+            AccountMeta::new(params.payer.pubkey(), true),
+            crate::constants::SYSTEM_PROGRAM_META,
+            AccountMeta::new(creator_vault_pda, false),
+            crate::constants::TOKEN_PROGRAM_META,
+            accounts::EVENT_AUTHORITY_META,
+            accounts::PUMPFUN_META,
+            accounts::FEE_CONFIG_META,
+            accounts::FEE_PROGRAM_META,
+        ];
+
         // Create sell instruction
-        let mut instructions = vec![Instruction::new_with_bytes(
-            accounts::PUMPFUN,
-            &sell_data,
-            vec![
-                global_constants::GLOBAL_ACCOUNT_META.clone(),
-                global_constants::FEE_RECIPIENT_META.clone(),
-                AccountMeta::new_readonly(params.mint, false),
-                AccountMeta::new(bonding_curve, false),
-                AccountMeta::new(get_associated_token_address(&bonding_curve, &params.mint), false),
-                AccountMeta::new(
-                    get_associated_token_address(&params.payer.pubkey(), &params.mint),
-                    false,
-                ),
-                AccountMeta::new(params.payer.pubkey(), true),
-                crate::constants::SYSTEM_PROGRAM_META.clone(),
-                AccountMeta::new(creator_vault_pda, false),
-                crate::constants::TOKEN_PROGRAM_META.clone(),
-                accounts::EVENT_AUTHORITY_META.clone(),
-                accounts::PUMPFUN_META.clone(),
-                accounts::FEE_CONFIG_META.clone(),
-                accounts::FEE_PROGRAM_META.clone(),
-            ],
-        )];
+        let mut instructions =
+            vec![Instruction::new_with_bytes(accounts::PUMPFUN, &sell_data, accounts.to_vec())];
 
         // If selling all tokens, close the account
         if protocol_params.close_token_account_when_sell.unwrap_or(false) {

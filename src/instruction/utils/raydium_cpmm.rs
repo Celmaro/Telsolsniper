@@ -24,15 +24,19 @@ pub mod accounts {
     pub const PROTOCOL_FEE_RATE: u64 = 120000;
     pub const FUND_FEE_RATE: u64 = 40000;
     // META
-    pub const AUTHORITY_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(AUTHORITY, false)
-        });
+    pub const AUTHORITY_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: AUTHORITY,
+            is_signer: false,
+            is_writable: false,
+        };
 
-    pub const AMM_CONFIG_META: once_cell::sync::Lazy<solana_sdk::instruction::AccountMeta> =
-        once_cell::sync::Lazy::new(|| {
-            solana_sdk::instruction::AccountMeta::new_readonly(AMM_CONFIG, false)
-        });
+    pub const AMM_CONFIG_META: solana_sdk::instruction::AccountMeta =
+        solana_sdk::instruction::AccountMeta {
+            pubkey: AMM_CONFIG,
+            is_signer: false,
+            is_writable: false,
+        };
 }
 
 pub const SWAP_BASE_IN_DISCRIMINATOR: &[u8] = &[143, 190, 90, 218, 196, 30, 51, 222];

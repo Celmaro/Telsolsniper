@@ -93,9 +93,9 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
         // Create buy instruction
         let accounts = vec![
-            crate::constants::TOKEN_PROGRAM_META.clone(), // Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm
-            accounts::AUTHORITY_META.clone(),             // Authority (readonly)
+            accounts::AUTHORITY_META,             // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm Open Orders
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_coin, false), // Pool Coin Token Account
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_pc, false), // Pool Pc Token Account
@@ -187,9 +187,9 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
 
         // Create buy instruction
         let accounts = vec![
-            crate::constants::TOKEN_PROGRAM_META.clone(), // Token Program (readonly)
+            crate::constants::TOKEN_PROGRAM_META, // Token Program (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm
-            accounts::AUTHORITY_META.clone(),             // Authority (readonly)
+            accounts::AUTHORITY_META,             // Authority (readonly)
             solana_sdk::instruction::AccountMeta::new(protocol_params.amm, false), // Amm Open Orders
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_coin, false), // Pool Coin Token Account
             solana_sdk::instruction::AccountMeta::new(protocol_params.token_pc, false), // Pool Pc Token Account
