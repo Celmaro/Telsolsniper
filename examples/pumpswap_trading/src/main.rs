@@ -189,6 +189,7 @@ async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

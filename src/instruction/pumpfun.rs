@@ -93,15 +93,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
-        instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &params.mint,
-                &crate::constants::TOKEN_PROGRAM,
-                params.open_seed_optimize,
-            ),
-        );
+        if params.create_mint_ata {
+            instructions.extend(
+                crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                    params.open_seed_optimize,
+                ),
+            );
+        }
 
         let mut buy_data = [0u8; 24];
         buy_data[..8].copy_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // Method ID

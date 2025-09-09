@@ -122,6 +122,7 @@ async fn bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

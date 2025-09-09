@@ -115,6 +115,7 @@ async fn pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyR
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

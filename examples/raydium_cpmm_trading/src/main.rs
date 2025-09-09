@@ -164,6 +164,7 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

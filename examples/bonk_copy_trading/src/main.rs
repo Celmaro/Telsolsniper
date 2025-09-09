@@ -153,6 +153,7 @@ async fn bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult<()> 
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

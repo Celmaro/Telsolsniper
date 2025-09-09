@@ -37,6 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             true,
             true,
             true,
+            true,
             true, // ❗️❗️❗️❗️ open seed optimize
         )
         .await?;

@@ -70,15 +70,17 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
-        instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &params.mint,
-                &crate::constants::TOKEN_PROGRAM,
-                params.open_seed_optimize,
-            ),
-        );
+        if params.create_mint_ata {
+            instructions.extend(
+                crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                    params.open_seed_optimize,
+                ),
+            );
+        }
 
         // Create buy instruction
         let accounts: [AccountMeta; 17] = [

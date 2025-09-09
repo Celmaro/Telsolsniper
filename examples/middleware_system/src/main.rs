@@ -104,6 +104,7 @@ async fn test_middleware() -> AnyResult<()> {
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

@@ -124,15 +124,17 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), sol_amount));
         }
 
-        instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                if quote_mint_is_wsol { &base_mint } else { &quote_mint },
-                if quote_mint_is_wsol { &base_token_program } else { &quote_token_program },
-                params.open_seed_optimize,
-            ),
-        );
+        if params.create_mint_ata {
+            instructions.extend(
+                crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    if quote_mint_is_wsol { &base_mint } else { &quote_mint },
+                    if quote_mint_is_wsol { &base_token_program } else { &quote_token_program },
+                    params.open_seed_optimize,
+                ),
+            );
+        }
 
         // Create buy instruction
         let mut accounts = Vec::with_capacity(23);

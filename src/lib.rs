@@ -161,6 +161,7 @@ impl SolanaTrade {
         wait_transaction_confirmed: bool,
         create_wsol_ata: bool,
         close_wsol_ata: bool,
+        create_mint_ata: bool,
         open_seed_optimize: bool,
     ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
@@ -187,6 +188,7 @@ impl SolanaTrade {
             open_seed_optimize,
             create_wsol_ata,
             close_wsol_ata,
+            create_mint_ata,
             swqos_clients: self.swqos_clients.clone(),
             middleware_manager: self.middleware_manager.clone(),
         };

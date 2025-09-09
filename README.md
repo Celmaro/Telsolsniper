@@ -33,23 +33,30 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.6.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.6.2" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "0.6.1"
+sol-trade-sdk = "0.6.2"
 ```
 
 ## Usage Examples
 
 ### Important Parameter Description
+#### open_seed_optimize Parameter
 
-#### create_wsol_ata and close_wsol_ata Parameters
+`open_seed_optimize` is used to specify whether to use seed optimization to reduce transaction CU consumption.
 
-In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_ata` parameters provide fine-grained control over wSOL (Wrapped SOL) account management:
+- **Purpose**: When `open_seed_optimize: true`, the SDK uses createAccountWithSeed optimization to create token ata accounts during transactions.
+- **Note**: Transactions created with `open_seed_optimize` enabled must be sold through this SDK. Using official methods to sell may fail.
+- **Note**: After enabling `open_seed_optimize`, you need to use the `get_associated_token_address_with_program_id_fast_use_seed` method to get the token ata address.
+
+#### create_wsol_ata and close_wsol_ata、 create_mint_ata Parameters
+
+In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_ata`、 `create_mint_ata` parameters provide fine-grained control over wSOL (Wrapped SOL) account management:
 
 - **create_wsol_ata**:
   - When `create_wsol_ata: true`, the SDK automatically creates and wraps SOL to wSOL before trading
@@ -58,6 +65,9 @@ In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_at
 - **close_wsol_ata**:
   - When `close_wsol_ata: true`, the SDK automatically closes the wSOL account and unwraps to SOL after trading
   - When selling: automatically unwraps the received wSOL to SOL and reclaims rent
+
+- **create_mint_ata**:
+  - When `create_mint_ata: true`, the SDK automatically creates the token ata account before trading
 
 - **Benefits of Separate Parameters**:
   - Allows independent control of wSOL account creation and closure
@@ -114,6 +124,7 @@ Please ensure that the parameters your trading logic depends on are available in
 | Address Lookup | `address_lookup` | Address lookup table example | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
 | Nonce | `nonce_cache` | Nonce example | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
 | WSOL Wrapper | `wsol_wrapper` | Wrap/unwrap SOL to/from WSOL example | `cargo run --package wsol_wrapper` | [examples/wsol_wrapper](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/wsol_wrapper/src/main.rs) |
+| Seed Trading | `seed_trading` | Seed trading example | `cargo run --package seed_trading` | [examples/seed_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/seed_trading/src/main.rs) |
 
 ### SWQOS Service Configuration
 

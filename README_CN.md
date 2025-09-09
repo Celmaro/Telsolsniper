@@ -33,23 +33,31 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.6.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "0.6.2" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "0.6.1"
+sol-trade-sdk = "0.6.2"
 ```
 
 ## 使用示例
 
 ### 重要说明
 
-#### create_wsol_ata 和 close_wsol_ata 参数
+#### open_seed_optimize 参数
 
-在 PumpSwap、Bonk、Raydium 交易中，`create_wsol_ata` 和 `close_wsol_ata` 参数提供对 wSOL（Wrapped SOL）账户管理的精细控制：
+`open_seed_optimize` ，用于指定是否使用 seed 优化交易 CU 消耗。
+
+- **用途**：当 `open_seed_optimize: true` 时，SDK 会在交易时使用 createAccountWithSeed 优化来创建代币 ata 账户。
+- **注意**：开启 `open_seed_optimize` 后创建的交易，需要通过该 SDK 卖出，使用官网提供的方法卖出可能会失败。
+- **注意**：开启 `open_seed_optimize` 后，获取代币 ata 地址需要通过 `get_associated_token_address_with_program_id_fast_use_seed` 方法获取。
+
+#### create_wsol_ata 和 close_wsol_ata、 create_mint_ata 参数
+
+在 PumpSwap、Bonk、Raydium 交易中，`create_wsol_ata` 和 `close_wsol_ata`、 `create_mint_ata` 参数提供对 wSOL（Wrapped SOL）账户管理的精细控制：
 
 - **create_wsol_ata**：
   - 当 `create_wsol_ata: true` 时，SDK 会在交易前自动创建并将 SOL 包装为 wSOL
@@ -58,6 +66,9 @@ sol-trade-sdk = "0.6.1"
 - **close_wsol_ata**：
   - 当 `close_wsol_ata: true` 时，SDK 会在交易后自动关闭 wSOL 账户并解包装为 SOL
   - 卖出时：自动将获得的 wSOL 解包装为 SOL 并回收租金
+
+- **create_mint_ata**：
+  - 当 `create_mint_ata: true` 时，SDK 会在交易时创建代币ata账户
 
 - **分离参数的优势**：
   - 允许独立控制 wSOL 账户的创建和关闭
@@ -114,6 +125,7 @@ sol-trade-sdk = "0.6.1"
 | 地址查找表 | `address_lookup` | 地址查找表示例 | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
 | Nonce    | `nonce_cache` | Nonce示例 | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
 | WSOL 包装器 | `wsol_wrapper` | SOL与WSOL相互转换示例 | `cargo run --package wsol_wrapper` | [examples/wsol_wrapper](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/wsol_wrapper/src/main.rs) |
+| Seed 优化 | `seed_trading` | Seed 优化交易示例 | `cargo run --package seed_trading` | [examples/seed_trading](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/seed_trading/src/main.rs) |
 
 ### SWQOS 服务配置说明
 

@@ -96,15 +96,17 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
-        instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
-                &params.payer.pubkey(),
-                &params.payer.pubkey(),
-                &params.mint,
-                &protocol_params.mint_token_program,
-                params.open_seed_optimize,
-            ),
-        );
+        if params.create_mint_ata {
+            instructions.extend(
+                crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &params.mint,
+                    &protocol_params.mint_token_program,
+                    params.open_seed_optimize,
+                ),
+            );
+        }
 
         let mut data = [0u8; 32];
         data[..8].copy_from_slice(&BUY_EXECT_IN_DISCRIMINATOR);

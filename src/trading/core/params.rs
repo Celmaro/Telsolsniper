@@ -34,6 +34,7 @@ pub struct BuyParams {
     pub middleware_manager: Option<Arc<MiddlewareManager>>,
     pub create_wsol_ata: bool,
     pub close_wsol_ata: bool,
+    pub create_mint_ata: bool,
 }
 
 /// Sell parameters

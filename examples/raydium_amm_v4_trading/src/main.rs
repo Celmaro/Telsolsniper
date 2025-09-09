@@ -160,6 +160,7 @@ async fn raydium_amm_v4_copy_trade_with_grpc(trade_info: RaydiumAmmV4SwapEvent) 
             true,
             true,
             true,
+            true,
             false,
         )
         .await?;

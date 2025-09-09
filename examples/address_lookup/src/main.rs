@@ -171,6 +171,7 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             true,
             false,
             false,
+            true,
             false,
         )
         .await?;
