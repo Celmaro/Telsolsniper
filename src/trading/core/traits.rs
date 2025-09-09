@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{swqos::SwqosClient, trading::MiddlewareManager};
 use anyhow::Result;
-use solana_sdk::instruction::Instruction;
+use solana_sdk::{instruction::Instruction, signature::Signature};
 
 use super::params::{BuyParams, SellParams};
 
@@ -15,14 +15,14 @@ pub trait TradeExecutor: Send + Sync {
         params: BuyParams,
         swqos_clients: Vec<Arc<SwqosClient>>,
         middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()>;
+    ) -> Result<Signature>;
     /// 使用MEV服务执行卖出交易
     async fn sell_with_tip(
         &self,
         params: SellParams,
         swqos_clients: Vec<Arc<SwqosClient>>,
         middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()>;
+    ) -> Result<Signature>;
     /// 获取协议名称
     fn protocol_name(&self) -> &'static str;
 }
