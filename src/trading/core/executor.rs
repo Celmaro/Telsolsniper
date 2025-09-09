@@ -1,4 +1,5 @@
 use anyhow::Result;
+use solana_sdk::signature::Signature;
 use std::{sync::Arc, time::Instant};
 
 use super::{
@@ -32,7 +33,7 @@ impl TradeExecutor for GenericTradeExecutor {
         params: BuyParams,
         swqos_clients: Vec<Arc<SwqosClient>>,
         middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()> {
+    ) -> Result<Signature> {
         let mut data_size_limit = params.data_size_limit;
         if data_size_limit == 0 {
             data_size_limit = MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
@@ -55,7 +56,7 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building buy transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        parallel_execute_with_tips(
+        let sig = parallel_execute_with_tips(
             swqos_clients,
             params.payer,
             final_instructions,
@@ -71,7 +72,7 @@ impl TradeExecutor for GenericTradeExecutor {
         )
         .await?;
 
-        Ok(())
+        Ok(sig)
     }
 
     async fn sell_with_tip(
@@ -79,7 +80,7 @@ impl TradeExecutor for GenericTradeExecutor {
         params: SellParams,
         swqos_clients: Vec<Arc<SwqosClient>>,
         middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()> {
+    ) -> Result<Signature> {
         let start = Instant::now();
 
         // Build instructions directly from params to avoid unnecessary cloning
@@ -97,7 +98,7 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building sell transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        parallel_execute_with_tips(
+        let sig = parallel_execute_with_tips(
             swqos_clients,
             params.payer,
             final_instructions,
@@ -113,7 +114,7 @@ impl TradeExecutor for GenericTradeExecutor {
         )
         .await?;
 
-        Ok(())
+        Ok(sig)
     }
 
     fn protocol_name(&self) -> &'static str {

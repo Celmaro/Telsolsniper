@@ -5,6 +5,7 @@ pub mod protos;
 pub mod swqos;
 pub mod trading;
 pub mod utils;
+// use solana_program::example_mocks::solana_signature::Signature;
 use solana_sdk::signer::Signer;
 pub use solana_streamer_sdk;
 
@@ -22,10 +23,10 @@ use crate::trading::MiddlewareManager;
 use crate::trading::SellParams;
 use crate::trading::TradeFactory;
 use common::{PriorityFee, SolanaRpcClient, TradeConfig};
+use parking_lot::Mutex;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use solana_sdk::hash::Hash;
-use solana_sdk::{pubkey::Pubkey, signature::Keypair};
-use parking_lot::Mutex;
+use solana_sdk::{pubkey::Pubkey, signature::Keypair, signature::Signature};
 use std::sync::Arc;
 use swqos::SwqosClient;
 
@@ -157,7 +158,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
                 "slippage_basis_points is none, use default slippage basis points: {}",
@@ -205,9 +206,10 @@ impl SolanaTrade {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
-        executor
+        let sig = executor
             .buy_with_tip(buy_params, self.swqos_clients.clone(), self.middleware_manager.clone())
-            .await
+            .await;
+        sig
     }
 
     /// Execute a sell order for a specified token
@@ -249,7 +251,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
                 "slippage_basis_points is none, use default slippage basis points: {}",
@@ -301,7 +303,10 @@ impl SolanaTrade {
             if !with_tip { self.rpc_client.clone() } else { self.swqos_clients.clone() };
 
         // Execute sell based on tip preference
-        executor.sell_with_tip(sell_params, _swqos_clients, self.middleware_manager.clone()).await
+        let sig = executor
+            .sell_with_tip(sell_params, _swqos_clients, self.middleware_manager.clone())
+            .await;
+        sig
     }
 
     /// Execute a sell order for a percentage of the specified token amount
@@ -349,23 +354,25 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
         }
         let amount = amount_token * percent / 100;
-        self.sell(
-            dex_type,
-            mint,
-            amount,
-            slippage_basis_points,
-            recent_blockhash,
-            custom_priority_fee,
-            with_tip,
-            extension_params,
-            lookup_table_key,
-            wait_transaction_confirmed,
-        )
-        .await
+        let sig = self
+            .sell(
+                dex_type,
+                mint,
+                amount,
+                slippage_basis_points,
+                recent_blockhash,
+                custom_priority_fee,
+                with_tip,
+                extension_params,
+                lookup_table_key,
+                wait_transaction_confirmed,
+            )
+            .await;
+        sig
     }
 }
