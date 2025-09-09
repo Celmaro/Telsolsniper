@@ -47,7 +47,7 @@ sol-trade-sdk = "0.6.2"
 
 ### 重要说明
 
-#### open_seed_optimize 参数
+#### 🌱 open_seed_optimize 参数
 
 `open_seed_optimize` ，用于指定是否使用 seed 优化交易 CU 消耗。
 
@@ -55,7 +55,7 @@ sol-trade-sdk = "0.6.2"
 - **注意**：开启 `open_seed_optimize` 后创建的交易，需要通过该 SDK 卖出，使用官网提供的方法卖出可能会失败。
 - **注意**：开启 `open_seed_optimize` 后，获取代币 ata 地址需要通过 `get_associated_token_address_with_program_id_fast_use_seed` 方法获取。
 
-#### create_wsol_ata 和 close_wsol_ata、 create_mint_ata 参数
+#### 💰 create_wsol_ata 和 close_wsol_ata、 create_mint_ata 参数
 
 在 PumpSwap、Bonk、Raydium 交易中，`create_wsol_ata` 和 `close_wsol_ata`、 `create_mint_ata` 参数提供对 wSOL（Wrapped SOL）账户管理的精细控制：
 
@@ -75,7 +75,7 @@ sol-trade-sdk = "0.6.2"
   - 适用于批量操作，可以创建一次，在多次交易后再关闭
   - 为高级交易策略提供灵活性
 
-#### lookup_table_key 参数
+#### 🔍 lookup_table_key 参数
 
 `lookup_table_key` 参数是一个可选的 `Pubkey`，用于指定地址查找表以优化交易。在使用前你需要通过`AddressLookupTableCache`来管理缓存地址查找表。
 
@@ -89,7 +89,7 @@ sol-trade-sdk = "0.6.2"
   - 提高交易成功率和速度
   - 特别适用于具有许多账户引用的复杂交易
 
-#### priority_fee 参数
+#### ⚡ priority_fee 参数
 
 `priority_fee` 参数是一个可选的 `PriorityFee`，允许您为单个交易覆盖默认的优先级费用设置：
 

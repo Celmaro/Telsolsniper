@@ -46,7 +46,7 @@ sol-trade-sdk = "0.6.2"
 ## Usage Examples
 
 ### Important Parameter Description
-#### open_seed_optimize Parameter
+#### 🌱 open_seed_optimize Parameter
 
 `open_seed_optimize` is used to specify whether to use seed optimization to reduce transaction CU consumption.
 
@@ -54,7 +54,7 @@ sol-trade-sdk = "0.6.2"
 - **Note**: Transactions created with `open_seed_optimize` enabled must be sold through this SDK. Using official methods to sell may fail.
 - **Note**: After enabling `open_seed_optimize`, you need to use the `get_associated_token_address_with_program_id_fast_use_seed` method to get the token ata address.
 
-#### create_wsol_ata and close_wsol_ata、 create_mint_ata Parameters
+#### 💰 create_wsol_ata and close_wsol_ata、 create_mint_ata Parameters
 
 In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_ata`、 `create_mint_ata` parameters provide fine-grained control over wSOL (Wrapped SOL) account management:
 
@@ -74,7 +74,7 @@ In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_at
   - Useful for batch operations where you want to create once and close after multiple transactions
   - Provides flexibility for advanced trading strategies
 
-#### lookup_table_key Parameter
+#### 🔍 lookup_table_key Parameter
 
 The `lookup_table_key` parameter is an optional `Pubkey` that specifies an address lookup table for transaction optimization. You need to use `AddressLookupTableCache` to manage the cached address lookup table before using it.
 
@@ -88,7 +88,7 @@ The `lookup_table_key` parameter is an optional `Pubkey` that specifies an addre
   - Improves transaction success rate and speed
   - Particularly useful for complex transactions with many account references
 
-#### priority_fee Parameter
+#### ⚡ priority_fee Parameter
 
 The `priority_fee` parameter is an optional `PriorityFee` that allows you to override the default priority fee settings for individual transactions:
 
