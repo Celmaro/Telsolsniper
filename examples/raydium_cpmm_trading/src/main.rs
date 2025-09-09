@@ -123,7 +123,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: priority_fee,
         swqos_configs,
-        lookup_table_key: None,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -163,6 +162,10 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
             Box::new(buy_params),
             None,
             true,
+            true,
+            true,
+            true,
+            false,
         )
         .await?;
 
@@ -192,6 +195,9 @@ async fn raydium_cpmm_copy_trade_with_grpc(trade_info: RaydiumCpmmSwapEvent) -> 
             Box::new(sell_params),
             None,
             true,
+            true,
+            true,
+            false,
         )
         .await?;
 

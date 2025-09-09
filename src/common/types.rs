@@ -9,7 +9,7 @@ use crate::{
 };
 use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Keypair};
+use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
 
 #[derive(Debug, Clone)]
 pub struct TradeConfig {
@@ -17,7 +17,6 @@ pub struct TradeConfig {
     pub swqos_configs: Vec<SwqosConfig>,
     pub priority_fee: PriorityFee,
     pub commitment: CommitmentConfig,
-    pub lookup_table_key: Option<Pubkey>,
 }
 
 impl TradeConfig {
@@ -26,9 +25,8 @@ impl TradeConfig {
         swqos_configs: Vec<SwqosConfig>,
         priority_fee: PriorityFee,
         commitment: CommitmentConfig,
-        lookup_table_key: Option<Pubkey>,
     ) -> Self {
-        Self { rpc_url, swqos_configs, priority_fee, commitment, lookup_table_key }
+        Self { rpc_url, swqos_configs, priority_fee, commitment }
     }
 }
 

@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use solana_hash::Hash;
-use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signature::Keypair};
+use solana_sdk::{
+    instruction::Instruction, pubkey::Pubkey, signature::Keypair, signature::Signature,
+};
 use std::{str::FromStr, sync::Arc, time::Instant};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -8,11 +10,55 @@ use tokio::task::JoinHandle;
 use crate::{
     common::PriorityFee,
     swqos::{SwqosClient, SwqosType, TradeType},
-    trading::{common::build_transaction, MiddlewareManager},
+    trading::{common::build_transaction, BuyParams, MiddlewareManager, SellParams},
 };
 
+pub async fn buy_parallel_execute(
+    params: BuyParams,
+    instructions: Vec<Instruction>,
+    protocol_name: &'static str,
+) -> Result<Signature> {
+    parallel_execute(
+        params.swqos_clients,
+        params.payer,
+        instructions,
+        params.priority_fee,
+        params.lookup_table_key,
+        params.recent_blockhash,
+        params.data_size_limit,
+        params.middleware_manager,
+        protocol_name,
+        true,
+        params.wait_transaction_confirmed,
+        true,
+    )
+    .await
+}
+
+pub async fn sell_parallel_execute(
+    params: SellParams,
+    instructions: Vec<Instruction>,
+    protocol_name: &'static str,
+) -> Result<Signature> {
+    parallel_execute(
+        params.swqos_clients,
+        params.payer,
+        instructions,
+        params.priority_fee,
+        params.lookup_table_key,
+        params.recent_blockhash,
+        0,
+        params.middleware_manager,
+        protocol_name,
+        false,
+        params.wait_transaction_confirmed,
+        params.with_tip,
+    )
+    .await
+}
+
 /// Generic function for parallel transaction execution
-pub async fn parallel_execute_with_tips(
+async fn parallel_execute(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     instructions: Vec<Instruction>,
@@ -25,9 +71,9 @@ pub async fn parallel_execute_with_tips(
     is_buy: bool,
     wait_transaction_confirmed: bool,
     with_tip: bool,
-) -> Result<()> {
+) -> Result<Signature> {
     let cores = core_affinity::get_core_ids().unwrap();
-    let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(swqos_clients.len());
+    let mut handles: Vec<JoinHandle<Result<Signature>>> = Vec::with_capacity(swqos_clients.len());
     if is_buy
         && (swqos_clients.len() > priority_fee.buy_tip_fees.len()
             || priority_fee.buy_tip_fees.is_empty())
@@ -103,7 +149,11 @@ pub async fn parallel_execute_with_tips(
                 start.elapsed()
             );
 
-            Ok::<(), anyhow::Error>(())
+            transaction
+                .signatures
+                .first()
+                .ok_or_else(|| anyhow!("Transaction has no signatures"))
+                .cloned()
         });
 
         handles.push(handle);
@@ -125,13 +175,20 @@ pub async fn parallel_execute_with_tips(
     let mut errors = Vec::new();
 
     if !wait_transaction_confirmed {
-        return Ok(());
+        if let Some(result) = rx.recv().await {
+            match result {
+                Ok(Ok(sig)) => return Ok(sig),
+                Ok(Err(e)) => errors.push(format!("Task error: {}", e)),
+                Err(e) => errors.push(format!("Join error: {}", e)),
+            }
+        }
+        return Err(anyhow!("No transaction signature available"));
     }
 
     while let Some(result) = rx.recv().await {
         match result {
-            Ok(Ok(_)) => {
-                return Ok(());
+            Ok(Ok(sig)) => {
+                return Ok(sig);
             }
             Ok(Err(e)) => errors.push(format!("Task error: {}", e)),
             Err(e) => errors.push(format!("Join error: {}", e)),

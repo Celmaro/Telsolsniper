@@ -72,7 +72,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: PriorityFee::default(),
         swqos_configs,
-        lookup_table_key: None,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -103,6 +102,10 @@ async fn test_middleware() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
+            true,
+            true,
+            true,
+            false,
         )
         .await?;
     println!("tip: This transaction will not succeed because we're using a test account. You can modify the code to initialize the payer with your own private key");

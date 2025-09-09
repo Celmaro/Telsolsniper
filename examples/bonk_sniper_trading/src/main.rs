@@ -88,7 +88,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: priority_fee,
         swqos_configs,
-        lookup_table_key: None,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -121,6 +120,10 @@ async fn bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<
             Box::new(BonkParams::from_dev_trade(trade_info.clone())),
             None,
             true,
+            true,
+            true,
+            true,
+            false,
         )
         .await?;
 
@@ -152,6 +155,9 @@ async fn bonk_sniper_trade_with_shreds(trade_info: BonkTradeEvent) -> AnyResult<
             )),
             None,
             true,
+            true,
+            true,
+            false,
         )
         .await?;
 

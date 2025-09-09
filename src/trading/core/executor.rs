@@ -1,14 +1,13 @@
 use anyhow::Result;
+use solana_sdk::signature::Signature;
 use std::{sync::Arc, time::Instant};
 
+use crate::trading::core::parallel::{buy_parallel_execute, sell_parallel_execute};
+
 use super::{
-    parallel::parallel_execute_with_tips,
     params::{BuyParams, SellParams},
     traits::{InstructionBuilder, TradeExecutor},
 };
-use crate::{swqos::SwqosClient, trading::middleware::MiddlewareManager};
-
-const MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT: u32 = 256 * 1024;
 
 /// Generic trade executor implementation
 pub struct GenericTradeExecutor {
@@ -27,22 +26,12 @@ impl GenericTradeExecutor {
 
 #[async_trait::async_trait]
 impl TradeExecutor for GenericTradeExecutor {
-    async fn buy_with_tip(
-        &self,
-        params: BuyParams,
-        swqos_clients: Vec<Arc<SwqosClient>>,
-        middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()> {
-        let mut data_size_limit = params.data_size_limit;
-        if data_size_limit == 0 {
-            data_size_limit = MAX_LOADED_ACCOUNTS_DATA_SIZE_LIMIT;
-        }
-
+    async fn buy_with_tip(&self, params: BuyParams) -> Result<Signature> {
         let start = Instant::now();
 
         // Build instructions directly from params to avoid unnecessary cloning
         let instructions = self.instruction_builder.build_buy_instructions(&params).await?;
-        let final_instructions = match &middleware_manager {
+        let final_instructions = match &params.middleware_manager {
             Some(middleware_manager) => middleware_manager
                 .apply_middlewares_process_protocol_instructions(
                     instructions,
@@ -55,36 +44,15 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building buy transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        parallel_execute_with_tips(
-            swqos_clients,
-            params.payer,
-            final_instructions,
-            Arc::new(params.priority_fee),
-            params.lookup_table_key,
-            params.recent_blockhash,
-            data_size_limit,
-            middleware_manager,
-            self.protocol_name,
-            true,
-            params.wait_transaction_confirmed,
-            true,
-        )
-        .await?;
-
-        Ok(())
+        buy_parallel_execute(params, final_instructions, self.protocol_name).await
     }
 
-    async fn sell_with_tip(
-        &self,
-        params: SellParams,
-        swqos_clients: Vec<Arc<SwqosClient>>,
-        middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()> {
+    async fn sell_with_tip(&self, params: SellParams) -> Result<Signature> {
         let start = Instant::now();
 
         // Build instructions directly from params to avoid unnecessary cloning
         let instructions = self.instruction_builder.build_sell_instructions(&params).await?;
-        let final_instructions = match &middleware_manager {
+        let final_instructions = match &params.middleware_manager {
             Some(middleware_manager) => middleware_manager
                 .apply_middlewares_process_protocol_instructions(
                     instructions,
@@ -97,23 +65,7 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building sell transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        parallel_execute_with_tips(
-            swqos_clients,
-            params.payer,
-            final_instructions,
-            Arc::new(params.priority_fee),
-            params.lookup_table_key,
-            params.recent_blockhash,
-            0,
-            middleware_manager,
-            self.protocol_name,
-            false,
-            params.wait_transaction_confirmed,
-            params.with_tip,
-        )
-        .await?;
-
-        Ok(())
+        sell_parallel_execute(params, final_instructions, self.protocol_name).await
     }
 
     fn protocol_name(&self) -> &'static str {

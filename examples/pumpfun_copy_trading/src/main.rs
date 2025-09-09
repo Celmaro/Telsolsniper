@@ -113,7 +113,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: priority_fee,
         swqos_configs,
-        lookup_table_key: None,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -146,6 +145,10 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
             None,
             true,
+            false,
+            false,
+            true,
+            false,
         )
         .await?;
 
@@ -172,6 +175,9 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             Box::new(PumpFunParams::from_trade(&trade_info, Some(true))),
             None,
             true,
+            false,
+            false,
+            false,
         )
         .await?;
 

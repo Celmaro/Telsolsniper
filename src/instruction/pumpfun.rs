@@ -76,13 +76,16 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                 protocol_params.associated_bonding_curve
             };
 
-        let user_token_account = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-            &params.payer.pubkey(),
-            &params.mint,
-            &crate::constants::TOKEN_PROGRAM,
-        );
+        let user_token_account =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
+                &params.payer.pubkey(),
+                &params.mint,
+                &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
+            );
 
-        let user_volume_accumulator = get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap();
+        let user_volume_accumulator =
+            get_user_volume_accumulator_pda(&params.payer.pubkey()).unwrap();
 
         // ========================================
         // Build instructions
@@ -90,12 +93,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
-        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-            &params.payer.pubkey(),
-            &params.payer.pubkey(),
-            &params.mint,
-            &crate::constants::TOKEN_PROGRAM,
-        ));
+        if params.create_mint_ata {
+            instructions.extend(
+                crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
+                    &params.payer.pubkey(),
+                    &params.payer.pubkey(),
+                    &params.mint,
+                    &crate::constants::TOKEN_PROGRAM,
+                    params.open_seed_optimize,
+                ),
+            );
+        }
 
         let mut buy_data = [0u8; 24];
         buy_data[..8].copy_from_slice(&[102, 6, 61, 18, 1, 218, 235, 234]); // Method ID
@@ -185,11 +193,13 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
                 protocol_params.associated_bonding_curve
             };
 
-        let user_token_account = crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
-            &params.payer.pubkey(),
-            &params.mint,
-            &crate::constants::TOKEN_PROGRAM,
-        );
+        let user_token_account =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
+                &params.payer.pubkey(),
+                &params.mint,
+                &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
+            );
 
         // ========================================
         // Build instructions
