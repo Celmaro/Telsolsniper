@@ -16,7 +16,6 @@ pub mod seeds {
 pub mod accounts {
     use solana_sdk::{pubkey, pubkey::Pubkey};
     pub const AUTHORITY: Pubkey = pubkey!("GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL");
-    pub const AMM_CONFIG: Pubkey = pubkey!("D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2");
     pub const RAYDIUM_CPMM: Pubkey = pubkey!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
     pub const FEE_RATE_DENOMINATOR_VALUE: u128 = 1_000_000;
     pub const TRADE_FEE_RATE: u64 = 2500;
@@ -27,13 +26,6 @@ pub mod accounts {
     pub const AUTHORITY_META: solana_sdk::instruction::AccountMeta =
         solana_sdk::instruction::AccountMeta {
             pubkey: AUTHORITY,
-            is_signer: false,
-            is_writable: false,
-        };
-
-    pub const AMM_CONFIG_META: solana_sdk::instruction::AccountMeta =
-        solana_sdk::instruction::AccountMeta {
-            pubkey: AMM_CONFIG,
             is_signer: false,
             is_writable: false,
         };
@@ -93,11 +85,15 @@ pub async fn get_pool_token_balances(
     let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
 
     // Parse balance string to u64
-    let token0_amount =
-        token0_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
+    let token0_amount = token0_balance
+        .amount
+        .parse::<u64>()
+        .map_err(|e| anyhow!("Failed to parse token0 balance: {}", e))?;
 
-    let token1_amount =
-        token1_balance.amount.parse::<u64>().map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
+    let token1_amount = token1_balance
+        .amount
+        .parse::<u64>()
+        .map_err(|e| anyhow!("Failed to parse token1 balance: {}", e))?;
 
     Ok((token0_amount, token1_amount))
 }

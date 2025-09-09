@@ -46,16 +46,18 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         let minimum_amount_out = swap_result.min_amount_out;
 
         let user_source_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
         let user_destination_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.mint,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
 
         // ========================================
@@ -69,11 +71,12 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         }
 
         instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &params.mint,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             ),
         );
 
@@ -145,16 +148,18 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         let minimum_amount_out = swap_result.min_amount_out;
 
         let user_source_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.mint,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
         let user_destination_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
 
         // ========================================

@@ -1,5 +1,5 @@
 use crate::{
-    common::fast_fn::get_associated_token_address_with_program_id_fast,
+    common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed,
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::raydium_cpmm::{
         accounts, get_observation_state_pda, get_pool_pda, get_vault_account,
@@ -38,7 +38,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         let pool_state = if protocol_params.pool_state == Pubkey::default() {
             get_pool_pda(
-                &accounts::AMM_CONFIG,
+                &protocol_params.amm_config,
                 &protocol_params.base_mint,
                 &protocol_params.quote_mint,
             )
@@ -67,15 +67,17 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         );
         let minimum_amount_out = result.min_amount_out;
 
-        let wsol_token_account = get_associated_token_address_with_program_id_fast(
+        let wsol_token_account = get_associated_token_address_with_program_id_fast_use_seed(
             &params.payer.pubkey(),
             &crate::constants::WSOL_TOKEN_ACCOUNT,
             &crate::constants::TOKEN_PROGRAM,
+            params.open_seed_optimize,
         );
-        let mint_token_account = get_associated_token_address_with_program_id_fast(
+        let mint_token_account = get_associated_token_address_with_program_id_fast_use_seed(
             &params.payer.pubkey(),
             &params.mint,
             &mint_token_program,
+            params.open_seed_optimize,
         );
 
         let wsol_vault_account = get_vault_account(
@@ -104,11 +106,12 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         }
 
         instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &params.mint,
                 &mint_token_program,
+                params.open_seed_optimize,
             ),
         );
 
@@ -116,7 +119,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         let accounts: [AccountMeta; 13] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
-            accounts::AMM_CONFIG_META,                     // Amm Config (readonly)
+            AccountMeta::new(protocol_params.amm_config, false), // Amm Config (readonly)
             AccountMeta::new(pool_state, false),           // Pool State
             AccountMeta::new(wsol_token_account, false),   // Input Token Account
             AccountMeta::new(mint_token_account, false),   // Output Token Account
@@ -164,7 +167,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         let pool_state = if protocol_params.pool_state == Pubkey::default() {
             get_pool_pda(
-                &accounts::AMM_CONFIG,
+                &protocol_params.amm_config,
                 &protocol_params.base_mint,
                 &protocol_params.quote_mint,
             )
@@ -192,15 +195,17 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         )
         .min_amount_out;
 
-        let wsol_token_account = get_associated_token_address_with_program_id_fast(
+        let wsol_token_account = get_associated_token_address_with_program_id_fast_use_seed(
             &params.payer.pubkey(),
             &crate::constants::WSOL_TOKEN_ACCOUNT,
             &crate::constants::TOKEN_PROGRAM,
+            params.open_seed_optimize,
         );
-        let mint_token_account = get_associated_token_address_with_program_id_fast(
+        let mint_token_account = get_associated_token_address_with_program_id_fast_use_seed(
             &params.payer.pubkey(),
             &params.mint,
             &mint_token_program,
+            params.open_seed_optimize,
         );
 
         let wsol_vault_account = get_vault_account(
@@ -231,7 +236,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         let accounts: [AccountMeta; 13] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
-            accounts::AMM_CONFIG_META,                     // Amm Config (readonly)
+            AccountMeta::new(protocol_params.amm_config, false), // Amm Config (readonly)
             AccountMeta::new(pool_state, false),           // Pool State
             AccountMeta::new(mint_token_account, false),   // Input Token Account
             AccountMeta::new(wsol_token_account, false),   // Output Token Account

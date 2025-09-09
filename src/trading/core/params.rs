@@ -422,6 +422,8 @@ impl ProtocolParams for BonkParams {
 pub struct RaydiumCpmmParams {
     /// Pool address
     pub pool_state: Pubkey,
+    /// Amm config address
+    pub amm_config: Pubkey,
     /// Base token mint address
     pub base_mint: Pubkey,
     /// Quote token mint address
@@ -452,6 +454,7 @@ impl RaydiumCpmmParams {
     ) -> Self {
         Self {
             pool_state: trade_info.pool_state,
+            amm_config: trade_info.amm_config,
             base_mint: trade_info.input_token_mint,
             quote_mint: trade_info.output_token_mint,
             base_reserve: base_reserve,
@@ -482,6 +485,7 @@ impl RaydiumCpmmParams {
             .await?;
         Ok(Self {
             pool_state: pool_address.clone(),
+            amm_config: pool.amm_config,
             base_mint: pool.token0_mint,
             quote_mint: pool.token1_mint,
             base_reserve: token0_balance,
