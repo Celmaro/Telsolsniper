@@ -47,15 +47,24 @@ sol-trade-sdk = "0.6.1"
 
 ### Important Parameter Description
 
-#### auto_handle_wsol Parameter
+#### create_wsol_ata and close_wsol_ata Parameters
 
-In PumpSwap, Bonk, and Raydium CPMM trading, the `auto_handle_wsol` parameter is used to automatically handle wSOL (Wrapped SOL):
+In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_ata` parameters provide fine-grained control over wSOL (Wrapped SOL) account management:
 
-- **Mechanism**:
-  - When `auto_handle_wsol: true`, the SDK automatically handles the conversion between SOL and wSOL
+- **create_wsol_ata**:
+  - When `create_wsol_ata: true`, the SDK automatically creates and wraps SOL to wSOL before trading
   - When buying: automatically wraps SOL to wSOL for trading
-  - When selling: automatically unwraps the received wSOL to SOL
   - Default value is `true`
+
+- **close_wsol_ata**:
+  - When `close_wsol_ata: true`, the SDK automatically closes the wSOL account and unwraps to SOL after trading
+  - When selling: automatically unwraps the received wSOL to SOL and reclaims rent
+  - Default value is `true`
+
+- **Benefits of Separate Parameters**:
+  - Allows independent control of wSOL account creation and closure
+  - Useful for batch operations where you want to create once and close after multiple transactions
+  - Provides flexibility for advanced trading strategies
 
 #### lookup_table_key Parameter
 

@@ -46,7 +46,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
         let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
         let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
-        let auto_handle_wsol = protocol_params.auto_handle_wsol;
+        let create_wsol_ata = protocol_params.create_wsol_ata;
+        let close_wsol_ata = protocol_params.close_wsol_ata;
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
         let pool_base_token_account = protocol_params.pool_base_token_account;
@@ -118,7 +119,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(6);
 
-        if auto_handle_wsol {
+        if create_wsol_ata {
             instructions
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), sol_amount));
         }
@@ -187,7 +188,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             accounts,
             data: data.to_vec(),
         });
-        if auto_handle_wsol {
+        if close_wsol_ata {
             // Close wSOL ATA account, reclaim rent
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
@@ -213,7 +214,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_quote_token_account = protocol_params.pool_quote_token_account;
         let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
         let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
-        let auto_handle_wsol = protocol_params.auto_handle_wsol;
+        let create_wsol_ata = protocol_params.create_wsol_ata;
+        let close_wsol_ata = protocol_params.close_wsol_ata;
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
 
@@ -286,7 +288,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        if auto_handle_wsol {
+        if create_wsol_ata {
             instructions.extend(wsol_manager::create_wsol_ata(&params.payer.pubkey()));
         }
 
@@ -346,7 +348,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             data: data.to_vec(),
         });
 
-        if auto_handle_wsol {
+        if close_wsol_ata {
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
         Ok(instructions)

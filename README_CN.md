@@ -47,15 +47,24 @@ sol-trade-sdk = "0.6.1"
 
 ### 重要说明
 
-#### auto_handle_wsol 参数
+#### create_wsol_ata 和 close_wsol_ata 参数
 
-在 PumpSwap、Bonk、Raydium CPMM 交易中，`auto_handle_wsol` 参数用于自动处理 wSOL（Wrapped SOL）：
+在 PumpSwap、Bonk、Raydium 交易中，`create_wsol_ata` 和 `close_wsol_ata` 参数提供对 wSOL（Wrapped SOL）账户管理的精细控制：
 
-- **作用机制**：
-  - 当 `auto_handle_wsol: true` 时，SDK 会自动处理 SOL 与 wSOL 之间的转换
+- **create_wsol_ata**：
+  - 当 `create_wsol_ata: true` 时，SDK 会在交易前自动创建并将 SOL 包装为 wSOL
   - 买入时：自动将 SOL 包装为 wSOL 进行交易
-  - 卖出时：自动将获得的 wSOL 解包装为 SOL
   - 默认值为 `true`
+
+- **close_wsol_ata**：
+  - 当 `close_wsol_ata: true` 时，SDK 会在交易后自动关闭 wSOL 账户并解包装为 SOL
+  - 卖出时：自动将获得的 wSOL 解包装为 SOL 并回收租金
+  - 默认值为 `true`
+
+- **分离参数的优势**：
+  - 允许独立控制 wSOL 账户的创建和关闭
+  - 适用于批量操作，可以创建一次，在多次交易后再关闭
+  - 为高级交易策略提供灵活性
 
 #### lookup_table_key 参数
 

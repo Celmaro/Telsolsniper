@@ -61,16 +61,18 @@ impl InstructionBuilder for BonkInstructionBuilder {
         );
 
         let user_base_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.mint,
                 &protocol_params.mint_token_program,
+                params.open_seed_optimize,
             );
         let user_quote_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
 
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
@@ -89,17 +91,18 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(6);
 
-        if protocol_params.auto_handle_wsol {
+        if protocol_params.create_wsol_ata {
             instructions
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
         instructions.extend(
-            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.payer.pubkey(),
                 &params.mint,
                 &protocol_params.mint_token_program,
+                params.open_seed_optimize,
             ),
         );
 
@@ -132,7 +135,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 
-        if protocol_params.auto_handle_wsol {
+        if protocol_params.close_wsol_ata {
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
@@ -187,16 +190,18 @@ impl InstructionBuilder for BonkInstructionBuilder {
         );
 
         let user_base_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &params.mint,
                 &protocol_params.mint_token_program,
+                params.open_seed_optimize,
             );
         let user_quote_token_account =
-            crate::common::fast_fn::get_associated_token_address_with_program_id_fast(
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &crate::constants::WSOL_TOKEN_ACCOUNT,
                 &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
             );
 
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
@@ -215,7 +220,9 @@ impl InstructionBuilder for BonkInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        instructions.extend(crate::trading::common::create_wsol_ata(&params.payer.pubkey()));
+        if protocol_params.create_wsol_ata {
+            instructions.extend(crate::trading::common::create_wsol_ata(&params.payer.pubkey()));
+        }
 
         let mut data = [0u8; 32];
         data[..8].copy_from_slice(&SELL_EXECT_IN_DISCRIMINATOR);
@@ -246,7 +253,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
 
-        if protocol_params.auto_handle_wsol {
+        if protocol_params.close_wsol_ata {
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 

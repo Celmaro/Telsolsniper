@@ -150,9 +150,8 @@ pub struct PumpSwapParams {
     pub base_token_program: Pubkey,
     /// Quote token program ID
     pub quote_token_program: Pubkey,
-    /// Automatically handle WSOL wrapping
-    /// When true, automatically handles wrapping and unwrapping operations between SOL and WSOL
-    pub auto_handle_wsol: bool,
+    pub create_wsol_ata: bool,
+    pub close_wsol_ata: bool,
 }
 
 impl PumpSwapParams {
@@ -169,7 +168,8 @@ impl PumpSwapParams {
             coin_creator_vault_authority: event.coin_creator_vault_authority,
             base_token_program: event.base_token_program,
             quote_token_program: event.quote_token_program,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
 
@@ -186,7 +186,8 @@ impl PumpSwapParams {
             coin_creator_vault_authority: event.coin_creator_vault_authority,
             base_token_program: event.base_token_program,
             quote_token_program: event.quote_token_program,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
 
@@ -238,7 +239,8 @@ impl PumpSwapParams {
             } else {
                 crate::constants::TOKEN_PROGRAM_2022
             },
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         })
     }
 }
@@ -270,7 +272,8 @@ pub struct BonkParams {
     pub platform_config: Pubkey,
     pub platform_associated_account: Pubkey,
     pub creator_associated_account: Pubkey,
-    pub auto_handle_wsol: bool,
+    pub create_wsol_ata: bool,
+    pub close_wsol_ata: bool,
 }
 
 impl BonkParams {
@@ -281,7 +284,8 @@ impl BonkParams {
         creator_associated_account: Pubkey,
     ) -> Self {
         Self {
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
             mint_token_program,
             platform_config,
             platform_associated_account,
@@ -302,7 +306,8 @@ impl BonkParams {
             platform_config: trade_info.platform_config,
             platform_associated_account: trade_info.platform_associated_account,
             creator_associated_account: trade_info.creator_associated_account,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
 
@@ -358,7 +363,8 @@ impl BonkParams {
             platform_config: trade_info.platform_config,
             platform_associated_account: trade_info.platform_associated_account,
             creator_associated_account: trade_info.creator_associated_account,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
 
@@ -394,7 +400,8 @@ impl BonkParams {
             platform_config: pool_data.platform_config,
             platform_associated_account,
             creator_associated_account,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         })
     }
 }
@@ -433,8 +440,8 @@ pub struct RaydiumCpmmParams {
     pub quote_token_program: Pubkey,
     /// Observation state account
     pub observation_state: Pubkey,
-    /// Whether to automatically handle wSOL wrapping and unwrapping
-    pub auto_handle_wsol: bool,
+    pub create_wsol_ata: bool,
+    pub close_wsol_ata: bool,
 }
 
 impl RaydiumCpmmParams {
@@ -454,7 +461,8 @@ impl RaydiumCpmmParams {
             base_token_program: trade_info.input_token_program,
             quote_token_program: trade_info.output_token_program,
             observation_state: trade_info.observation_state,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
 
@@ -483,7 +491,8 @@ impl RaydiumCpmmParams {
             base_token_program: pool.token0_program,
             quote_token_program: pool.token1_program,
             observation_state: pool.observation_key,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         })
     }
 }
@@ -516,8 +525,8 @@ pub struct RaydiumAmmV4Params {
     pub coin_reserve: u64,
     /// Current pc reserve amount in the pool
     pub pc_reserve: u64,
-    /// Whether to automatically handle wSOL wrapping and unwrapping
-    pub auto_handle_wsol: bool,
+    pub create_wsol_ata: bool,
+    pub close_wsol_ata: bool,
 }
 
 impl RaydiumAmmV4Params {
@@ -535,7 +544,8 @@ impl RaydiumAmmV4Params {
             token_pc: amm_info.token_pc,
             coin_reserve,
             pc_reserve,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         }
     }
     pub async fn from_amm_address_by_rpc(
@@ -553,7 +563,8 @@ impl RaydiumAmmV4Params {
             token_pc: amm_info.token_pc,
             coin_reserve,
             pc_reserve,
-            auto_handle_wsol: true,
+            create_wsol_ata: true,
+            close_wsol_ata: true,
         })
     }
 }
