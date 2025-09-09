@@ -25,7 +25,7 @@ use common::{PriorityFee, SolanaRpcClient, TradeConfig};
 use parking_lot::Mutex;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use solana_sdk::hash::Hash;
-use solana_sdk::{pubkey::Pubkey, signature::Keypair};
+use solana_sdk::{pubkey::Pubkey, signature::Keypair, signature::Signature};
 use std::sync::Arc;
 use swqos::SwqosClient;
 
@@ -157,7 +157,7 @@ impl SolanaTrade {
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
         open_seed_optimize: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
                 "slippage_basis_points is none, use default slippage basis points: {}",
@@ -249,7 +249,7 @@ impl SolanaTrade {
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
         open_seed_optimize: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
                 "slippage_basis_points is none, use default slippage basis points: {}",
@@ -355,7 +355,7 @@ impl SolanaTrade {
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
         open_seed_optimize: bool,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Signature, anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
         }

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use solana_sdk::signature::Signature;
 use std::{sync::Arc, time::Instant};
 
 use crate::trading::core::parallel::{buy_parallel_execute, sell_parallel_execute};
@@ -25,7 +26,7 @@ impl GenericTradeExecutor {
 
 #[async_trait::async_trait]
 impl TradeExecutor for GenericTradeExecutor {
-    async fn buy_with_tip(&self, params: BuyParams) -> Result<()> {
+    async fn buy_with_tip(&self, params: BuyParams) -> Result<Signature> {
         let start = Instant::now();
 
         // Build instructions directly from params to avoid unnecessary cloning
@@ -43,12 +44,10 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building buy transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        buy_parallel_execute(params, final_instructions, self.protocol_name).await?;
-
-        Ok(())
+        buy_parallel_execute(params, final_instructions, self.protocol_name).await
     }
 
-    async fn sell_with_tip(&self, params: SellParams) -> Result<()> {
+    async fn sell_with_tip(&self, params: SellParams) -> Result<Signature> {
         let start = Instant::now();
 
         // Build instructions directly from params to avoid unnecessary cloning
@@ -66,9 +65,7 @@ impl TradeExecutor for GenericTradeExecutor {
         println!("Building sell transaction instructions time cost: {:?}", start.elapsed());
 
         // Execute transactions in parallel
-        sell_parallel_execute(params, final_instructions, self.protocol_name).await?;
-
-        Ok(())
+        sell_parallel_execute(params, final_instructions, self.protocol_name).await
     }
 
     fn protocol_name(&self) -> &'static str {
