@@ -46,8 +46,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_quote_token_reserves = protocol_params.pool_quote_token_reserves;
         let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
         let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
-        let create_wsol_ata = protocol_params.create_wsol_ata;
-        let close_wsol_ata = protocol_params.close_wsol_ata;
+        let create_wsol_ata = params.create_wsol_ata;
+        let close_wsol_ata = params.close_wsol_ata;
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
         let pool_base_token_account = protocol_params.pool_base_token_account;
@@ -214,8 +214,8 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_quote_token_account = protocol_params.pool_quote_token_account;
         let params_coin_creator_vault_ata = protocol_params.coin_creator_vault_ata;
         let params_coin_creator_vault_authority = protocol_params.coin_creator_vault_authority;
-        let create_wsol_ata = protocol_params.create_wsol_ata;
-        let close_wsol_ata = protocol_params.close_wsol_ata;
+        let create_wsol_ata = params.create_wsol_ata;
+        let close_wsol_ata = params.close_wsol_ata;
         let base_token_program = protocol_params.base_token_program;
         let quote_token_program = protocol_params.quote_token_program;
 

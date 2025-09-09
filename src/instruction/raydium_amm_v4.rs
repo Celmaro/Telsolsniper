@@ -65,7 +65,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(6);
 
-        if protocol_params.create_wsol_ata {
+        if params.create_wsol_ata {
             instructions
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
@@ -112,7 +112,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             accounts.to_vec(),
         ));
 
-        if protocol_params.close_wsol_ata {
+        if params.close_wsol_ata {
             // Close wSOL ATA account, reclaim rent
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
@@ -167,7 +167,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        if protocol_params.create_wsol_ata {
+        if params.create_wsol_ata {
             instructions.extend(crate::trading::common::create_wsol_ata(&params.payer.pubkey()));
         }
 
@@ -203,7 +203,7 @@ impl InstructionBuilder for RaydiumAmmV4InstructionBuilder {
             accounts.to_vec(),
         ));
 
-        if protocol_params.close_wsol_ata {
+        if params.close_wsol_ata {
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 

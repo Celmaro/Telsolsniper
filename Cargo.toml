@@ -30,13 +30,14 @@ members = [
     "examples/nonce_cache",
     "examples/pumpswap_direct_trading",
     "examples/wsol_wrapper",
+    "examples/seed_trading",
 ]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-solana-streamer-sdk =  "0.4.2"
+solana-streamer-sdk =  "0.4.3"
 solana-sdk = "2.3.0"
 solana-client = "2.3.6"
 solana-program = "2.3.0" 

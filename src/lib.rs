@@ -133,6 +133,9 @@ impl SolanaTrade {
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
     /// * `wait_transaction_confirmed` - Whether to wait for the transaction to be confirmed
+    /// * `create_wsol_ata` - Whether to create wSOL ATA account
+    /// * `close_wsol_ata` - Whether to close wSOL ATA account
+    /// * `open_seed_optimize` - Whether to open seed optimize
     ///
     /// # Returns
     ///
@@ -156,6 +159,8 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        create_wsol_ata: bool,
+        close_wsol_ata: bool,
         open_seed_optimize: bool,
     ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
@@ -180,6 +185,8 @@ impl SolanaTrade {
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
             open_seed_optimize,
+            create_wsol_ata,
+            close_wsol_ata,
             swqos_clients: self.swqos_clients.clone(),
             middleware_manager: self.middleware_manager.clone(),
         };
@@ -223,6 +230,9 @@ impl SolanaTrade {
     /// * `extension_params` - Optional protocol-specific parameters (uses defaults if None)
     /// * `lookup_table_key` - Optional address lookup table key for transaction optimization
     /// * `wait_transaction_confirmed` - Whether to wait for the transaction to be confirmed
+    /// * `create_wsol_ata` - Whether to create wSOL ATA account
+    /// * `close_wsol_ata` - Whether to close wSOL ATA account
+    /// * `open_seed_optimize` - Whether to open seed optimize
     ///
     /// # Returns
     ///
@@ -248,6 +258,8 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        create_wsol_ata: bool,
+        close_wsol_ata: bool,
         open_seed_optimize: bool,
     ) -> Result<Signature, anyhow::Error> {
         if slippage_basis_points.is_none() {
@@ -278,6 +290,8 @@ impl SolanaTrade {
                 self.swqos_clients.clone()
             },
             middleware_manager: self.middleware_manager.clone(),
+            create_wsol_ata,
+            close_wsol_ata,
         };
         if custom_priority_fee.is_some() {
             sell_params.priority_fee = Arc::new(custom_priority_fee.unwrap());
@@ -301,9 +315,6 @@ impl SolanaTrade {
         if !is_valid_params {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
-
-        let _swqos_clients =
-            if !with_tip { self.rpc_client.clone() } else { self.swqos_clients.clone() };
 
         // Execute sell based on tip preference
         executor.sell_with_tip(sell_params).await
@@ -354,6 +365,8 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        create_wsol_ata: bool,
+        close_wsol_ata: bool,
         open_seed_optimize: bool,
     ) -> Result<Signature, anyhow::Error> {
         if percent == 0 || percent > 100 {
@@ -371,6 +384,8 @@ impl SolanaTrade {
             extension_params,
             lookup_table_key,
             wait_transaction_confirmed,
+            create_wsol_ata,
+            close_wsol_ata,
             open_seed_optimize,
         )
         .await

@@ -170,6 +170,8 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             Some(lookup_table_key), // you still need to update the AddressLookupTableCache
             true,
             false,
+            false,
+            false,
         )
         .await?;
 

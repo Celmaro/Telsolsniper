@@ -151,6 +151,8 @@ async fn bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult<()> 
             Box::new(BonkParams::from_trade(trade_info.clone())),
             None,
             true,
+            true,
+            true,
             false,
         )
         .await?;
@@ -177,6 +179,8 @@ async fn bonk_copy_trade_with_grpc(trade_info: BonkTradeEvent) -> AnyResult<()> 
             false,
             Box::new(BonkParams::from_trade(trade_info.clone())),
             None,
+            true,
+            true,
             true,
             false,
         )

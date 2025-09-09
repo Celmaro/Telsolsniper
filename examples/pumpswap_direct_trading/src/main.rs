@@ -33,6 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool).await?),
             None,
             true,
+            true,
+            true,
             false,
         )
         .await?;
@@ -57,6 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             false,
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool).await?),
             None,
+            true,
+            true,
             true,
             false,
         )

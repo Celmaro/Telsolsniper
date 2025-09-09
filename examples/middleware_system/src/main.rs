@@ -102,6 +102,8 @@ async fn test_middleware() -> AnyResult<()> {
             Box::new(PumpSwapParams::from_pool_address_by_rpc(&client.rpc, &pool_address).await?),
             None,
             true,
+            true,
+            true,
             false,
         )
         .await?;

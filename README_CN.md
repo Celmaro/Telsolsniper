@@ -54,12 +54,10 @@ sol-trade-sdk = "0.6.1"
 - **create_wsol_ata**：
   - 当 `create_wsol_ata: true` 时，SDK 会在交易前自动创建并将 SOL 包装为 wSOL
   - 买入时：自动将 SOL 包装为 wSOL 进行交易
-  - 默认值为 `true`
 
 - **close_wsol_ata**：
   - 当 `close_wsol_ata: true` 时，SDK 会在交易后自动关闭 wSOL 账户并解包装为 SOL
   - 卖出时：自动将获得的 wSOL 解包装为 SOL 并回收租金
-  - 默认值为 `true`
 
 - **分离参数的优势**：
   - 允许独立控制 wSOL 账户的创建和关闭

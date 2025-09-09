@@ -54,12 +54,10 @@ In PumpSwap, Bonk, and Raydium trading, the `create_wsol_ata` and `close_wsol_at
 - **create_wsol_ata**:
   - When `create_wsol_ata: true`, the SDK automatically creates and wraps SOL to wSOL before trading
   - When buying: automatically wraps SOL to wSOL for trading
-  - Default value is `true`
 
 - **close_wsol_ata**:
   - When `close_wsol_ata: true`, the SDK automatically closes the wSOL account and unwraps to SOL after trading
   - When selling: automatically unwraps the received wSOL to SOL and reclaims rent
-  - Default value is `true`
 
 - **Benefits of Separate Parameters**:
   - Allows independent control of wSOL account creation and closure

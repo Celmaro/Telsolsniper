@@ -146,6 +146,8 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             None,
             true,
             false,
+            false,
+            false,
         )
         .await?;
 
@@ -172,6 +174,8 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             Box::new(PumpFunParams::from_trade(&trade_info, Some(true))),
             None,
             true,
+            false,
+            false,
             false,
         )
         .await?;
