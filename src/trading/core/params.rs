@@ -3,7 +3,9 @@ use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::{PriorityFee, SolanaRpcClient};
 use crate::solana_streamer_sdk::streaming::event_parser::common::EventType;
 use crate::solana_streamer_sdk::streaming::event_parser::protocols::bonk::BonkTradeEvent;
+use crate::swqos::SwqosClient;
 use crate::trading::common::get_multi_token_balances;
+use crate::trading::MiddlewareManager;
 use solana_hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
@@ -21,12 +23,15 @@ pub struct BuyParams {
     pub mint: Pubkey,
     pub sol_amount: u64,
     pub slippage_basis_points: Option<u64>,
-    pub priority_fee: PriorityFee,
+    pub priority_fee: Arc<PriorityFee>,
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
     pub data_size_limit: u32,
     pub wait_transaction_confirmed: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
+    pub open_seed_optimize: bool,
+    pub swqos_clients: Vec<Arc<SwqosClient>>,
+    pub middleware_manager: Option<Arc<MiddlewareManager>>,
 }
 
 /// Sell parameters
@@ -37,12 +42,15 @@ pub struct SellParams {
     pub mint: Pubkey,
     pub token_amount: Option<u64>,
     pub slippage_basis_points: Option<u64>,
-    pub priority_fee: PriorityFee,
+    pub priority_fee: Arc<PriorityFee>,
     pub lookup_table_key: Option<Pubkey>,
     pub recent_blockhash: Hash,
     pub wait_transaction_confirmed: bool,
     pub with_tip: bool,
     pub protocol_params: Box<dyn ProtocolParams>,
+    pub open_seed_optimize: bool,
+    pub swqos_clients: Vec<Arc<SwqosClient>>,
+    pub middleware_manager: Option<Arc<MiddlewareManager>>,
 }
 
 /// PumpFun protocol specific parameters

@@ -22,10 +22,10 @@ use crate::trading::MiddlewareManager;
 use crate::trading::SellParams;
 use crate::trading::TradeFactory;
 use common::{PriorityFee, SolanaRpcClient, TradeConfig};
+use parking_lot::Mutex;
 use rustls::crypto::{ring::default_provider, CryptoProvider};
 use solana_sdk::hash::Hash;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
-use parking_lot::Mutex;
 use std::sync::Arc;
 use swqos::SwqosClient;
 
@@ -34,8 +34,7 @@ pub struct SolanaTrade {
     pub rpc: Arc<SolanaRpcClient>,
     pub rpc_client: Vec<Arc<SwqosClient>>,
     pub swqos_clients: Vec<Arc<SwqosClient>>,
-    pub priority_fee: PriorityFee,
-    pub trade_config: TradeConfig,
+    pub priority_fee: Arc<PriorityFee>,
     pub middleware_manager: Option<Arc<MiddlewareManager>>,
 }
 
@@ -49,7 +48,6 @@ impl Clone for SolanaTrade {
             rpc_client: self.rpc_client.clone(),
             swqos_clients: self.swqos_clients.clone(),
             priority_fee: self.priority_fee.clone(),
-            trade_config: self.trade_config.clone(),
             middleware_manager: self.middleware_manager.clone(),
         }
     }
@@ -68,7 +66,7 @@ impl SolanaTrade {
 
         let rpc_url = trade_config.rpc_url.clone();
         let swqos_configs = trade_config.swqos_configs.clone();
-        let priority_fee = trade_config.priority_fee.clone();
+        let priority_fee = Arc::new(trade_config.priority_fee.clone());
         let commitment = trade_config.commitment.clone();
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
 
@@ -79,6 +77,8 @@ impl SolanaTrade {
         }
 
         let rpc = Arc::new(SolanaRpcClient::new_with_commitment(rpc_url.clone(), commitment));
+        common::seed::update_rents(&rpc).await.unwrap();
+        common::seed::start_rent_updater(rpc.clone());
 
         let rpc_client = SwqosConfig::get_swqos_client(
             rpc_url.clone(),
@@ -92,7 +92,6 @@ impl SolanaTrade {
             rpc_client: vec![rpc_client],
             swqos_clients,
             priority_fee,
-            trade_config: trade_config.clone(),
             middleware_manager: None,
         };
 
@@ -157,6 +156,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        open_seed_optimize: bool,
     ) -> Result<(), anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
@@ -167,23 +167,24 @@ impl SolanaTrade {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
-        let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
-
         let mut buy_params = BuyParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
             sol_amount: sol_amount,
             slippage_basis_points: slippage_basis_points,
-            priority_fee: self.trade_config.priority_fee.clone(),
-            lookup_table_key: final_lookup_table_key,
+            priority_fee: self.priority_fee.clone(),
+            lookup_table_key,
             recent_blockhash,
-            data_size_limit: 0,
+            data_size_limit: 256 * 1024,
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
+            open_seed_optimize,
+            swqos_clients: self.swqos_clients.clone(),
+            middleware_manager: self.middleware_manager.clone(),
         };
         if custom_priority_fee.is_some() {
-            buy_params.priority_fee = custom_priority_fee.unwrap();
+            buy_params.priority_fee = Arc::new(custom_priority_fee.unwrap());
         }
 
         // Validate protocol params
@@ -205,9 +206,7 @@ impl SolanaTrade {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
-        executor
-            .buy_with_tip(buy_params, self.swqos_clients.clone(), self.middleware_manager.clone())
-            .await
+        executor.buy_with_tip(buy_params).await
     }
 
     /// Execute a sell order for a specified token
@@ -249,6 +248,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        open_seed_optimize: bool,
     ) -> Result<(), anyhow::Error> {
         if slippage_basis_points.is_none() {
             println!(
@@ -259,23 +259,28 @@ impl SolanaTrade {
         let executor = TradeFactory::create_executor(dex_type.clone());
         let protocol_params = extension_params;
 
-        let final_lookup_table_key = lookup_table_key.or(self.trade_config.lookup_table_key);
-
         let mut sell_params = SellParams {
             rpc: Some(self.rpc.clone()),
             payer: self.payer.clone(),
             mint: mint,
             token_amount: Some(token_amount),
             slippage_basis_points: slippage_basis_points,
-            priority_fee: self.trade_config.priority_fee.clone(),
-            lookup_table_key: final_lookup_table_key,
+            priority_fee: self.priority_fee.clone(),
+            lookup_table_key,
             recent_blockhash,
             wait_transaction_confirmed: wait_transaction_confirmed,
             protocol_params: protocol_params.clone(),
             with_tip: with_tip,
+            open_seed_optimize,
+            swqos_clients: if !with_tip {
+                self.rpc_client.clone()
+            } else {
+                self.swqos_clients.clone()
+            },
+            middleware_manager: self.middleware_manager.clone(),
         };
         if custom_priority_fee.is_some() {
-            sell_params.priority_fee = custom_priority_fee.unwrap();
+            sell_params.priority_fee = Arc::new(custom_priority_fee.unwrap());
         }
 
         // Validate protocol params
@@ -301,7 +306,7 @@ impl SolanaTrade {
             if !with_tip { self.rpc_client.clone() } else { self.swqos_clients.clone() };
 
         // Execute sell based on tip preference
-        executor.sell_with_tip(sell_params, _swqos_clients, self.middleware_manager.clone()).await
+        executor.sell_with_tip(sell_params).await
     }
 
     /// Execute a sell order for a percentage of the specified token amount
@@ -349,6 +354,7 @@ impl SolanaTrade {
         extension_params: Box<dyn ProtocolParams>,
         lookup_table_key: Option<Pubkey>,
         wait_transaction_confirmed: bool,
+        open_seed_optimize: bool,
     ) -> Result<(), anyhow::Error> {
         if percent == 0 || percent > 100 {
             return Err(anyhow::anyhow!("Percentage must be between 1 and 100"));
@@ -365,7 +371,52 @@ impl SolanaTrade {
             extension_params,
             lookup_table_key,
             wait_transaction_confirmed,
+            open_seed_optimize,
         )
         .await
+    }
+
+    /// Wraps SOL into wSOL (Wrapped SOL)
+    ///
+    /// This function creates a wSOL associated token account (if it doesn't exist),
+    /// transfers the specified amount of SOL to that account, and then syncs the native
+    /// token balance to make SOL usable as an SPL token.
+    ///
+    /// # Arguments
+    /// - `amount`: The amount of SOL to wrap (in lamports)
+    ///
+    /// # Returns
+    /// - `Ok(String)`: Transaction signature
+    /// - `Err(anyhow::Error)`: If the transaction fails
+    pub async fn wrap_sol_to_wsol(&self, amount: u64) -> Result<String, anyhow::Error> {
+        use crate::trading::common::wsol_manager::handle_wsol;
+        use solana_sdk::transaction::Transaction;
+        let recent_blockhash = self.rpc.get_latest_blockhash().await?;
+        let instructions = handle_wsol(&self.payer.pubkey(), amount);
+        let mut transaction =
+            Transaction::new_with_payer(&instructions, Some(&self.payer.pubkey()));
+        transaction.sign(&[&*self.payer], recent_blockhash);
+        let signature = self.rpc.send_and_confirm_transaction(&transaction).await?;
+        Ok(signature.to_string())
+    }
+    /// Closes the wSOL account and unwraps SOL back to native SOL
+    ///
+    /// This function closes the wSOL associated token account, which automatically
+    /// transfers any remaining wSOL balance back to the account owner as native SOL.
+    /// This is useful for cleaning up wSOL accounts and recovering wrapped SOL.
+    ///
+    /// # Returns
+    /// - `Ok(String)`: Transaction signature
+    /// - `Err(anyhow::Error)`: If the transaction fails
+    pub async fn close_wsol(&self) -> Result<String, anyhow::Error> {
+        use crate::trading::common::wsol_manager::close_wsol;
+        use solana_sdk::transaction::Transaction;
+        let recent_blockhash = self.rpc.get_latest_blockhash().await?;
+        let instructions = close_wsol(&self.payer.pubkey());
+        let mut transaction =
+            Transaction::new_with_payer(&instructions, Some(&self.payer.pubkey()));
+        transaction.sign(&[&*self.payer], recent_blockhash);
+        let signature = self.rpc.send_and_confirm_transaction(&transaction).await?;
+        Ok(signature.to_string())
     }
 }

@@ -81,7 +81,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: priority_fee,
         swqos_configs,
-        lookup_table_key: None,
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -114,6 +113,7 @@ async fn pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyR
             Box::new(PumpFunParams::from_dev_trade(&trade_info, None)),
             None,
             true,
+            false,
         )
         .await?;
 
@@ -140,6 +140,7 @@ async fn pumpfun_sniper_trade_with_shreds(trade_info: PumpFunTradeEvent) -> AnyR
             Box::new(PumpFunParams::immediate_sell(trade_info.creator_vault, true)),
             None,
             true,
+            false,
         )
         .await?;
 

@@ -29,6 +29,7 @@ members = [
     "examples/address_lookup",
     "examples/nonce_cache",
     "examples/pumpswap_direct_trading",
+    "examples/wsol_wrapper",
 ]
 
 [lib]

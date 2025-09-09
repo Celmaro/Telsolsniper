@@ -133,7 +133,6 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         commitment: CommitmentConfig::confirmed(),
         priority_fee: priority_fee,
         swqos_configs,
-        lookup_table_key: Some(Pubkey::from_str("use_your_lookup_table_key_here").unwrap()),
     };
 
     let solana_trade_client = SolanaTrade::new(Arc::new(payer), trade_config).await;
@@ -152,9 +151,9 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
     let slippage_basis_points = Some(100);
     let recent_blockhash = client.rpc.get_latest_blockhash().await?;
 
+    let lookup_table_key = Pubkey::from_str("use_your_lookup_table_key_here").unwrap();
     // Setup lookup table cache
-    setup_lookup_table_cache(client.rpc.clone(), client.trade_config.lookup_table_key.unwrap())
-        .await?;
+    setup_lookup_table_cache(client.rpc.clone(), lookup_table_key).await?;
 
     // Buy tokens
     println!("Buying tokens from PumpFun...");
@@ -168,8 +167,9 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             recent_blockhash,
             None,
             Box::new(PumpFunParams::from_trade(&trade_info, None)),
-            None, // You can also pass a new address lookup table account here, but you still need to update the AddressLookupTableCache
+            Some(lookup_table_key), // you still need to update the AddressLookupTableCache
             true,
+            false,
         )
         .await?;
 

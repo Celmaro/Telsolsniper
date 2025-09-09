@@ -1,28 +1,14 @@
-use std::sync::Arc;
-
-use crate::{swqos::SwqosClient, trading::MiddlewareManager};
+use super::params::{BuyParams, SellParams};
 use anyhow::Result;
 use solana_sdk::instruction::Instruction;
-
-use super::params::{BuyParams, SellParams};
 
 /// 交易执行器trait - 定义了所有交易协议都需要实现的核心方法
 #[async_trait::async_trait]
 pub trait TradeExecutor: Send + Sync {
     /// 使用MEV服务执行买入交易
-    async fn buy_with_tip(
-        &self,
-        params: BuyParams,
-        swqos_clients: Vec<Arc<SwqosClient>>,
-        middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()>;
+    async fn buy_with_tip(&self, params: BuyParams) -> Result<()>;
     /// 使用MEV服务执行卖出交易
-    async fn sell_with_tip(
-        &self,
-        params: SellParams,
-        swqos_clients: Vec<Arc<SwqosClient>>,
-        middleware_manager: Option<Arc<MiddlewareManager>>,
-    ) -> Result<()>;
+    async fn sell_with_tip(&self, params: SellParams) -> Result<()>;
     /// 获取协议名称
     fn protocol_name(&self) -> &'static str;
 }

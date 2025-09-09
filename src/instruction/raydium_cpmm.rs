@@ -103,12 +103,14 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
                 .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), amount_in));
         }
 
-        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-            &params.payer.pubkey(),
-            &params.payer.pubkey(),
-            &params.mint,
-            &mint_token_program,
-        ));
+        instructions.extend(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+                &params.payer.pubkey(),
+                &params.payer.pubkey(),
+                &params.mint,
+                &mint_token_program,
+            ),
+        );
 
         // Create buy instruction
         let accounts: [AccountMeta; 13] = [
@@ -140,7 +142,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         if protocol_params.auto_handle_wsol {
             // Close wSOL ATA account, reclaim rent
-            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
+            instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)
@@ -221,12 +223,14 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(3);
 
-        instructions.push(crate::common::fast_fn::create_associated_token_account_idempotent_fast(
-            &params.payer.pubkey(),
-            &params.payer.pubkey(),
-            &crate::constants::WSOL_TOKEN_ACCOUNT,
-            &crate::constants::TOKEN_PROGRAM,
-        ));
+        instructions.extend(
+            crate::common::fast_fn::create_associated_token_account_idempotent_fast(
+                &params.payer.pubkey(),
+                &params.payer.pubkey(),
+                &crate::constants::WSOL_TOKEN_ACCOUNT,
+                &crate::constants::TOKEN_PROGRAM,
+            ),
+        );
 
         // Create sell instruction
         let accounts: [AccountMeta; 13] = [
@@ -258,7 +262,7 @@ impl InstructionBuilder for RaydiumCpmmInstructionBuilder {
 
         if protocol_params.auto_handle_wsol {
             // Close wSOL ATA account, reclaim rent
-            instructions.push(crate::trading::common::close_wsol(&params.payer.pubkey()));
+            instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
         }
 
         Ok(instructions)

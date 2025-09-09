@@ -8,11 +8,55 @@ use tokio::task::JoinHandle;
 use crate::{
     common::PriorityFee,
     swqos::{SwqosClient, SwqosType, TradeType},
-    trading::{common::build_transaction, MiddlewareManager},
+    trading::{common::build_transaction, BuyParams, MiddlewareManager, SellParams},
 };
 
+pub async fn buy_parallel_execute(
+    params: BuyParams,
+    instructions: Vec<Instruction>,
+    protocol_name: &'static str,
+) -> Result<()> {
+    parallel_execute(
+        params.swqos_clients,
+        params.payer,
+        instructions,
+        params.priority_fee,
+        params.lookup_table_key,
+        params.recent_blockhash,
+        params.data_size_limit,
+        params.middleware_manager,
+        protocol_name,
+        true,
+        params.wait_transaction_confirmed,
+        true,
+    )
+    .await
+}
+
+pub async fn sell_parallel_execute(
+    params: SellParams,
+    instructions: Vec<Instruction>,
+    protocol_name: &'static str,
+) -> Result<()> {
+    parallel_execute(
+        params.swqos_clients,
+        params.payer,
+        instructions,
+        params.priority_fee,
+        params.lookup_table_key,
+        params.recent_blockhash,
+        0,
+        params.middleware_manager,
+        protocol_name,
+        false,
+        params.wait_transaction_confirmed,
+        params.with_tip,
+    )
+    .await
+}
+
 /// Generic function for parallel transaction execution
-pub async fn parallel_execute_with_tips(
+async fn parallel_execute(
     swqos_clients: Vec<Arc<SwqosClient>>,
     payer: Arc<Keypair>,
     instructions: Vec<Instruction>,

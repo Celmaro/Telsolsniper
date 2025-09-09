@@ -25,21 +25,22 @@ pub enum InstructionCacheKey {
         owner: Pubkey,
         mint: Pubkey,
         token_program: Pubkey,
+        use_seed: bool,
     },
     /// Close wSOL Account
     CloseWsolAccount { payer: Pubkey, wsol_token_account: Pubkey },
 }
 
 /// Global instruction cache for storing common instructions
-static INSTRUCTION_CACHE: Lazy<RwLock<CLruCache<InstructionCacheKey, Instruction>>> =
+static INSTRUCTION_CACHE: Lazy<RwLock<CLruCache<InstructionCacheKey, Vec<Instruction>>>> =
     Lazy::new(|| {
         RwLock::new(CLruCache::new(NonZeroUsize::new(MAX_INSTRUCTION_CACHE_SIZE).unwrap()))
     });
 
 /// Get cached instruction, compute and cache if not exists
-pub fn get_cached_instruction<F>(cache_key: InstructionCacheKey, compute_fn: F) -> Instruction
+pub fn get_cached_instructions<F>(cache_key: InstructionCacheKey, compute_fn: F) -> Vec<Instruction>
 where
-    F: FnOnce() -> Instruction,
+    F: FnOnce() -> Vec<Instruction>,
 {
     // Try to get from cache (using read lock)
     {
@@ -63,41 +64,75 @@ where
 
 // --------------------- Associated Token Account ---------------------
 
+pub fn create_associated_token_account_idempotent_fast_use_seed(
+    payer: &Pubkey,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+    use_seed: bool,
+) -> Vec<Instruction> {
+    _create_associated_token_account_idempotent_fast(payer, owner, mint, token_program, use_seed)
+}
+
 pub fn create_associated_token_account_idempotent_fast(
     payer: &Pubkey,
     owner: &Pubkey,
     mint: &Pubkey,
     token_program: &Pubkey,
-) -> Instruction {
+) -> Vec<Instruction> {
+    _create_associated_token_account_idempotent_fast(payer, owner, mint, token_program, false)
+}
+
+pub fn _create_associated_token_account_idempotent_fast(
+    payer: &Pubkey,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+    use_seed: bool,
+) -> Vec<Instruction> {
     // Create cache key
     let cache_key = InstructionCacheKey::CreateAssociatedTokenAccount {
         payer: *payer,
         owner: *owner,
         mint: *mint,
         token_program: *token_program,
+        use_seed,
     };
 
-    // Use cache to get instruction
-    get_cached_instruction(cache_key, || {
-        // Get Associated Token Address using cache
-        let associated_token_address =
-            get_associated_token_address_with_program_id_fast(owner, mint, token_program);
-
-        // Create Associated Token Account instruction
-        // Reference implementation of spl_associated_token_account::instruction::create_associated_token_account
-        Instruction {
-            program_id: ASSOCIATED_TOKEN_PROGRAM_ID,
-            accounts: vec![
-                AccountMeta::new(*payer, true), // Payer (signer, writable)
-                AccountMeta::new(associated_token_address, false), // ATA address (writable, non-signer)
-                AccountMeta::new_readonly(*owner, false), // Token account owner (readonly, non-signer)
-                AccountMeta::new_readonly(*mint, false), // Token mint address (readonly, non-signer)
-                crate::constants::SYSTEM_PROGRAM_META,
-                AccountMeta::new_readonly(*token_program, false), // Token program (readonly, non-signer)
-            ],
-            data: vec![1],
-        }
-    })
+    // Only use seed if the mint address is not wSOL or SOL
+    // token 2022 测试不成功（TODO）
+    if use_seed
+        && !mint.eq(&crate::constants::WSOL_TOKEN_ACCOUNT)
+        && !mint.eq(&crate::constants::SOL_TOKEN_ACCOUNT)
+        && token_program.eq(&spl_token::ID)
+    {
+        // Use cache to get instruction
+        get_cached_instructions(cache_key, || {
+            super::seed::create_associated_token_account_use_seed(payer, owner, mint, token_program)
+                .unwrap()
+        })
+    } else {
+        // Use cache to get instruction
+        get_cached_instructions(cache_key, || {
+            // Get Associated Token Address using cache
+            let associated_token_address =
+                get_associated_token_address_with_program_id_fast(owner, mint, token_program);
+            // Create Associated Token Account instruction
+            // Reference implementation of spl_associated_token_account::instruction::create_associated_token_account
+            vec![Instruction {
+                program_id: ASSOCIATED_TOKEN_PROGRAM_ID,
+                accounts: vec![
+                    AccountMeta::new(*payer, true), // Payer (signer, writable)
+                    AccountMeta::new(associated_token_address, false), // ATA address (writable, non-signer)
+                    AccountMeta::new_readonly(*owner, false), // Token account owner (readonly, non-signer)
+                    AccountMeta::new_readonly(*mint, false), // Token mint address (readonly, non-signer)
+                    crate::constants::SYSTEM_PROGRAM_META,
+                    AccountMeta::new_readonly(*token_program, false), // Token program (readonly, non-signer)
+                ],
+                data: vec![1],
+            }]
+        })
+    }
 }
 
 // --------------------- PDA ---------------------
@@ -150,11 +185,26 @@ struct AtaCacheKey {
     wallet_address: Pubkey,
     token_mint_address: Pubkey,
     token_program_id: Pubkey,
+    use_seed: bool,
 }
 
 /// Global ATA cache for storing Associated Token Address computation results
 static ATA_CACHE: Lazy<RwLock<CLruCache<AtaCacheKey, Pubkey>>> =
     Lazy::new(|| RwLock::new(CLruCache::new(NonZeroUsize::new(MAX_ATA_CACHE_SIZE).unwrap())));
+
+pub fn get_associated_token_address_with_program_id_fast_use_seed(
+    wallet_address: &Pubkey,
+    token_mint_address: &Pubkey,
+    token_program_id: &Pubkey,
+    use_seed: bool,
+) -> Pubkey {
+    _get_associated_token_address_with_program_id_fast(
+        wallet_address,
+        token_mint_address,
+        token_program_id,
+        use_seed,
+    )
+}
 
 /// Get cached Associated Token Address, compute and cache if not exists
 pub fn get_associated_token_address_with_program_id_fast(
@@ -162,10 +212,25 @@ pub fn get_associated_token_address_with_program_id_fast(
     token_mint_address: &Pubkey,
     token_program_id: &Pubkey,
 ) -> Pubkey {
+    _get_associated_token_address_with_program_id_fast(
+        wallet_address,
+        token_mint_address,
+        token_program_id,
+        false,
+    )
+}
+
+fn _get_associated_token_address_with_program_id_fast(
+    wallet_address: &Pubkey,
+    token_mint_address: &Pubkey,
+    token_program_id: &Pubkey,
+    use_seed: bool,
+) -> Pubkey {
     let cache_key = AtaCacheKey {
         wallet_address: *wallet_address,
         token_mint_address: *token_mint_address,
         token_program_id: *token_program_id,
+        use_seed,
     };
 
     // Try to get from cache (using read lock)
@@ -177,11 +242,26 @@ pub fn get_associated_token_address_with_program_id_fast(
     }
 
     // Cache miss, compute new ATA
-    let ata = get_associated_token_address_with_program_id(
-        wallet_address,
-        token_mint_address,
-        token_program_id,
-    );
+    // Only use seed if the token mint address is not wSOL or SOL
+    // token 2022 测试不成功（TODO）
+    let ata = if use_seed
+        && !token_mint_address.eq(&crate::constants::WSOL_TOKEN_ACCOUNT)
+        && !token_mint_address.eq(&crate::constants::SOL_TOKEN_ACCOUNT)
+        && token_program_id.eq(&spl_token::ID)
+    {
+        super::seed::get_associated_token_address_with_program_id_use_seed(
+            wallet_address,
+            token_mint_address,
+            token_program_id,
+        )
+        .unwrap()
+    } else {
+        get_associated_token_address_with_program_id(
+            wallet_address,
+            token_mint_address,
+            token_program_id,
+        )
+    };
 
     // Store computation result in cache (using write lock)
     {
@@ -206,20 +286,20 @@ pub fn fast_init(payer: &Pubkey) {
         &crate::constants::TOKEN_PROGRAM,
     );
     // Get Close wSOL Account instruction
-    get_cached_instruction(
+    get_cached_instructions(
         crate::common::fast_fn::InstructionCacheKey::CloseWsolAccount {
             payer: *payer,
             wsol_token_account,
         },
         || {
-            spl_token::instruction::close_account(
+            vec![spl_token::instruction::close_account(
                 &crate::constants::TOKEN_PROGRAM,
                 &wsol_token_account,
                 &payer,
                 &payer,
                 &[],
             )
-            .unwrap()
+            .unwrap()]
         },
     );
 }

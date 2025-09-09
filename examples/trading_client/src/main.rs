@@ -56,6 +56,5 @@ fn create_trade_config(rpc_url: String, swqos_configs: Vec<SwqosConfig>) -> Trad
         commitment: CommitmentConfig::confirmed(),
         priority_fee: PriorityFee::default(),
         swqos_configs,
-        lookup_table_key: None,
     }
 }

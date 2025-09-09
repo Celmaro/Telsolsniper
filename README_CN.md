@@ -106,6 +106,7 @@ sol-trade-sdk = "0.6.1"
 | 中间件系统 | `middleware_system` | 自定义指令中间件示例 | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
 | 地址查找表 | `address_lookup` | 地址查找表示例 | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
 | Nonce    | `nonce_cache` | Nonce示例 | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
+| WSOL 包装器 | `wsol_wrapper` | SOL与WSOL相互转换示例 | `cargo run --package wsol_wrapper` | [examples/wsol_wrapper](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/wsol_wrapper/src/main.rs) |
 
 ### SWQOS 服务配置说明
 
@@ -181,7 +182,6 @@ let trade_config = TradeConfig {
     commitment: CommitmentConfig::confirmed(),
     priority_fee, // 使用自定义优先费用
     swqos_configs,
-    lookup_table_key: None,
 };
 ```
 

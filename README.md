@@ -106,6 +106,7 @@ Please ensure that the parameters your trading logic depends on are available in
 | Middleware System | `middleware_system` | Custom instruction middleware example | `cargo run --package middleware_system` | [examples/middleware_system](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/middleware_system/src/main.rs) |
 | Address Lookup | `address_lookup` | Address lookup table example | `cargo run --package address_lookup` | [examples/address_lookup](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/address_lookup/src/main.rs) |
 | Nonce | `nonce_cache` | Nonce example | `cargo run --package nonce_cache` | [examples/nonce_cache](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/nonce_cache/src/main.rs) |
+| WSOL Wrapper | `wsol_wrapper` | Wrap/unwrap SOL to/from WSOL example | `cargo run --package wsol_wrapper` | [examples/wsol_wrapper](https://github.com/0xfnzero/sol-trade-sdk/tree/main/examples/wsol_wrapper/src/main.rs) |
 
 ### SWQOS Service Configuration
 
@@ -181,7 +182,6 @@ let trade_config = TradeConfig {
     commitment: CommitmentConfig::confirmed(),
     priority_fee, // Use custom priority fee
     swqos_configs,
-    lookup_table_key: None,
 };
 ```
 
