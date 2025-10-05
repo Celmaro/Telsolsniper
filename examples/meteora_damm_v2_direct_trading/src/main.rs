@@ -1,0 +1,98 @@
+use sol_trade_sdk::{
+    common::{
+        spl_associated_token_account::get_associated_token_address_with_program_id, AnyResult,
+        TradeConfig,
+    },
+    swqos::SwqosConfig,
+    trading::{core::params::MeteoraDammV2Params, factory::DexType},
+    SolanaTrade, TradeTokenType,
+};
+use solana_commitment_config::CommitmentConfig;
+use solana_sdk::signature::Keypair;
+use solana_sdk::{pubkey::Pubkey, signer::Signer};
+use std::{str::FromStr, sync::Arc};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Testing Metaora Damm V2 trading...");
+
+    let client = create_solana_trade_client().await?;
+    let slippage_basis_points = Some(100);
+    let recent_blockhash = client.rpc.get_latest_blockhash().await?;
+    let pool = Pubkey::from_str("35EFyWd9cH8pdHxVgXHF68L1oZxSWd1FfJASSNTUtoTC").unwrap();
+    let mint_pubkey = Pubkey::from_str("FhTRoy63ZiLcjLEVCMCTLc5Cu5ozrzouNg6cDp1ASZMC").unwrap();
+
+    // Buy tokens
+    println!("Buying tokens from Metaora Damm V2...");
+    let buy_sol_amount = 100_000;
+    let buy_params = sol_trade_sdk::TradeBuyParams {
+        dex_type: DexType::MeteoraDammV2,
+        input_token_type: TradeTokenType::WSOL,
+        mint: mint_pubkey,
+        input_token_amount: buy_sol_amount,
+        slippage_basis_points: slippage_basis_points,
+        recent_blockhash: Some(recent_blockhash),
+        extension_params: Box::new(
+            MeteoraDammV2Params::from_pool_address_by_rpc(&client.rpc, &pool).await?,
+        ),
+        lookup_table_key: None,
+        wait_transaction_confirmed: true,
+        create_input_token_ata: true,
+        close_input_token_ata: true,
+        create_mint_ata: true,
+        open_seed_optimize: false,
+        durable_nonce: None,
+        fixed_output_token_amount: Some(1),
+    };
+    client.buy(buy_params).await?;
+
+    // Sell tokens
+    println!("Selling tokens from Metaora Damm V2...");
+
+    let rpc = client.rpc.clone();
+    let payer = client.payer.pubkey();
+    let program_id = sol_trade_sdk::constants::TOKEN_PROGRAM;
+    let account = get_associated_token_address_with_program_id(&payer, &mint_pubkey, &program_id);
+    let balance = rpc.get_token_account_balance(&account).await?;
+    let amount_token = balance.amount.parse::<u64>().unwrap();
+    println!("Token balance: {}", amount_token);
+    let sell_params = sol_trade_sdk::TradeSellParams {
+        dex_type: DexType::MeteoraDammV2,
+        output_token_type: TradeTokenType::WSOL,
+        mint: mint_pubkey,
+        input_token_amount: amount_token,
+        slippage_basis_points: slippage_basis_points,
+        recent_blockhash: Some(recent_blockhash),
+        with_tip: false,
+        extension_params: Box::new(
+            MeteoraDammV2Params::from_pool_address_by_rpc(&client.rpc, &pool).await?,
+        ),
+        lookup_table_key: None,
+        wait_transaction_confirmed: true,
+        create_output_token_ata: true,
+        close_output_token_ata: true,
+        open_seed_optimize: false,
+        durable_nonce: None,
+        fixed_output_token_amount: Some(1),
+    };
+    client.sell(sell_params).await?;
+
+    tokio::signal::ctrl_c().await?;
+    Ok(())
+}
+
+/// Create SolanaTrade client
+/// Initializes a new SolanaTrade client with configuration
+async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
+    println!("🚀 Initializing SolanaTrade client...");
+    let payer = Keypair::from_base58_string("use_your_payer_keypair_here");
+    let rpc_url = "https://api.mainnet-beta.solana.com".to_string();
+    let commitment = CommitmentConfig::confirmed();
+    let swqos_configs: Vec<SwqosConfig> = vec![SwqosConfig::Default(rpc_url.clone())];
+    let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment);
+    let solana_trade = SolanaTrade::new(Arc::new(payer), trade_config).await;
+    // set global strategy
+    sol_trade_sdk::common::GasFeeStrategy::set_global_fee_strategy(150000, 500000, 0.001, 0.001);
+    println!("✅ SolanaTrade client initialized successfully!");
+    Ok(solana_trade)
+}
