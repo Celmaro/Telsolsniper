@@ -1,4 +1,4 @@
-//! 并行执行器
+//! Parallel executor for multi-SWQOS submit.
 
 use anyhow::{anyhow, Result};
 use crossbeam_queue::ArrayQueue;
@@ -39,8 +39,8 @@ struct TaskResult {
     signature: Signature,
     error: Option<anyhow::Error>,
     #[allow(dead_code)]
-    swqos_type: SwqosType,  // 🔧 增加：记录SWQOS类型
-    landed_on_chain: bool,  // 🔧 Whether tx landed on-chain (even if failed)
+    swqos_type: SwqosType,
+    landed_on_chain: bool,
 }
 
 /// Check if an error indicates the transaction landed on-chain (vs network/timeout error)
@@ -87,14 +87,14 @@ impl ResultCollector {
     }
 
     fn submit(&self, result: TaskResult) {
-        // 🚀 优化：ArrayQueue 内部已保证同步，无需额外 fence
+        // ArrayQueue is already synchronized; no extra fence needed
         let is_success = result.success;
         let is_landed_failed = result.landed_on_chain && !result.success;
 
         let _ = self.results.push(result);
 
         if is_success {
-            self.success_flag.store(true, Ordering::Release); // Release 确保 push 可见
+            self.success_flag.store(true, Ordering::Release);
         } else if is_landed_failed {
             // 🔧 Tx landed but failed (e.g., ExceededSlippage) - nonce is consumed, no point waiting
             self.landed_failed_flag.store(true, Ordering::Release);
@@ -105,12 +105,11 @@ impl ResultCollector {
 
     async fn wait_for_success(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
         let start = Instant::now();
-        let timeout = std::time::Duration::from_secs(30);
+        let timeout = std::time::Duration::from_secs(5);
+        let poll_interval = std::time::Duration::from_millis(1000);
 
         loop {
-            // 🚀 Acquire 确保看到 push 的内容
             if self.success_flag.load(Ordering::Acquire) {
-                // 🔧 修复：收集所有签名
                 let mut signatures = Vec::new();
                 let mut has_success = false;
                 while let Some(result) = self.results.pop() {
@@ -124,7 +123,7 @@ impl ResultCollector {
                 }
             }
 
-            // 🔧 Early exit: if a tx landed but failed (e.g., ExceededSlippage),
+            // Early exit: if a tx landed but failed (e.g., ExceededSlippage),
             // nonce is consumed and other channels can't succeed - return immediately
             if self.landed_failed_flag.load(Ordering::Acquire) {
                 let mut signatures = Vec::new();
@@ -142,8 +141,7 @@ impl ResultCollector {
             }
 
             let completed = self.completed_count.load(Ordering::Acquire);
-            if completed >= self.total_tasks {
-                // 🔧 修复：收集所有签名
+                if completed >= self.total_tasks {
                 let mut signatures = Vec::new();
                 let mut last_error = None;
                 let mut any_success = false;
@@ -165,12 +163,11 @@ impl ResultCollector {
             if start.elapsed() > timeout {
                 return None;
             }
-            tokio::task::yield_now().await;
+            tokio::time::sleep(poll_interval).await;
         }
     }
 
     fn get_first(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
-        // 🔧 修复：收集已提交的所有签名
         let mut signatures = Vec::new();
         let mut has_success = false;
         let mut last_error = None;
@@ -191,11 +188,25 @@ impl ResultCollector {
             None
         }
     }
+
+    /// 等待全部任务完成（不等待链上确认），然后收集并返回所有签名。用于「多路提交」时返回多笔签名。
+    async fn wait_for_all_submitted(&self, timeout_secs: u64) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
+        let start = Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+        let poll_interval = std::time::Duration::from_millis(50);
+        while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
+            if start.elapsed() > timeout {
+                break;
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+        self.get_first()
+    }
 }
 
-/// 🔧 修复：返回Vec<Signature>支持多SWQOS并发交易
+/// Execute trade on multiple SWQOS clients in parallel; returns success flag, all signatures, and last error.
 pub async fn execute_parallel(
-    swqos_clients: Vec<Arc<SwqosClient>>,
+    swqos_clients: &[Arc<SwqosClient>],
     payer: Arc<Keypair>,
     rpc: Option<Arc<SolanaRpcClient>>,
     instructions: Vec<Instruction>,
@@ -208,6 +219,7 @@ pub async fn execute_parallel(
     wait_transaction_confirmed: bool,
     with_tip: bool,
     gas_fee_strategy: GasFeeStrategy,
+    use_core_affinity: bool,
 ) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>)> {
     let _exec_start = Instant::now();
 
@@ -224,10 +236,10 @@ pub async fn execute_parallel(
         return Err(anyhow!("No Rpc Default Swqos configured."));
     }
 
-    let cores = core_affinity::get_core_ids().unwrap();
+    let cores = core_affinity::get_core_ids().unwrap_or_default();
     let instructions = Arc::new(instructions);
 
-    // 预先计算所有有效的组合
+    // Precompute all valid (client, gas config) combinations
     let task_configs: Vec<_> = swqos_clients
         .iter()
         .enumerate()
@@ -244,7 +256,7 @@ pub async fn execute_parallel(
                 .into_iter()
                 .filter(|config| config.0.eq(&swqos_client.get_swqos_type()))
                 .filter(|config| {
-                    // 当需要 tip 且不是 Default 时，按 provider 最低小费进行筛选
+                    // When tip required and not Default, filter by provider minimum tip
                     if with_tip && !matches!(config.0, SwqosType::Default) {
                         let min_tip = match config.0 {
                             SwqosType::Jito => SWQOS_MIN_TIP_JITO,
@@ -262,9 +274,9 @@ pub async fn execute_parallel(
                             SwqosType::Speedlanding => SWQOS_MIN_TIP_SPEEDLANDING,
                             SwqosType::Default => SWQOS_MIN_TIP_DEFAULT,
                         };
-                        if config.2.tip < min_tip {
+                        if config.2.tip < min_tip && crate::common::sdk_log::sdk_log_enabled() {
                             println!(
-                                "⚠️ Config filtered: {:?} tip {} is below minimum required tip {}",
+                                "⚠️ Config filtered: {:?} tip {} is below minimum required {}",
                                 config.0, config.2.tip, min_tip
                             );
                         }
@@ -291,7 +303,8 @@ pub async fn execute_parallel(
     let _spawn_start = Instant::now();
 
     for (i, swqos_client, gas_fee_strategy_config) in task_configs {
-        let core_id = cores[i % cores.len()];
+        let core_id = cores.get(i % cores.len().max(1)).copied();
+        let use_affinity = use_core_affinity;
         let payer = payer.clone();
         let instructions = instructions.clone();
         let middleware_manager = middleware_manager.clone();
@@ -306,10 +319,15 @@ pub async fn execute_parallel(
         let rpc = rpc.clone();
         let durable_nonce = durable_nonce.clone();
         let address_lookup_table_account = address_lookup_table_account.clone();
+        let recent_blockhash_task = recent_blockhash.clone();
 
         tokio::spawn(async move {
             let _task_start = Instant::now();
-            core_affinity::set_for_current(core_id);
+            if use_affinity {
+                if let Some(cid) = core_id {
+                    core_affinity::set_for_current(cid);
+                }
+            }
 
             let tip_amount = if with_tip { tip } else { 0.0 };
 
@@ -319,9 +337,9 @@ pub async fn execute_parallel(
                 rpc,
                 unit_limit,
                 unit_price,
-                instructions.as_ref().clone(),
+                instructions.as_ref(),
                 address_lookup_table_account,
-                recent_blockhash,
+                recent_blockhash_task,
                 middleware_manager,
                 protocol_name,
                 is_buy,
@@ -339,8 +357,8 @@ pub async fn execute_parallel(
                         success: false,
                         signature: Signature::default(),
                         error: Some(e),
-                        swqos_type,  // 🔧 记录SWQOS类型
-                        landed_on_chain: false,  // Build failed, tx never sent
+                        swqos_type,
+                        landed_on_chain: false,
                     });
                     return;
                 }
@@ -373,28 +391,28 @@ pub async fn execute_parallel(
                 }
             };
 
-            // Transaction sent
-
-            if let Some(signature) = transaction.signatures.first() {
-                collector.submit(TaskResult {
-                    success,
-                    signature: *signature,
-                    error: err,
-                    swqos_type,  // 🔧 记录SWQOS类型
-                    landed_on_chain,  // 🔧 Whether tx landed (even if it failed)
-                });
-            }
+            // Transaction sent: always submit a result so collector never has "no result" for this task.
+            // If transaction has no signatures (malformed), submit with default signature and success=false.
+            let sig = transaction.signatures.first().copied().unwrap_or_default();
+            collector.submit(TaskResult {
+                success,
+                signature: sig,
+                error: err,
+                swqos_type,
+                landed_on_chain,
+            });
         });
     }
 
     // All tasks spawned
 
     if !wait_transaction_confirmed {
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        if let Some(result) = collector.get_first() {
-            return Ok(result);
-        }
-        return Err(anyhow!("No transaction signature available"));
+        const SUBMIT_TIMEOUT_SECS: u64 = 30;
+        let (success, signatures, last_error) = collector
+            .wait_for_all_submitted(SUBMIT_TIMEOUT_SECS)
+            .await
+            .unwrap_or((false, vec![], Some(anyhow!("No SWQOS result within {}s", SUBMIT_TIMEOUT_SECS))));
+        return Ok((success, signatures, last_error));
     }
 
     if let Some(result) = collector.wait_for_success().await {

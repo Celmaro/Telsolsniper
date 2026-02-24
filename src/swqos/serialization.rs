@@ -105,7 +105,41 @@ impl Base64Encoder {
     }
 }
 
+/// Guard that returns the serialization buffer to the pool on drop.
+pub struct PooledTxBufGuard(pub Vec<u8>);
+
+impl std::ops::Deref for PooledTxBufGuard {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Drop for PooledTxBufGuard {
+    fn drop(&mut self) {
+        if !self.0.is_empty() {
+            SERIALIZER.return_buffer(std::mem::take(&mut self.0));
+        }
+    }
+}
+
+/// Serialize transaction to bincode bytes using buffer pool. The returned guard returns the buffer
+/// to the pool when dropped; use `&*guard` or `guard.as_ref()` for `&[u8]`.
+pub fn serialize_transaction_bincode_sync(
+    transaction: &impl SerializableTransaction,
+) -> Result<(PooledTxBufGuard, Signature)> {
+    let signature = transaction.get_signature();
+    let serialized_tx = SERIALIZER.serialize_zero_alloc(transaction, "transaction")?;
+    Ok((PooledTxBufGuard(serialized_tx), *signature))
+}
+
+/// Return a buffer to the pool (for manual use when not using `PooledTxBufGuard`).
+pub fn return_serialization_buffer(buffer: Vec<u8>) {
+    SERIALIZER.return_buffer(buffer);
+}
+
 /// Sync serialize + encode using buffer pool; use in hot path to reduce allocs.
+/// Base64 path uses SIMD-accelerated encoding.
 pub fn serialize_transaction_sync(
     transaction: &impl SerializableTransaction,
     encoding: UiTransactionEncoding,
@@ -114,7 +148,7 @@ pub fn serialize_transaction_sync(
     let serialized_tx = SERIALIZER.serialize_zero_alloc(transaction, "transaction")?;
     let serialized = match encoding {
         UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
-        UiTransactionEncoding::Base64 => STANDARD.encode(&serialized_tx),
+        UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
         _ => return Err(anyhow::anyhow!("Unsupported encoding")),
     };
     SERIALIZER.return_buffer(serialized_tx);
@@ -133,10 +167,7 @@ pub async fn serialize_transaction(
 
     let serialized = match encoding {
         UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
-        UiTransactionEncoding::Base64 => {
-            // Use SIMD-optimized Base64 encoding
-            STANDARD.encode(&serialized_tx)
-        }
+        UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
         _ => return Err(anyhow::anyhow!("Unsupported encoding")),
     };
 
@@ -156,7 +187,7 @@ pub fn serialize_transactions_batch_sync(
         let serialized_tx = SERIALIZER.serialize_zero_alloc(tx, "transaction")?;
         let encoded = match encoding {
             UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
-            UiTransactionEncoding::Base64 => STANDARD.encode(&serialized_tx),
+            UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
             _ => return Err(anyhow::anyhow!("Unsupported encoding")),
         };
         SERIALIZER.return_buffer(serialized_tx);
@@ -177,7 +208,7 @@ pub async fn serialize_transactions_batch(
 
         let encoded = match encoding {
             UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
-            UiTransactionEncoding::Base64 => STANDARD.encode(&serialized_tx),
+            UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
             _ => return Err(anyhow::anyhow!("Unsupported encoding")),
         };
 

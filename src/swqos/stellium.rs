@@ -1,4 +1,4 @@
-use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation, serialize_transaction_and_encode};
 use rand::seq::IndexedRandom;
 use reqwest::Client;
 use serde_json::json;
@@ -48,19 +48,7 @@ impl SwqosClientTrait for StelliumClient {
 impl StelliumClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = Client::builder()
-            // Optimized connection pool settings for high performance
-            .pool_idle_timeout(Duration::from_secs(300))
-            .pool_max_idle_per_host(4)
-            .tcp_keepalive(Some(Duration::from_secs(60)))  // Reduced from 1200 to 60
-            .tcp_nodelay(true)  // Disable Nagle's algorithm for lower latency
-            .http2_keep_alive_interval(Duration::from_secs(10))
-            .http2_keep_alive_timeout(Duration::from_secs(5))
-            .http2_adaptive_window(true)  // Enable adaptive flow control
-            .timeout(Duration::from_millis(3000))  // Reduced from 10s to 3s
-            .connect_timeout(Duration::from_millis(2000))  // Reduced from 5s to 2s
-            .build()
-            .unwrap();
+        let http_client = default_http_client_builder().build().unwrap();
 
         let keep_alive_running = Arc::new(AtomicBool::new(true));
 
@@ -94,7 +82,7 @@ impl StelliumClient {
             if let Ok(resp) = http_client.get(&url).timeout(Duration::from_millis(1500)).send().await {
                 let status = resp.status();
                 let _ = resp.bytes().await;
-                if !status.is_success() {
+                if !status.is_success() && crate::common::sdk_log::sdk_log_enabled() {
                     eprintln!(" [Stellium] Ping failed with status: {}", status);
                 }
             }
@@ -109,12 +97,14 @@ impl StelliumClient {
                     Ok(response) => {
                         let status = response.status();
                         let _ = response.bytes().await;
-                        if !status.is_success() {
+                        if !status.is_success() && crate::common::sdk_log::sdk_log_enabled() {
                             eprintln!(" [Stellium] Ping failed with status: {}", status);
                         }
                     }
                     Err(e) => {
-                        eprintln!(" [Stellium] Ping request error: {:?}", e);
+                        if crate::common::sdk_log::sdk_log_enabled() {
+                            eprintln!(" [Stellium] Ping request error: {:?}", e);
+                        }
                     }
                 }
             }
@@ -152,12 +142,14 @@ impl StelliumClient {
 
         // Parse response
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if response_json.get("result").is_some() {
-                println!(" [Stellium] {} submitted: {:?}", trade_type, start_time.elapsed());
-            } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" [Stellium] {} submission failed: {:?}", trade_type, _error);
+            if crate::common::sdk_log::sdk_log_enabled() {
+                if response_json.get("result").is_some() {
+                    println!(" [Stellium] {} submitted: {:?}", trade_type, start_time.elapsed());
+                } else if let Some(_error) = response_json.get("error") {
+                    eprintln!(" [Stellium] {} submission failed: {:?}", trade_type, _error);
+                }
             }
-        } else {
+        } else if crate::common::sdk_log::sdk_log_enabled() {
             eprintln!(" [Stellium] {} submission failed: {:?}", trade_type, response_text);
         }
 
@@ -165,12 +157,14 @@ impl StelliumClient {
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" signature: {:?}", signature);
-                println!(" [Stellium] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                if crate::common::sdk_log::sdk_log_enabled() {
+                    println!(" signature: {:?}", signature);
+                    println!(" [Stellium] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                }
                 return Err(e);
             },
         }
-        if wait_confirmation {
+        if wait_confirmation && crate::common::sdk_log::sdk_log_enabled() {
             println!(" signature: {:?}", signature);
             println!(" [Stellium] {} confirmed: {:?}", trade_type, start_time.elapsed());
         }

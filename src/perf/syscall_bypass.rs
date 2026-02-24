@@ -1,13 +1,5 @@
-//! 🚀 系统调用绕过机制 - 最小化系统调用开销
-//! 
-//! 实现系统调用级别的极致优化，包括：
-//! - 系统调用批处理
-//! - vDSO快速系统调用
-//! - io_uring异步I/O优化
-//! - 内存映射系统调用
-//! - 用户空间系统调用实现
-//! - 系统调用拦截与优化
-//! - 直接硬件访问
+//! Syscall bypass: batching, vDSO fast time, io_uring, mmap, userspace impl.
+//! 系统调用绕过：批处理、vDSO 快速时间、io_uring、mmap、用户态实现。
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -18,38 +10,25 @@ use std::fs::OpenOptions;
 use anyhow::Result;
 use crossbeam_utils::CachePadded;
 
-/// 🚀 系统调用绕过管理器
+/// Syscall bypass manager (batch, fast time, I/O). 系统调用绕过管理器。
 pub struct SystemCallBypassManager {
-    /// 绕过配置
     config: SyscallBypassConfig,
-    /// 批处理器
     batch_processor: Arc<SyscallBatchProcessor>,
-    /// 快速时间获取器
     fast_time_provider: Arc<FastTimeProvider>,
-    /// I/O优化器
     _io_optimizer: Arc<IOOptimizer>,
-    /// 统计信息
     stats: Arc<SyscallBypassStats>,
 }
 
-/// 系统调用绕过配置
+/// Syscall bypass configuration. 系统调用绕过配置。
 #[derive(Debug, Clone)]
 pub struct SyscallBypassConfig {
-    /// 启用系统调用批处理
     pub enable_batch_processing: bool,
-    /// 批处理大小
     pub batch_size: usize,
-    /// 启用快速时间获取
     pub enable_fast_time: bool,
-    /// 启用vDSO优化
     pub enable_vdso: bool,
-    /// 启用io_uring
     pub enable_io_uring: bool,
-    /// 启用内存映射优化
     pub enable_mmap_optimization: bool,
-    /// 启用用户空间实现
     pub enable_userspace_impl: bool,
-    /// 系统调用缓存大小
     pub syscall_cache_size: usize,
 }
 
@@ -68,30 +47,19 @@ impl Default for SyscallBypassConfig {
     }
 }
 
-/// 系统调用批处理器
 pub struct SyscallBatchProcessor {
-    /// 待处理的系统调用队列
     pending_calls: crossbeam_queue::ArrayQueue<SyscallRequest>,
-    /// 批处理线程池
     _executor: tokio::runtime::Handle,
-    /// 批处理统计
     batch_stats: CachePadded<AtomicU64>,
 }
 
-/// 系统调用请求
 #[derive(Debug, Clone)]
 pub enum SyscallRequest {
-    /// 文件写入
     Write { fd: i32, data: Vec<u8> },
-    /// 文件读取
     Read { fd: i32, size: usize },
-    /// 网络发送
     Send { socket: i32, data: Vec<u8> },
-    /// 网络接收
     Recv { socket: i32, size: usize },
-    /// 时间获取
     GetTime,
-    /// 内存分配
     MemAlloc { size: usize },
     /// 内存释放
     MemFree { ptr: usize },
@@ -132,7 +100,7 @@ impl FastTimeProvider {
             vdso_enabled: enable_vdso,
         };
         
-        log::info!("🚀 Fast time provider initialized with vDSO: {}", enable_vdso);
+        tracing::info!(target: "sol_trade_sdk","🚀 Fast time provider initialized with vDSO: {}", enable_vdso);
         Ok(provider)
     }
     
@@ -233,7 +201,7 @@ impl IOOptimizer {
     pub fn new(_config: &SyscallBypassConfig) -> Result<Self> {
         let io_uring_available = Self::check_io_uring_support();
         
-        log::info!("🚀 I/O Optimizer initialized - io_uring: {}", io_uring_available);
+        tracing::info!(target: "sol_trade_sdk","🚀 I/O Optimizer initialized - io_uring: {}", io_uring_available);
         
         Ok(Self {
             io_uring_available,
@@ -249,7 +217,7 @@ impl IOOptimizer {
             // 检查内核版本和io_uring支持
             if let Ok(uname) = std::process::Command::new("uname").arg("-r").output() {
                 let kernel_version = String::from_utf8_lossy(&uname.stdout);
-                log::info!("Kernel version: {}", kernel_version.trim());
+                tracing::info!(target: "sol_trade_sdk","Kernel version: {}", kernel_version.trim());
                 
                 // 简单检查：内核版本 >= 5.1 支持io_uring
                 if let Some(version_str) = kernel_version.split('.').next() {
@@ -277,7 +245,7 @@ impl IOOptimizer {
     /// 使用io_uring进行批量写入
     async fn io_uring_batch_write(&self, requests: &[(i32, &[u8])]) -> Result<Vec<usize>> {
         // 这里是伪代码 - 实际实现需要io_uring库
-        log::trace!("Using io_uring for {} write operations", requests.len());
+        tracing::trace!(target: "sol_trade_sdk","Using io_uring for {} write operations", requests.len());
         
         let mut results = Vec::with_capacity(requests.len());
         
@@ -362,7 +330,7 @@ impl IOOptimizer {
                 
                 self.mmap_regions.push(region);
                 
-                log::info!("✅ Memory mapped I/O created: {} bytes at {:p}", size, addr);
+                tracing::info!(target: "sol_trade_sdk","✅ Memory mapped I/O created: {} bytes at {:p}", size, addr);
                 Ok(addr as usize)
             }
         }
@@ -390,7 +358,7 @@ impl SyscallBatchProcessor {
         let pending_calls = crossbeam_queue::ArrayQueue::new(batch_size * 10);
         let executor = tokio::runtime::Handle::current();
         
-        log::info!("🚀 Syscall batch processor created with batch size: {}", batch_size);
+        tracing::info!(target: "sol_trade_sdk","🚀 Syscall batch processor created with batch size: {}", batch_size);
         
         Ok(Self {
             pending_calls,
@@ -464,7 +432,7 @@ impl SyscallBatchProcessor {
         
         self.batch_stats.fetch_add(1, Ordering::Relaxed);
         
-        log::trace!("Executed batch of {} syscalls", batch_size);
+        tracing::trace!(target: "sol_trade_sdk","Executed batch of {} syscalls", batch_size);
         Ok(batch_size)
     }
     
@@ -473,7 +441,7 @@ impl SyscallBatchProcessor {
         // 使用writev系统调用进行批量写入
         for (fd, data) in requests {
             // 实际实现会使用writev或io_uring
-            log::trace!("Batched write to fd {}: {} bytes", fd, data.len());
+            tracing::trace!(target: "sol_trade_sdk","Batched write to fd {}: {} bytes", fd, data.len());
         }
         Ok(())
     }
@@ -482,7 +450,7 @@ impl SyscallBatchProcessor {
     async fn batch_read_operations(&self, requests: Vec<(i32, usize)>) -> Result<()> {
         // 使用readv系统调用进行批量读取
         for (fd, size) in requests {
-            log::trace!("Batched read from fd {}: {} bytes", fd, size);
+            tracing::trace!(target: "sol_trade_sdk","Batched read from fd {}: {} bytes", fd, size);
         }
         Ok(())
     }
@@ -491,7 +459,7 @@ impl SyscallBatchProcessor {
     async fn batch_network_operations(&self, requests: Vec<(i32, Vec<u8>)>) -> Result<()> {
         // 使用sendmsg/recvmsg进行批量网络操作
         for (socket, data) in requests {
-            log::trace!("Batched network send to socket {}: {} bytes", socket, data.len());
+            tracing::trace!(target: "sol_trade_sdk","Batched network send to socket {}: {} bytes", socket, data.len());
         }
         Ok(())
     }
@@ -515,11 +483,11 @@ impl SystemCallBypassManager {
         let io_optimizer = Arc::new(IOOptimizer::new(&config)?);
         let stats = Arc::new(SyscallBypassStats::default());
         
-        log::info!("🚀 System Call Bypass Manager initialized");
-        log::info!("   📦 Batch Processing: {}", config.enable_batch_processing);
-        log::info!("   ⏰ Fast Time: {}", config.enable_fast_time);
-        log::info!("   🚀 vDSO: {}", config.enable_vdso);
-        log::info!("   📁 io_uring: {}", config.enable_io_uring);
+        tracing::info!(target: "sol_trade_sdk","🚀 System Call Bypass Manager initialized");
+        tracing::info!(target: "sol_trade_sdk","   📦 Batch Processing: {}", config.enable_batch_processing);
+        tracing::info!(target: "sol_trade_sdk","   ⏰ Fast Time: {}", config.enable_fast_time);
+        tracing::info!(target: "sol_trade_sdk","   🚀 vDSO: {}", config.enable_vdso);
+        tracing::info!(target: "sol_trade_sdk","   📁 io_uring: {}", config.enable_io_uring);
         
         Ok(Self {
             config,
@@ -626,7 +594,7 @@ impl SystemCallBypassManager {
             }
         });
         
-        log::info!("✅ Batch processing worker started");
+        tracing::info!(target: "sol_trade_sdk","✅ Batch processing worker started");
         Ok(())
     }
     
@@ -669,16 +637,16 @@ pub struct SyscallBypassStatsSnapshot {
 impl SyscallBypassStatsSnapshot {
     /// 打印统计信息
     pub fn print_stats(&self) {
-        log::info!("📊 System Call Bypass Stats:");
-        log::info!("   🚫 Syscalls Bypassed: {}", self.syscalls_bypassed);
-        log::info!("   📦 Syscalls Batched: {}", self.syscalls_batched);
-        log::info!("   ⏰ Time Calls Cached: {}", self.time_calls_cached);
-        log::info!("   📁 I/O Operations Optimized: {}", self.io_operations_optimized);
-        log::info!("   💾 Memory Operations Avoided: {}", self.memory_operations_avoided);
+        tracing::info!(target: "sol_trade_sdk","📊 System Call Bypass Stats:");
+        tracing::info!(target: "sol_trade_sdk","   🚫 Syscalls Bypassed: {}", self.syscalls_bypassed);
+        tracing::info!(target: "sol_trade_sdk","   📦 Syscalls Batched: {}", self.syscalls_batched);
+        tracing::info!(target: "sol_trade_sdk","   ⏰ Time Calls Cached: {}", self.time_calls_cached);
+        tracing::info!(target: "sol_trade_sdk","   📁 I/O Operations Optimized: {}", self.io_operations_optimized);
+        tracing::info!(target: "sol_trade_sdk","   💾 Memory Operations Avoided: {}", self.memory_operations_avoided);
         
         let total_optimizations = self.syscalls_bypassed + self.time_calls_cached + 
                                  self.io_operations_optimized + self.memory_operations_avoided;
-        log::info!("   🏆 Total Optimizations: {}", total_optimizations);
+        tracing::info!(target: "sol_trade_sdk","   🏆 Total Optimizations: {}", total_optimizations);
     }
 }
 

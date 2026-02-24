@@ -67,6 +67,12 @@ pub struct SwapParams {
     pub fixed_output_amount: Option<u64>,
     pub gas_fee_strategy: GasFeeStrategy,
     pub simulate: bool,
+    /// Whether to output SDK logs (from TradeConfig.log_enabled).
+    pub log_enabled: bool,
+    /// Whether to pin parallel submit tasks to cores (from TradeConfig.use_core_affinity).
+    pub use_core_affinity: bool,
+    /// Optional event receive time in microseconds (same scale as sol-parser-sdk clock::now_micros). Used as timing start when log_enabled.
+    pub grpc_recv_us: Option<i64>,
     /// Use exact SOL amount instructions (buy_exact_sol_in for PumpFun, buy_exact_quote_in for PumpSwap).
     /// When Some(true) or None (default), the exact SOL/quote amount is spent and slippage is applied to output tokens.
     /// When Some(false), uses regular buy instruction where slippage is applied to SOL/quote input.

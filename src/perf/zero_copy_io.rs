@@ -73,7 +73,7 @@ impl SharedMemoryPool {
             free_blocks.push(AtomicU64::new(bits));
         }
         
-        log::info!("🚀 Created shared memory pool {} with {} blocks of {} bytes each", 
+        tracing::info!(target: "sol_trade_sdk","🚀 Created shared memory pool {} with {} blocks of {} bytes each", 
                   pool_id, total_blocks, aligned_block_size);
         
         Ok(Self {
@@ -155,7 +155,7 @@ impl SharedMemoryPool {
     #[inline(always)]
     pub fn deallocate_block(&self, block: ZeroCopyBlock) {
         if block.pool_id != self.pool_id {
-            log::error!("Attempting to deallocate block from wrong pool");
+            tracing::error!(target: "sol_trade_sdk", "Attempting to deallocate block from wrong pool");
             return;
         }
         
@@ -267,7 +267,7 @@ impl MemoryMappedBuffer {
             .map_anon()
             .context("Failed to create memory mapped buffer")?;
         
-        log::info!("🚀 Created memory mapped buffer {} with size {} bytes", buffer_id, size);
+        tracing::info!(target: "sol_trade_sdk","🚀 Created memory mapped buffer {} with size {} bytes", buffer_id, size);
         
         Ok(Self {
             mmap,
@@ -425,7 +425,7 @@ impl DirectMemoryAccessManager {
             dma_channels.push(Arc::new(DMAChannel::new(i)?));
         }
         
-        log::info!("🚀 Created DMA manager with {} channels", num_channels);
+        tracing::info!(target: "sol_trade_sdk","🚀 Created DMA manager with {} channels", num_channels);
         
         Ok(Self {
             dma_channels,
@@ -549,12 +549,12 @@ impl ZeroCopyStats {
         let bytes = self.bytes_transferred.load(Ordering::Relaxed);
         let mmap_usage = self.mmap_buffer_usage.load(Ordering::Relaxed);
         
-        log::info!("🚀 Zero-Copy Stats:");
-        log::info!("   📦 Blocks: Allocated={}, Freed={}, Active={}", 
+        tracing::info!(target: "sol_trade_sdk","🚀 Zero-Copy Stats:");
+        tracing::info!(target: "sol_trade_sdk","   📦 Blocks: Allocated={}, Freed={}, Active={}", 
                   allocated, freed, allocated.saturating_sub(freed));
-        log::info!("   📊 Bytes Transferred: {} ({:.2} MB)", 
+        tracing::info!(target: "sol_trade_sdk","   📊 Bytes Transferred: {} ({:.2} MB)", 
                   bytes, bytes as f64 / 1024.0 / 1024.0);
-        log::info!("   💾 Memory Mapped Usage: {} ({:.2} MB)", 
+        tracing::info!(target: "sol_trade_sdk","   💾 Memory Mapped Usage: {} ({:.2} MB)", 
                   mmap_usage, mmap_usage as f64 / 1024.0 / 1024.0);
     }
 }
@@ -581,10 +581,10 @@ impl ZeroCopyMemoryManager {
         let dma_manager = Arc::new(DirectMemoryAccessManager::new(16)?); // 16 DMA channels
         let stats = Arc::new(ZeroCopyStats::new());
         
-        log::info!("🚀 Zero-Copy Memory Manager initialized");
-        log::info!("   📦 Memory Pools: {}", shared_pools.len());
-        log::info!("   💾 Mapped Buffers: {}", mmap_buffers.len());
-        log::info!("   🔄 DMA Channels: 16");
+        tracing::info!(target: "sol_trade_sdk","🚀 Zero-Copy Memory Manager initialized");
+        tracing::info!(target: "sol_trade_sdk","   📦 Memory Pools: {}", shared_pools.len());
+        tracing::info!(target: "sol_trade_sdk","   💾 Mapped Buffers: {}", mmap_buffers.len());
+        tracing::info!(target: "sol_trade_sdk","   🔄 DMA Channels: 16");
         
         Ok(Self {
             shared_pools,

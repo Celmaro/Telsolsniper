@@ -174,7 +174,9 @@ mod tests {
         let total_elapsed = start.elapsed();
         let avg_per_call = total_elapsed.as_nanos() / iterations;
 
-        println!("Average fast_now_nanos() call: {}ns", avg_per_call);
+        if crate::common::sdk_log::sdk_log_enabled() {
+            println!("Average fast_now_nanos() call: {}ns", avg_per_call);
+        }
 
         // 快速时间戳应该非常快（< 100ns per call）
         assert!(avg_per_call < 100);
@@ -193,6 +195,8 @@ mod tests {
         let total_elapsed = start.elapsed();
         let avg_per_call = total_elapsed.as_nanos() / iterations;
 
-        println!("Average Instant::now() call: {}ns", avg_per_call);
+        if crate::common::sdk_log::sdk_log_enabled() {
+            println!("Average Instant::now() call: {}ns", avg_per_call);
+        }
     }
 }

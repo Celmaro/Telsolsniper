@@ -72,6 +72,10 @@ pub struct TradeConfig {
     pub create_wsol_ata_on_startup: bool,
     /// Whether to use seed optimization for all ATA operations (default: true)
     pub use_seed_optimize: bool,
+    /// Whether to pin parallel submit tasks to CPU cores (can reduce latency; set false in containers). Default true.
+    pub use_core_affinity: bool,
+    /// Whether to output all SDK logs (timing, SWQOS submit/confirm, WSOL, blacklist, etc.). Default true.
+    pub log_enabled: bool,
 }
 
 impl TradeConfig {
@@ -80,14 +84,18 @@ impl TradeConfig {
         swqos_configs: Vec<SwqosConfig>,
         commitment: CommitmentConfig,
     ) -> Self {
-        println!("🔧 TradeConfig create_wsol_ata_on_startup default value: true");
-        println!("🔧 TradeConfig use_seed_optimize default value: true");
+        if crate::common::sdk_log::sdk_log_enabled() {
+            println!("🔧 TradeConfig create_wsol_ata_on_startup default: true");
+            println!("🔧 TradeConfig use_seed_optimize default: true");
+        }
         Self {
             rpc_url,
             swqos_configs,
             commitment,
-            create_wsol_ata_on_startup: true,  // 默认：启动时检查并创建
-            use_seed_optimize: true,           // 默认：使用seed优化
+            create_wsol_ata_on_startup: true,  // default: check and create on startup
+            use_seed_optimize: true,           // default: use seed optimization
+            use_core_affinity: true,           // default: pin parallel submit tasks to cores
+            log_enabled: true,                 // default: enable all SDK logs
         }
     }
 

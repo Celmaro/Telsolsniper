@@ -6,6 +6,7 @@ pub mod swqos;
 pub mod trading;
 pub mod utils;
 use crate::common::nonce_cache::DurableNonceInfo;
+use crate::common::sdk_log;
 use crate::common::GasFeeStrategy;
 use crate::common::{TradeConfig, InfrastructureConfig};
 #[cfg(feature = "perf-trace")]
@@ -37,6 +38,21 @@ use solana_sdk::message::AddressLookupTableAccount;
 use solana_sdk::signer::Signer;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair, signature::Signature};
 use std::sync::Arc;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, warn};
+
+/// Single place to validate that protocol params match the given DEX type (avoids duplicate match in buy/sell).
+#[inline(always)]
+fn validate_protocol_params(dex_type: DexType, params: &DexParamEnum) -> bool {
+    match dex_type {
+        DexType::PumpFun => params.as_any().downcast_ref::<PumpFunParams>().is_some(),
+        DexType::PumpSwap => params.as_any().downcast_ref::<PumpSwapParams>().is_some(),
+        DexType::Bonk => params.as_any().downcast_ref::<BonkParams>().is_some(),
+        DexType::RaydiumCpmm => params.as_any().downcast_ref::<RaydiumCpmmParams>().is_some(),
+        DexType::RaydiumAmmV4 => params.as_any().downcast_ref::<RaydiumAmmV4Params>().is_some(),
+        DexType::MeteoraDammV2 => params.as_any().downcast_ref::<MeteoraDammV2Params>().is_some(),
+    }
+}
 
 /// Type of the token to buy
 #[derive(Clone, PartialEq)]
@@ -90,7 +106,9 @@ impl TradingInfrastructure {
         for swqos in &config.swqos_configs {
             // Check blacklist, skip disabled providers
             if swqos.is_blacklisted() {
-                eprintln!("\u{26a0}\u{fe0f} SWQOS {:?} is blacklisted, skipping", swqos.swqos_type());
+                if sdk_log::sdk_log_enabled() {
+                    warn!(target: "sol_trade_sdk", "⚠️ SWQOS {:?} is blacklisted, skipping", swqos.swqos_type());
+                }
                 continue;
             }
             match SwqosConfig::get_swqos_client(
@@ -99,10 +117,15 @@ impl TradingInfrastructure {
                 swqos.clone(),
             ).await {
                 Ok(swqos_client) => swqos_clients.push(swqos_client),
-                Err(err) => eprintln!(
-                    "failed to create {:?} swqos client: {err}. Excluding from swqos list",
-                    swqos.swqos_type()
-                ),
+                Err(err) => {
+                    if sdk_log::sdk_log_enabled() {
+                        warn!(
+                            target: "sol_trade_sdk",
+                            "failed to create {:?} swqos client: {err}. Excluding from swqos list",
+                            swqos.swqos_type()
+                        );
+                    }
+                }
             }
         }
 
@@ -130,6 +153,10 @@ pub struct TradingClient {
     /// Whether to use seed optimization for all ATA operations (default: true)
     /// Applies to all token account creations across buy and sell operations
     pub use_seed_optimize: bool,
+    /// Whether to pin parallel submit tasks to CPU cores (from TradeConfig.use_core_affinity). Default true.
+    pub use_core_affinity: bool,
+    /// Whether to output all SDK logs (from TradeConfig.log_enabled).
+    pub log_enabled: bool,
 }
 
 static INSTANCE: Mutex<Option<Arc<TradingClient>>> = Mutex::new(None);
@@ -144,6 +171,8 @@ impl Clone for TradingClient {
             infrastructure: self.infrastructure.clone(),
             middleware_manager: self.middleware_manager.clone(),
             use_seed_optimize: self.use_seed_optimize,
+            use_core_affinity: self.use_core_affinity,
+            log_enabled: self.log_enabled,
         }
     }
 }
@@ -193,6 +222,8 @@ pub struct TradeBuyParams {
     /// When Some(false), uses regular buy instruction where slippage is applied to SOL/quote input.
     /// This option only applies to PumpFun and PumpSwap DEXes; it is ignored for other DEXes.
     pub use_exact_sol_amount: Option<bool>,
+    /// 可选：事件收到时间（微秒，与 sol-parser-sdk 的 metadata.grpc_recv_us / clock::now_micros 同源）。不传且开启 log_enabled 时 SDK 用 now_micros() 作为起点，打印起点→提交耗时。
+    pub grpc_recv_us: Option<i64>,
 }
 
 /// Parameters for executing sell orders across different DEX protocols
@@ -237,6 +268,8 @@ pub struct TradeSellParams {
     pub gas_fee_strategy: GasFeeStrategy,
     /// Whether to simulate the transaction instead of executing it
     pub simulate: bool,
+    /// 可选：事件收到时间（微秒，与 sol-parser-sdk clock 同源）。不传且开启 log_enabled 时 SDK 用 now_micros() 作为起点。
+    pub grpc_recv_us: Option<i64>,
 }
 
 impl TradingClient {
@@ -266,6 +299,8 @@ impl TradingClient {
             infrastructure,
             middleware_manager: None,
             use_seed_optimize,
+            use_core_affinity: true,
+            log_enabled: true,
         }
     }
 
@@ -293,7 +328,9 @@ impl TradingClient {
             tokio::spawn(async move {
                 Self::ensure_wsol_ata(&payer_clone, &rpc_clone).await;
             });
-            println!("ℹ️ WSOL ATA 创建已在后台启动，不阻塞机器人启动");
+            if sdk_log::sdk_log_enabled() {
+                info!(target: "sol_trade_sdk", "ℹ️ WSOL ATA creation started in background, does not block bot startup");
+            }
         }
 
         Self {
@@ -301,6 +338,8 @@ impl TradingClient {
             infrastructure,
             middleware_manager: None,
             use_seed_optimize,
+            use_core_affinity: true,
+            log_enabled: true,
         }
     }
 
@@ -315,11 +354,15 @@ impl TradingClient {
 
         match rpc.get_account(&wsol_ata).await {
             Ok(_) => {
-                println!("✅ WSOL ATA已存在: {}", wsol_ata);
+                if sdk_log::sdk_log_enabled() {
+                    info!(target: "sol_trade_sdk", "✅ WSOL ATA already exists: {}", wsol_ata);
+                }
                 return;
             }
             Err(_) => {
-                println!("🔨 创建WSOL ATA: {}", wsol_ata);
+                if sdk_log::sdk_log_enabled() {
+                    info!(target: "sol_trade_sdk", "🔨 Creating WSOL ATA: {}", wsol_ata);
+                }
                 let create_ata_ixs =
                     crate::trading::common::wsol_manager::create_wsol_ata(&payer.pubkey());
 
@@ -333,15 +376,19 @@ impl TradingClient {
 
                     for attempt in 1..=MAX_RETRIES {
                         if attempt > 1 {
-                            println!("🔄 重试创建WSOL ATA (第{}/{}次)...", attempt, MAX_RETRIES);
+                            if sdk_log::sdk_log_enabled() {
+                                info!(target: "sol_trade_sdk", "🔄 Retrying WSOL ATA creation (attempt {}/{})...", attempt, MAX_RETRIES);
+                            }
                             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                         }
 
                         let recent_blockhash = match rpc.get_latest_blockhash().await {
                             Ok(hash) => hash,
                             Err(e) => {
-                                eprintln!("⚠️ 获取最新blockhash失败: {}", e);
-                                last_error = Some(format!("获取blockhash失败: {}", e));
+                                if sdk_log::sdk_log_enabled() {
+                                    warn!(target: "sol_trade_sdk", "⚠️ Failed to get latest blockhash: {}", e);
+                                }
+                                last_error = Some(format!("Failed to get blockhash: {}", e));
                                 continue;
                             }
                         };
@@ -361,7 +408,9 @@ impl TradingClient {
 
                         match send_result {
                             Ok(Ok(signature)) => {
-                                println!("✅ WSOL ATA创建成功: {}", signature);
+                                if sdk_log::sdk_log_enabled() {
+                                    info!(target: "sol_trade_sdk", "✅ WSOL ATA created successfully: {}", signature);
+                                }
                                 return;
                             }
                             Ok(Err(e)) => {
@@ -369,45 +418,50 @@ impl TradingClient {
 
                                 // 检查账户是否实际已存在
                                 if let Ok(_) = rpc.get_account(&wsol_ata).await {
-                                    println!(
-                                        "✅ WSOL ATA已存在（交易失败但账户存在）: {}",
-                                        wsol_ata
-                                    );
+                                    if sdk_log::sdk_log_enabled() {
+                                        info!(target: "sol_trade_sdk", "✅ WSOL ATA already exists (tx failed but account exists): {}", wsol_ata);
+                                    }
                                     return;
                                 }
 
-                                if attempt < MAX_RETRIES {
-                                    eprintln!("⚠️ 第{}次尝试失败: {}", attempt, e);
+                                if attempt < MAX_RETRIES && sdk_log::sdk_log_enabled() {
+                                    warn!(target: "sol_trade_sdk", "⚠️ Attempt {} failed: {}", attempt, e);
                                 }
                             }
                             Err(_) => {
-                                last_error = Some(format!("交易确认超时（{}秒）", TIMEOUT_SECS));
-                                eprintln!("⚠️ 第{}次尝试超时", attempt);
+                                last_error = Some(format!("Transaction confirmation timeout ({}s)", TIMEOUT_SECS));
+                                if sdk_log::sdk_log_enabled() {
+                                    warn!(target: "sol_trade_sdk", "⚠️ Attempt {} timed out", attempt);
+                                }
                             }
                         }
                     }
 
                     // 所有重试都失败了
                     if let Some(err) = last_error {
-                        eprintln!("❌ WSOL ATA创建失败（已重试{}次）: {}", MAX_RETRIES, wsol_ata);
-                        eprintln!("   错误详情: {}", err);
-                        eprintln!("   💡 可能原因:");
-                        eprintln!("      1. 钱包SOL余额不足（需要约0.002 SOL用于租金豁免）");
-                        eprintln!("      2. RPC节点响应超时或网络拥堵");
-                        eprintln!("      3. 交易费用不足");
-                        eprintln!("   🔧 解决方案:");
-                        eprintln!("      1. 给钱包充值至少0.1 SOL");
-                        eprintln!("      2. 等待几秒后重试");
-                        eprintln!("      3. 检查RPC节点连接");
-                        eprintln!("   ⚠️ 程序将在5秒后退出，请解决上述问题后重启");
+                        if sdk_log::sdk_log_enabled() {
+                            error!(target: "sol_trade_sdk", "❌ WSOL ATA creation failed after {} retries: {}", MAX_RETRIES, wsol_ata);
+                            error!(target: "sol_trade_sdk", "   Error: {}", err);
+                            error!(target: "sol_trade_sdk", "   💡 Possible causes:");
+                            error!(target: "sol_trade_sdk", "      1. Insufficient SOL balance (need ~0.002 SOL for rent exemption)");
+                            error!(target: "sol_trade_sdk", "      2. RPC timeout or network congestion");
+                            error!(target: "sol_trade_sdk", "      3. Insufficient transaction fee");
+                            error!(target: "sol_trade_sdk", "   🔧 Solutions:");
+                            error!(target: "sol_trade_sdk", "      1. Fund wallet with at least 0.1 SOL");
+                            error!(target: "sol_trade_sdk", "      2. Retry after a few seconds");
+                            error!(target: "sol_trade_sdk", "      3. Check RPC connection");
+                            error!(target: "sol_trade_sdk", "   ⚠️ Process will exit in 5 seconds, restart after fixing the above");
+                        }
                         std::thread::sleep(std::time::Duration::from_secs(5));
                         panic!(
-                            "❌ WSOL ATA创建失败且账户不存在: {}. 错误: {}",
+                            "❌ WSOL ATA creation failed and account does not exist: {}. Error: {}",
                             wsol_ata, err
                         );
                     }
                 } else {
-                    println!("ℹ️ WSOL ATA已存在（无需创建）");
+                    if sdk_log::sdk_log_enabled() {
+                        info!(target: "sol_trade_sdk", "ℹ️ WSOL ATA already exists (no need to create)");
+                    }
                 }
             }
         }
@@ -426,6 +480,10 @@ impl TradingClient {
     /// Returns a configured `SolTradingSDK` instance ready for trading operations
     #[inline]
     pub async fn new(payer: Arc<Keypair>, trade_config: TradeConfig) -> Self {
+        // 设置 SDK 全局日志开关，后续所有 SDK 内日志（SWQOS/WSOL/耗时等）均受此控制
+        sdk_log::set_sdk_log_enabled(trade_config.log_enabled);
+        // 预热高性能时钟，避免首笔交易时触发 3 次 Utc::now() 校准
+        let _ = crate::common::clock::now_micros();
         // Create infrastructure from trade config
         let infra_config = InfrastructureConfig::from_trade_config(&trade_config);
         let infrastructure = Arc::new(TradingInfrastructure::new(infra_config).await);
@@ -443,6 +501,8 @@ impl TradingClient {
             infrastructure,
             middleware_manager: None,
             use_seed_optimize: trade_config.use_seed_optimize,
+            use_core_affinity: trade_config.use_core_affinity,
+            log_enabled: trade_config.log_enabled,
         };
 
         let mut current = INSTANCE.lock();
@@ -525,8 +585,9 @@ impl TradingClient {
         params: TradeBuyParams,
     ) -> Result<(bool, Vec<Signature>, Option<TradeError>), anyhow::Error> {
         #[cfg(feature = "perf-trace")]
-        if params.slippage_basis_points.is_none() {
-            log::debug!(
+        if sdk_log::sdk_log_enabled() && params.slippage_basis_points.is_none() {
+            debug!(
+                target: "sol_trade_sdk",
                 "slippage_basis_points is none, use default slippage basis points: {}",
                 DEFAULT_SLIPPAGE
             );
@@ -573,28 +634,13 @@ impl TradingClient {
             fixed_output_amount: params.fixed_output_token_amount,
             gas_fee_strategy: params.gas_fee_strategy,
             simulate: params.simulate,
+            log_enabled: self.log_enabled,
+            use_core_affinity: self.use_core_affinity,
+            grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: params.use_exact_sol_amount,
         };
 
-        // Validate protocol params
-        let is_valid_params = match params.dex_type {
-            DexType::PumpFun => protocol_params.as_any().downcast_ref::<PumpFunParams>().is_some(),
-            DexType::PumpSwap => {
-                protocol_params.as_any().downcast_ref::<PumpSwapParams>().is_some()
-            }
-            DexType::Bonk => protocol_params.as_any().downcast_ref::<BonkParams>().is_some(),
-            DexType::RaydiumCpmm => {
-                protocol_params.as_any().downcast_ref::<RaydiumCpmmParams>().is_some()
-            }
-            DexType::RaydiumAmmV4 => {
-                protocol_params.as_any().downcast_ref::<RaydiumAmmV4Params>().is_some()
-            }
-            DexType::MeteoraDammV2 => {
-                protocol_params.as_any().downcast_ref::<MeteoraDammV2Params>().is_some()
-            }
-        };
-
-        if !is_valid_params {
+        if !validate_protocol_params(params.dex_type, &protocol_params) {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
@@ -635,8 +681,9 @@ impl TradingClient {
         params: TradeSellParams,
     ) -> Result<(bool, Vec<Signature>, Option<TradeError>), anyhow::Error> {
         #[cfg(feature = "perf-trace")]
-        if params.slippage_basis_points.is_none() {
-            log::debug!(
+        if sdk_log::sdk_log_enabled() && params.slippage_basis_points.is_none() {
+            debug!(
+                target: "sol_trade_sdk",
                 "slippage_basis_points is none, use default slippage basis points: {}",
                 DEFAULT_SLIPPAGE
             );
@@ -683,32 +730,16 @@ impl TradingClient {
             fixed_output_amount: params.fixed_output_token_amount,
             gas_fee_strategy: params.gas_fee_strategy,
             simulate: params.simulate,
+            log_enabled: self.log_enabled,
+            use_core_affinity: self.use_core_affinity,
+            grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: None,
         };
 
-        // Validate protocol params
-        let is_valid_params = match params.dex_type {
-            DexType::PumpFun => protocol_params.as_any().downcast_ref::<PumpFunParams>().is_some(),
-            DexType::PumpSwap => {
-                protocol_params.as_any().downcast_ref::<PumpSwapParams>().is_some()
-            }
-            DexType::Bonk => protocol_params.as_any().downcast_ref::<BonkParams>().is_some(),
-            DexType::RaydiumCpmm => {
-                protocol_params.as_any().downcast_ref::<RaydiumCpmmParams>().is_some()
-            }
-            DexType::RaydiumAmmV4 => {
-                protocol_params.as_any().downcast_ref::<RaydiumAmmV4Params>().is_some()
-            }
-            DexType::MeteoraDammV2 => {
-                protocol_params.as_any().downcast_ref::<MeteoraDammV2Params>().is_some()
-            }
-        };
-
-        if !is_valid_params {
+        if !validate_protocol_params(params.dex_type, &protocol_params) {
             return Err(anyhow::anyhow!("Invalid protocol params for Trade"));
         }
 
-        // Execute sell based on tip preference
         let swap_result = executor.swap(sell_params).await;
         let result =
             swap_result.map(|(success, sigs, err)| (success, sigs, err.map(TradeError::from)));

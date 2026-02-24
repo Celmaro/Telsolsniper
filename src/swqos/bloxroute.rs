@@ -1,3 +1,4 @@
+use crate::swqos::common::default_http_client_builder;
 use crate::swqos::common::poll_transaction_confirmation;
 use crate::swqos::common::serialize_transaction_and_encode;
 use crate::swqos::serialization;
@@ -47,17 +48,9 @@ impl SwqosClientTrait for BloxrouteClient {
 impl BloxrouteClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = Client::builder()
-            // Optimized connection pool settings for high performance
+        let http_client = default_http_client_builder()
             .pool_idle_timeout(Duration::from_secs(120))
-            .pool_max_idle_per_host(256)  // Increased from 64 to 256
-            .tcp_keepalive(Some(Duration::from_secs(60)))  // Reduced from 1200 to 60
-            .tcp_nodelay(true)  // Disable Nagle's algorithm for lower latency
-            .http2_keep_alive_interval(Duration::from_secs(10))
-            .http2_keep_alive_timeout(Duration::from_secs(5))
-            .http2_adaptive_window(true)  // Enable adaptive flow control
-            .timeout(Duration::from_millis(3000))  // Reduced from 10s to 3s
-            .connect_timeout(Duration::from_millis(2000))  // Reduced from 5s to 2s
+            .pool_max_idle_per_host(256)
             .build()
             .unwrap();
         Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
@@ -85,12 +78,14 @@ impl BloxrouteClient {
 
         // Parse with from_str to avoid extra wait from .json().await
         if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if response_json.get("result").is_some() {
-                println!(" [bloxroute] {} submitted: {:?}", trade_type, start_time.elapsed());
-            } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" [bloxroute] {} submission failed: {:?}", trade_type, _error);
+            if crate::common::sdk_log::sdk_log_enabled() {
+                if response_json.get("result").is_some() {
+                    println!(" [bloxroute] {} submitted: {:?}", trade_type, start_time.elapsed());
+                } else if let Some(_error) = response_json.get("error") {
+                    eprintln!(" [bloxroute] {} submission failed: {:?}", trade_type, _error);
+                }
             }
-        } else {
+        } else if crate::common::sdk_log::sdk_log_enabled() {
             eprintln!(" [bloxroute] {} submission failed: {:?}", trade_type, response_text);
         }
 
@@ -98,12 +93,14 @@ impl BloxrouteClient {
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" signature: {:?}", signature);
-                println!(" [bloxroute] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                if crate::common::sdk_log::sdk_log_enabled() {
+                    println!(" signature: {:?}", signature);
+                    println!(" [bloxroute] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                }
                 return Err(e);
             },
         }
-        if wait_confirmation {
+        if wait_confirmation && crate::common::sdk_log::sdk_log_enabled() {
             println!(" signature: {:?}", signature);
             println!(" [bloxroute] {} confirmed: {:?}", trade_type, start_time.elapsed());
         }
@@ -135,11 +132,13 @@ impl BloxrouteClient {
             .text()
             .await?;
 
-        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if response_json.get("result").is_some() {
-                println!(" bloxroute {} submitted: {:?}", trade_type, start_time.elapsed());
-            } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" bloxroute {} submission failed: {:?}", trade_type, _error);
+        if crate::common::sdk_log::sdk_log_enabled() {
+            if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                if response_json.get("result").is_some() {
+                    println!(" bloxroute {} submitted: {:?}", trade_type, start_time.elapsed());
+                } else if let Some(_error) = response_json.get("error") {
+                    eprintln!(" bloxroute {} submission failed: {:?}", trade_type, _error);
+                }
             }
         }
 

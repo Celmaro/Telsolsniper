@@ -1,11 +1,5 @@
-//! 🚀 性能优化模块
-//!
-//! 提供多层次性能优化：
-//! - SIMD 向量化：AVX2 内存操作、批量计算
-//! - 硬件级优化：分支预测、缓存预取
-//! - 零拷贝 I/O：内存映射、DMA传输
-//! - 系统调用绕过：批处理、快速时间
-//! - 编译器优化：内联、向量化
+//! Performance: SIMD, cache prefetch, branch hints, zero-copy I/O, syscall bypass, compiler hints.
+//! 性能优化：SIMD、缓存预取、分支提示、零拷贝 I/O、系统调用绕过、编译器提示。
 
 pub mod simd;
 pub mod hardware_optimizations;

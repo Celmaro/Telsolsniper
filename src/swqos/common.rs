@@ -17,6 +17,36 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+/// Default pool idle timeout for SWQOS HTTP client (seconds). 连接池空闲超时（秒）。
+const HTTP_POOL_IDLE_TIMEOUT_SECS: u64 = 300;
+/// Max idle connections per host. 每主机最大空闲连接数。
+const HTTP_POOL_MAX_IDLE_PER_HOST: usize = 4;
+/// TCP keepalive interval (seconds). TCP 保活间隔（秒）。
+const HTTP_TCP_KEEPALIVE_SECS: u64 = 60;
+/// HTTP/2 keepalive interval (seconds). HTTP/2 保活间隔（秒）。
+const HTTP2_KEEPALIVE_INTERVAL_SECS: u64 = 10;
+/// HTTP/2 keepalive timeout (seconds). HTTP/2 保活超时（秒）。
+const HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 5;
+/// Request timeout (milliseconds). 请求超时（毫秒）。
+const HTTP_TIMEOUT_MS: u64 = 3000;
+/// Connect timeout (milliseconds). 连接超时（毫秒）。
+const HTTP_CONNECT_TIMEOUT_MS: u64 = 2000;
+
+/// Shared HTTP client builder for SWQOS clients; call `.build().unwrap()` or override pool first. SWQOS 共用 HTTP 客户端构建器。
+pub fn default_http_client_builder() -> reqwest::ClientBuilder {
+    Client::builder()
+        .pool_idle_timeout(Duration::from_secs(HTTP_POOL_IDLE_TIMEOUT_SECS))
+        .pool_max_idle_per_host(HTTP_POOL_MAX_IDLE_PER_HOST)
+        .tcp_keepalive(Some(Duration::from_secs(HTTP_TCP_KEEPALIVE_SECS)))
+        .tcp_nodelay(true)
+        .http2_keep_alive_interval(Duration::from_secs(HTTP2_KEEPALIVE_INTERVAL_SECS))
+        .http2_keep_alive_timeout(Duration::from_secs(HTTP2_KEEPALIVE_TIMEOUT_SECS))
+        .http2_adaptive_window(true)
+        .timeout(Duration::from_millis(HTTP_TIMEOUT_MS))
+        .connect_timeout(Duration::from_millis(HTTP_CONNECT_TIMEOUT_MS))
+}
+
+/// Trade/on-chain error with code and optional instruction index. 交易/链上错误，含错误码与可选指令下标。
 #[derive(Debug, Clone)]
 pub struct TradeError {
     pub code: u32,

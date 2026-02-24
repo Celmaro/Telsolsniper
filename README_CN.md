@@ -60,6 +60,14 @@
 
 ---
 
+## 🆕 3.5.0 更新说明
+
+- **性能**：仅在打日志时做热路径计时；减少 clone（`execute_parallel` 改为接收 `&[Arc<SwqosClient>]`）；SWQoS 共用 HTTP 客户端常量。
+- **代码质量**：抽取 buy/sell 共用的 `validate_protocol_params`；指令/账户大小与 HTTP 超时常量化；预取与分支提示注释完善。
+- **文档**：execution、executor、perf、swqos 等模块增加中英双语文档注释。
+
+---
+
 ## ✨ 项目特性
 
 1. **PumpFun 交易**: 支持`购买`、`卖出`功能
@@ -89,14 +97,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.4.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.0" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "3.4.1"
+sol-trade-sdk = "3.5.0"
 ```
 
 ## 🛠️ 使用示例

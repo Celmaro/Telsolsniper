@@ -354,6 +354,9 @@ impl GasFeeStrategy {
     /// 打印所有策略。
     /// Print all strategies
     pub fn print_all_strategies(&self) {
+        if !crate::common::sdk_log::sdk_log_enabled() {
+            return;
+        }
         for strategy in self.get_strategies(TradeType::Buy) {
             println!("[buy] - {:?}", strategy);
         }

@@ -6,7 +6,6 @@ use quinn::{
     TransportConfig,
 };
 use rand::seq::IndexedRandom as _;
-use solana_rpc_client::rpc_client::SerializableTransaction;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
 use solana_tls_utils::{new_dummy_x509_certificate, SkipServerVerification};
 use std::time::Instant;
@@ -19,6 +18,7 @@ use tokio::sync::Mutex;
 
 use crate::common::SolanaRpcClient;
 use crate::swqos::common::poll_transaction_confirmation;
+use crate::swqos::serialization::serialize_transaction_bincode_sync;
 use crate::swqos::SwqosClientTrait;
 use crate::{
     constants::swqos::SPEEDLANDING_TIP_ACCOUNTS,
@@ -105,27 +105,32 @@ impl SwqosClientTrait for SpeedlandingClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start_time = Instant::now();
-        let signature = transaction.get_signature();
-        let serialized_tx = bincode::serialize(transaction)?;
+        let (buf_guard, signature) = serialize_transaction_bincode_sync(transaction)?;
         let connection = self.connection.load_full();
-        if Self::try_send_bytes(&connection, &serialized_tx).await.is_err() {
-            eprintln!(" [speedlanding] {} submission failed, reconnecting", trade_type);
+        if Self::try_send_bytes(&connection, &*buf_guard).await.is_err() {
+            if crate::common::sdk_log::sdk_log_enabled() {
+                eprintln!(" [speedlanding] {} submission failed, reconnecting", trade_type);
+            }
             self.reconnect().await?;
             let connection = self.connection.load_full();
-            if let Err(e) = Self::try_send_bytes(&connection, &serialized_tx).await {
-                eprintln!(" [speedlanding] {} submission failed: {:?}", trade_type, e);
+            if let Err(e) = Self::try_send_bytes(&connection, &*buf_guard).await {
+                if crate::common::sdk_log::sdk_log_enabled() {
+                    eprintln!(" [speedlanding] {} submission failed: {:?}", trade_type, e);
+                }
                 return Err(e.into());
             }
         }
-        match poll_transaction_confirmation(&self.rpc_client, *signature, wait_confirmation).await {
+        match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
-                println!(" signature: {:?}", signature);
-                println!(" [speedlanding] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                if crate::common::sdk_log::sdk_log_enabled() {
+                    println!(" signature: {:?}", signature);
+                    println!(" [speedlanding] {} confirmation failed: {:?}", trade_type, start_time.elapsed());
+                }
                 return Err(e);
             }
         }
-        if wait_confirmation {
+        if wait_confirmation && crate::common::sdk_log::sdk_log_enabled() {
             println!(" signature: {:?}", signature);
             println!(" [speedlanding] {} confirmed: {:?}", trade_type, start_time.elapsed());
         }

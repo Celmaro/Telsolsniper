@@ -140,7 +140,7 @@ impl CompilerOptimizer {
     
     /// 🚀 生成超高性能编译配置
     pub fn generate_ultra_performance_config(&self) -> Result<CompilerConfig> {
-        log::info!("🚀 Generating ultra-performance compiler configuration...");
+        tracing::info!(target: "sol_trade_sdk","🚀 Generating ultra-performance compiler configuration...");
         
         let mut rustflags = Vec::new();
         
@@ -206,7 +206,7 @@ impl CompilerOptimizer {
             cargo_config: self.generate_cargo_config(),
         };
         
-        log::info!("✅ Ultra-performance compiler configuration generated");
+        tracing::info!(target: "sol_trade_sdk","✅ Ultra-performance compiler configuration generated");
         Ok(config)
     }
     

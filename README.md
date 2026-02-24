@@ -60,6 +60,14 @@
 
 ---
 
+## 🆕 What's new in 3.5.0
+
+- **Performance**: Hot-path timing only when logging; reduced clones (`execute_parallel` takes `&[Arc<SwqosClient>]`); shared HTTP client constants for SWQoS.
+- **Code quality**: Extracted `validate_protocol_params` for buy/sell; constants for instruction/account sizes and HTTP timeouts; prefetch and branch-hint comments.
+- **Documentation**: Bilingual (English + 中文) doc comments across execution, executor, perf, and swqos modules.
+
+---
+
 ## ✨ Features
 
 1. **PumpFun Trading**: Support for `buy` and `sell` operations
@@ -89,14 +97,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.4.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.0" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "3.4.1"
+sol-trade-sdk = "3.5.0"
 ```
 
 ## 🛠️ Usage Examples

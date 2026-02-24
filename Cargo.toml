@@ -1,6 +1,6 @@
 [package]
 name = "sol-trade-sdk"
-version = "3.4.1"
+version = "3.5.0"
 edition = "2021"
 authors = [
     "William <byteblock6@gmail.com>",
@@ -81,7 +81,6 @@ rustls = { version = "0.23.23", features = ["ring"] }
 rustls-native-certs = "0.8.1"
 tokio-rustls = "0.26.1"
 core_affinity = "0.8"
-log = "0.4.22"
 chrono = "0.4.39"
 regex = "1"
 tracing = "0.1.41"
