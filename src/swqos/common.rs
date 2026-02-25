@@ -89,41 +89,64 @@ pub async fn poll_transaction_confirmation(
     txt_sig: Signature,
     wait_confirmation: bool,
 ) -> Result<Signature> {
-    // If no confirmation needed, return signature immediately
+    poll_any_transaction_confirmation(rpc, &[txt_sig], wait_confirmation).await
+}
+
+/// Poll multiple signatures in parallel (one RPC call per poll) and return the first one that confirms.
+/// When transactions are submitted to multiple SWQOS channels, each channel produces a different
+/// signature. Only one will land on-chain, so we must check all of them.
+pub async fn poll_any_transaction_confirmation(
+    rpc: &SolanaRpcClient,
+    signatures: &[Signature],
+    wait_confirmation: bool,
+) -> Result<Signature> {
+    if signatures.is_empty() {
+        return Err(anyhow::anyhow!("No signatures to confirm"));
+    }
+    // If no confirmation needed, return first signature immediately
     if !wait_confirmation {
-        return Ok(txt_sig);
+        return Ok(signatures[0]);
     }
 
-    let timeout: Duration = Duration::from_secs(15); // 15s to avoid timeout under network congestion
+    let timeout: Duration = Duration::from_secs(15);
     let interval: Duration = Duration::from_millis(1000);
     let start: Instant = Instant::now();
     let mut poll_count = 0u32;
+    // Track which signature landed (confirmed or failed on-chain)
+    let mut landed_sig: Option<Signature> = None;
 
     loop {
         if start.elapsed() >= timeout {
-            return Err(anyhow::anyhow!("Transaction {}'s confirmation timed out", txt_sig));
+            return Err(anyhow::anyhow!("Transaction confirmation timed out after {}s ({} signatures polled)", timeout.as_secs(), signatures.len()));
         }
 
         poll_count += 1;
 
-        let status = rpc.get_signature_statuses(&[txt_sig]).await?;
-        let first = status.value.get(0).and_then(|o| o.as_ref());
-        match first {
-            Some(s) => {
+        let status = rpc.get_signature_statuses(signatures).await?;
+        // Check all signatures for any that confirmed successfully
+        for (i, maybe_status) in status.value.iter().enumerate() {
+            if let Some(s) = maybe_status {
                 if s.err.is_none()
                     && (s.confirmation_status == Some(TransactionConfirmationStatus::Confirmed)
                         || s.confirmation_status == Some(TransactionConfirmationStatus::Finalized))
                 {
-                    return Ok(txt_sig);
+                    return Ok(signatures[i]);
                 }
-            }
-            None => {
-                sleep(interval).await;
-                continue;
+                // Track the first signature that landed on-chain (even if errored)
+                if landed_sig.is_none() {
+                    landed_sig = Some(signatures[i]);
+                }
             }
         }
 
-        let should_get_transaction = first.map(|s| s.err.is_some()).unwrap_or(false) || poll_count >= 10;
+        // If no signature has any status yet, keep waiting
+        if landed_sig.is_none() {
+            sleep(interval).await;
+            continue;
+        }
+
+        let landed = landed_sig.unwrap();
+        let should_get_transaction = poll_count >= 10;
 
         if !should_get_transaction {
             sleep(interval).await;
@@ -132,7 +155,7 @@ pub async fn poll_transaction_confirmation(
 
         let tx_details = match rpc
             .get_transaction_with_config(
-                &txt_sig,
+                &landed,
                 RpcTransactionConfig {
                     encoding: Some(UiTransactionEncoding::JsonParsed),
                     max_supported_transaction_version: Some(0),
@@ -155,7 +178,7 @@ pub async fn poll_transaction_confirmation(
         } else {
             let meta = meta.unwrap();
             if meta.err.is_none() {
-                return Ok(txt_sig);
+                return Ok(landed);
             } else {
                 // Extract error message from log_messages
                 let mut error_msg = String::new();

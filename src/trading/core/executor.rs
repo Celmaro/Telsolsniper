@@ -11,7 +11,7 @@ use tracing::{info, trace, warn};
 use crate::{
     common::{nonce_cache::DurableNonceInfo, GasFeeStrategy, SolanaRpcClient},
     perf::syscall_bypass::SystemCallBypassManager,
-    swqos::common::poll_transaction_confirmation,
+    swqos::common::poll_any_transaction_confirmation,
     trading::core::{
         async_executor::execute_parallel,
         execution::{InstructionProcessor, Prefetch},
@@ -156,10 +156,12 @@ impl TradeExecutor for GenericTradeExecutor {
                 ),
                 Err(e) => (false, vec![], Some(anyhow::anyhow!("{}", e))),
             };
-            let first_sig = sigs.first().copied();
-            let confirm_result = if let (Some(rpc), Some(sig)) = (params.rpc.as_ref(), first_sig) {
+            let confirm_result = if let Some(rpc) = params.rpc.as_ref() {
+                if sigs.is_empty() {
+                    (ok, sigs, err)
+                } else {
                 let confirm_start = (params.log_enabled && crate::common::sdk_log::sdk_log_enabled()).then(Instant::now);
-                let poll_res = poll_transaction_confirmation(rpc, sig, true).await;
+                let poll_res = poll_any_transaction_confirmation(rpc, &sigs, true).await;
                 let confirm_elapsed = confirm_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
                 if params.log_enabled && crate::common::sdk_log::sdk_log_enabled() {
                     let dir = if is_buy { "Buy" } else { "Sell" };
@@ -170,6 +172,7 @@ impl TradeExecutor for GenericTradeExecutor {
                 match poll_res {
                     Ok(_) => (true, sigs, None),
                     Err(e) => (false, sigs, Some(e)),
+                }
                 }
             } else {
                 (ok, sigs, err)
