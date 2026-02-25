@@ -60,6 +60,10 @@
 
 ---
 
+## 🆕 What's new in 3.5.1
+
+- **SWQoS / executor**: Updates to common SWQoS logic and trading executor.
+
 ## 🆕 What's new in 3.5.0
 
 - **Performance**: Hot-path timing only when logging; reduced clones (`execute_parallel` takes `&[Arc<SwqosClient>]`); shared HTTP client constants for SWQoS.
