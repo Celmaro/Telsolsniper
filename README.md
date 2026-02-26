@@ -60,6 +60,12 @@
 
 ---
 
+## 🆕 What's new in 3.5.2
+
+- **SWQoS submit latency**: Sync serialize + buffer-pool hot path; `format!` body for single/batch submit (Bloxroute); avoid status clone in confirmation polling.
+- **First-submit & 5-min idle**: Immediate first ping + 30s keepalive; `pool_max_idle_per_host=4` and `pool_idle_timeout=300s` (BlockRazor, Temporal, Node1, Astralane, Stellium) so submit reuses the same connection; ping consumes response body for connection reuse.
+- **Docs**: All SWQoS comments translated to English.
+
 ## 🆕 What's new in 3.5.1
 
 - **SWQoS / executor**: Updates to common SWQoS logic and trading executor.
@@ -101,14 +107,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.2" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "3.5.1"
+sol-trade-sdk = "3.5.2"
 ```
 
 ## 🛠️ Usage Examples
