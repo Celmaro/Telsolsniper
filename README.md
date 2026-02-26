@@ -60,31 +60,6 @@
 
 ---
 
-## 🆕 What's new in 3.5.3
-
-- **Full release**: Includes all updates (3.5.2 SWQoS perf + IDL/instruction changes). Use this version.
-- **SWQoS submit latency**: Sync serialize + buffer-pool hot path; `format!` body for single/batch submit (Bloxroute); avoid status clone in confirmation polling.
-- **First-submit & 5-min idle**: Immediate first ping + 30s keepalive; `pool_max_idle_per_host=4` and `pool_idle_timeout=300s` (BlockRazor, Temporal, Node1, Astralane, Stellium); ping consumes response body for connection reuse.
-- **PumpFun / PumpSwap**: IDL updates (pump.json, pump_amm.json); instruction and utils updates for pumpfun and pumpswap; fast_fn and release notes.
-
-## 🆕 What's new in 3.5.2
-
-- **SWQoS submit latency**: Sync serialize + buffer-pool hot path; `format!` body for single/batch submit (Bloxroute); avoid status clone in confirmation polling.
-- **First-submit & 5-min idle**: Immediate first ping + 30s keepalive; `pool_max_idle_per_host=4` and `pool_idle_timeout=300s` (BlockRazor, Temporal, Node1, Astralane, Stellium) so submit reuses the same connection; ping consumes response body for connection reuse.
-- **Docs**: All SWQoS comments translated to English.
-
-## 🆕 What's new in 3.5.1
-
-- **SWQoS / executor**: Updates to common SWQoS logic and trading executor.
-
-## 🆕 What's new in 3.5.0
-
-- **Performance**: Hot-path timing only when logging; reduced clones (`execute_parallel` takes `&[Arc<SwqosClient>]`); shared HTTP client constants for SWQoS.
-- **Code quality**: Extracted `validate_protocol_params` for buy/sell; constants for instruction/account sizes and HTTP timeouts; prefetch and branch-hint comments.
-- **Documentation**: Bilingual (English + 中文) doc comments across execution, executor, perf, and swqos modules.
-
----
-
 ## ✨ Features
 
 1. **PumpFun Trading**: Support for `buy` and `sell` operations
