@@ -60,6 +60,13 @@
 
 ---
 
+## 🆕 What's new in 3.5.3
+
+- **Full release**: Includes all updates (3.5.2 SWQoS perf + IDL/instruction changes). Use this version.
+- **SWQoS submit latency**: Sync serialize + buffer-pool hot path; `format!` body for single/batch submit (Bloxroute); avoid status clone in confirmation polling.
+- **First-submit & 5-min idle**: Immediate first ping + 30s keepalive; `pool_max_idle_per_host=4` and `pool_idle_timeout=300s` (BlockRazor, Temporal, Node1, Astralane, Stellium); ping consumes response body for connection reuse.
+- **PumpFun / PumpSwap**: IDL updates (pump.json, pump_amm.json); instruction and utils updates for pumpfun and pumpswap; fast_fn and release notes.
+
 ## 🆕 What's new in 3.5.2
 
 - **SWQoS submit latency**: Sync serialize + buffer-pool hot path; `format!` body for single/batch submit (Bloxroute); avoid status clone in confirmation polling.
@@ -107,14 +114,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.2" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.3" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "3.5.2"
+sol-trade-sdk = "3.5.3"
 ```
 
 ## 🛠️ Usage Examples
