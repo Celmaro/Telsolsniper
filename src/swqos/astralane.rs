@@ -1,13 +1,12 @@
-use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation};
 use rand::seq::IndexedRandom;
 use reqwest::Client;
-use serde_json::json;
 use std::{sync::Arc, time::Instant};
 
 use std::time::Duration;
-use solana_transaction_status::UiTransactionEncoding;
-
 use anyhow::Result;
+use bincode::serialize as bincode_serialize;
+use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::transaction::VersionedTransaction;
 use crate::swqos::{SwqosType, TradeType};
 use crate::swqos::SwqosClientTrait;
@@ -16,6 +15,9 @@ use crate::{common::SolanaRpcClient, constants::swqos::ASTRALANE_TIP_ACCOUNTS};
 
 use tokio::task::JoinHandle;
 use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Empty body for getHealth POST; avoid per-request allocation.
+static PING_BODY: &[u8] = &[];
 
 #[derive(Clone)]
 pub struct AstralaneClient {
@@ -50,19 +52,7 @@ impl SwqosClientTrait for AstralaneClient {
 impl AstralaneClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = Client::builder()
-            // Optimized connection pool settings for high performance
-            .pool_idle_timeout(Duration::from_secs(300))
-            .pool_max_idle_per_host(4)
-            .tcp_keepalive(Some(Duration::from_secs(60)))  // Reduced from 1200 to 60
-            .tcp_nodelay(true)  // Disable Nagle's algorithm for lower latency
-            .http2_keep_alive_interval(Duration::from_secs(10))
-            .http2_keep_alive_timeout(Duration::from_secs(5))
-            .http2_adaptive_window(true)  // Enable adaptive flow control
-            .timeout(Duration::from_millis(3000))  // Reduced from 10s to 3s
-            .connect_timeout(Duration::from_millis(2000))  // Reduced from 5s to 2s
-            .build()
-            .unwrap();
+        let http_client = default_http_client_builder().build().unwrap();
         
         let client = Self { 
             rpc_client: Arc::new(rpc_client), 
@@ -90,13 +80,9 @@ impl AstralaneClient {
         let stop_ping = self.stop_ping.clone();
         
         let handle = tokio::spawn(async move {
-            // Immediate first ping to warm connection and reduce first-submit cold start latency
-            if let Err(e) = Self::send_ping_request(&http_client, &endpoint, &auth_token).await {
-                eprintln!("Astralane ping request failed: {}", e);
-            }
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
-                interval.tick().await;
+                interval.tick().await; // first tick completes immediately → one ping at start
                 if stop_ping.load(Ordering::Relaxed) {
                     break;
                 }
@@ -116,71 +102,49 @@ impl AstralaneClient {
         }
     }
 
-    /// Send ping request to /gethealth endpoint
+    /// Send ping request: POST endpoint?api-key=...&method=getHealth (endpoint is irisb from constants).
     async fn send_ping_request(http_client: &Client, endpoint: &str, auth_token: &str) -> Result<()> {
-        // Build ping URL by replacing /iris with /gethealth
-        let ping_url = if endpoint.ends_with("/iris") {
-            endpoint.replace("/iris", "/gethealth")
-        } else if endpoint.ends_with("/iris/") {
-            endpoint.replace("/iris/", "/gethealth")
-        } else if endpoint.ends_with('/') {
-            format!("{}gethealth", endpoint)
-        } else {
-            format!("{}/gethealth", endpoint)
-        };
-
-        // Short timeout for ping; consume body so connection is returned to pool for reuse by submit
-        let response = http_client.get(&ping_url)
-            .header("api_key", auth_token)
+        let response = http_client
+            .post(endpoint)
+            .query(&[("api-key", auth_token), ("method", "getHealth")])
             .timeout(Duration::from_millis(1500))
+            .body(PING_BODY)
             .send()
             .await?;
         let status = response.status();
-        let _ = response.bytes().await;
+        let _ = response.bytes().await; // consume body so connection returns to pool
         if !status.is_success() {
             eprintln!("Astralane ping request returned non-success status: {}", status);
         }
         Ok(())
     }
 
+    /// Send transaction via /irisb binary API (no Base64; lower latency).
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction, wait_confirmation: bool) -> Result<()> {
         let start_time = Instant::now();
-        let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
+        let signature = transaction.get_signature();
 
-        let request_body = serde_json::to_string(&json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "sendTransaction",
-            "params": [
-                content,
-                { "encoding": "base64", "skipPreflight": true },
-                { "mevProtect": false }
-            ]
-        }))?;
+        let body_bytes = bincode_serialize(transaction).map_err(|e| anyhow::anyhow!("Astralane binary serialize failed: {}", e))?;
 
-        // Send request with api_key header
-        let response_text = self.http_client.post(&self.endpoint)
-            .body(request_body)
-            .header("Content-Type", "application/json")
-            .header("api_key", &self.auth_token)
+        let response = self.http_client
+            .post(&self.endpoint)
+            .query(&[("api-key", self.auth_token.as_str()), ("method", "sendTransaction")])
+            .header("Content-Type", "application/octet-stream")
+            .body(body_bytes)
             .send()
-            .await?
-            .text()
             .await?;
 
-        // Parse JSON response
-        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if response_json.get("result").is_some() {
-                println!(" [astralane] {} submitted: {:?}", trade_type, start_time.elapsed());
-            } else if let Some(_error) = response_json.get("error") {
-                eprintln!(" [astralane] {} submission failed: {:?}", trade_type, _error);
-            }
+        let status = response.status();
+        let _ = response.bytes().await;
+        if status.is_success() {
+            println!(" [astralane] {} submitted: {:?}", trade_type, start_time.elapsed());
         } else {
-            eprintln!(" [astralane] {} submission failed: {:?}", trade_type, response_text);
+            eprintln!(" [astralane] {} submission failed: status {}", trade_type, status);
+            return Err(anyhow::anyhow!("Astralane sendTransaction failed: {}", status));
         }
 
-        let start_time: Instant = Instant::now();
-        match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
+        let start_time = Instant::now();
+        match poll_transaction_confirmation(&self.rpc_client, *signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
                 println!(" signature: {:?}", signature);

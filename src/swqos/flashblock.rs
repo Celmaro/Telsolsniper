@@ -1,10 +1,9 @@
-use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation, serialize_transaction_and_encode};
 use rand::seq::IndexedRandom;
 use reqwest::Client;
 use serde_json::json;
 use std::{sync::Arc, time::Instant};
 
-use std::time::Duration;
 use solana_transaction_status::UiTransactionEncoding;
 
 use anyhow::Result;
@@ -46,19 +45,7 @@ impl SwqosClientTrait for FlashBlockClient {
 impl FlashBlockClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = Client::builder()
-            // Optimized connection pool settings for high performance
-            .pool_idle_timeout(Duration::from_secs(120))
-            .pool_max_idle_per_host(256)  // Increased from 64 to 256
-            .tcp_keepalive(Some(Duration::from_secs(60)))  // Reduced from 1200 to 60
-            .tcp_nodelay(true)  // Disable Nagle's algorithm for lower latency
-            .http2_keep_alive_interval(Duration::from_secs(10))
-            .http2_keep_alive_timeout(Duration::from_secs(5))
-            .http2_adaptive_window(true)  // Enable adaptive flow control
-            .timeout(Duration::from_millis(3000))  // Reduced from 10s to 3s
-            .connect_timeout(Duration::from_millis(2000))  // Reduced from 5s to 2s
-            .build()
-            .unwrap();
+        let http_client = default_http_client_builder().build().unwrap();
         Self { rpc_client: Arc::new(rpc_client), endpoint, auth_token, http_client }
     }
 

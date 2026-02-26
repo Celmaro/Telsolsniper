@@ -1,7 +1,6 @@
-use crate::swqos::common::{poll_transaction_confirmation, serialize_transaction_and_encode};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation, serialize_transaction_and_encode};
 use rand::seq::IndexedRandom;
-use reqwest::{Client, header::{HeaderMap, HeaderValue, CONTENT_TYPE}};
-use serde_json::json;
+use reqwest::Client;
 use std::{sync::Arc, time::Instant};
 
 use std::time::Duration;
@@ -50,19 +49,7 @@ impl SwqosClientTrait for BlockRazorClient {
 impl BlockRazorClient {
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = Client::builder()
-            // Optimized connection pool settings for high performance
-            .pool_idle_timeout(Duration::from_secs(300))  // 5min so ping-kept connection is not evicted early
-            .pool_max_idle_per_host(4)    // Few connections so submit reuses same connection as ping, avoiding cold connection after ~5min server idle close
-            .tcp_keepalive(Some(Duration::from_secs(60)))  // Reduced from 1200 to 60
-            .tcp_nodelay(true)  // Disable Nagle's algorithm for lower latency
-            .http2_keep_alive_interval(Duration::from_secs(10))
-            .http2_keep_alive_timeout(Duration::from_secs(5))
-            .http2_adaptive_window(true)  // Enable adaptive flow control
-            .timeout(Duration::from_millis(3000))  // Reduced from 10s to 3s
-            .connect_timeout(Duration::from_millis(2000))  // Reduced from 5s to 2s
-            .build()
-            .unwrap();
+        let http_client = default_http_client_builder().build().unwrap();
         
         let client = Self { 
             rpc_client: Arc::new(rpc_client), 
@@ -120,31 +107,15 @@ impl BlockRazorClient {
         }
     }
 
-    /// Send ping request to /health endpoint
+    /// Send ping request: POST /v2/health?auth=... (Keep Alive). Only required param: auth.
     async fn send_ping_request(http_client: &Client, endpoint: &str, auth_token: &str) -> Result<()> {
-        // Build health URL by replacing sendTransaction with health
-        let ping_url = if endpoint.ends_with("sendTransaction") {
-            endpoint.replace("sendTransaction", "health")
-        } else if endpoint.ends_with("/sendTransaction") {
-            endpoint.replace("/sendTransaction", "/health")
-        } else {
-            // Fallback to original logic if endpoint doesn't end with sendTransaction
-            if endpoint.ends_with('/') {
-                format!("{}health", endpoint)
-            } else {
-                format!("{}/health", endpoint)
-            }
-        };
-
-        // Prepare headers
-        let mut headers = HeaderMap::new();
-        headers.insert("apikey", HeaderValue::from_str(auth_token)?);
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        // Short timeout for ping; consume body so connection is returned to pool for reuse by submit
-        let response = http_client.get(&ping_url)
-            .headers(headers)
+        let ping_url = endpoint.replace("/v2/sendTransaction", "/v2/health");
+        let response = http_client
+            .post(&ping_url)
+            .query(&[("auth", auth_token)])
+            .header("Content-Type", "text/plain")
             .timeout(Duration::from_millis(1500))
+            .body(&[] as &[u8])
             .send()
             .await?;
         let status = response.status();
@@ -155,40 +126,33 @@ impl BlockRazorClient {
         Ok(())
     }
 
+    /// Send transaction via v2 API: plain Base64 body, Content-Type: text/plain. Only required URI param: auth.
     pub async fn send_transaction(&self, trade_type: TradeType, transaction: &VersionedTransaction, wait_confirmation: bool) -> Result<()> {
         let start_time = Instant::now();
         let (content, signature) = serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
 
-        // BlockRazor fast-mode request format
-        let request_body = serde_json::to_string(&json!({
-            "transaction": content,
-            "mode": "fast"
-        }))?;
-
-        // BlockRazor uses apikey header
-        let response_text = self.http_client.post(&self.endpoint)
-            .body(request_body)
-            .header("Content-Type", "application/json")
-            .header("apikey", &self.auth_token)
+        let response = self.http_client
+            .post(&self.endpoint)
+            .query(&[("auth", self.auth_token.as_str())])
+            .header("Content-Type", "text/plain")
+            .body(content)
             .send()
-            .await?
-            .text()
             .await?;
 
-        // Parse JSON response
-        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+        let status = response.status();
+        let _ = response.bytes().await;
+        if status.is_success() {
             if crate::common::sdk_log::sdk_log_enabled() {
-                if response_json.get("result").is_some() || response_json.get("signature").is_some() {
-                    println!(" [blockrazor] {} submitted: {:?}", trade_type, start_time.elapsed());
-                } else if let Some(_error) = response_json.get("error") {
-                    eprintln!(" [blockrazor] {} submission failed: {:?}", trade_type, _error);
-                }
+                println!(" [blockrazor] {} submitted: {:?}", trade_type, start_time.elapsed());
             }
-        } else if crate::common::sdk_log::sdk_log_enabled() {
-            eprintln!(" [blockrazor] {} submission failed: {:?}", trade_type, response_text);
+        } else {
+            if crate::common::sdk_log::sdk_log_enabled() {
+                eprintln!(" [blockrazor] {} submission failed: status {}", trade_type, status);
+            }
+            return Err(anyhow::anyhow!("BlockRazor sendTransaction failed: {}", status));
         }
 
-        let start_time: Instant = Instant::now();
+        let start_time = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {

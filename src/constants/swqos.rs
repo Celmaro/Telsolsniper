@@ -227,26 +227,30 @@ pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 8] = [
     "http://ny.flashblock.trade",
 ];
 
+/// BlockRazor Send Transaction v2: plain-text Base64 body, auth in URI, Content-Type: text/plain. Keep-alive: POST /v2/health.
 pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 8] = [
-    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
-    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
-    "http://amsterdam.solana.blockrazor.xyz:443/sendTransaction",
-    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
-    "http://tokyo.solana.blockrazor.xyz:443/sendTransaction",
-    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
-    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
-    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://amsterdam.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://tokyo.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://london.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
 ];
 
+/// Astralane binary API path (no Base64; use with ?api-key=...&method=sendTransaction|getHealth).
+pub const ASTRALANE_PATH_IRISB: &str = "irisb";
+
 pub const SWQOS_ENDPOINTS_ASTRALANE: [&str; 8] = [
-    "http://ny.gateway.astralane.io/iris",
-    "http://fr.gateway.astralane.io/iris",
-    "http://ams.gateway.astralane.io/iris",
-    "http://ny.gateway.astralane.io/iris",
-    "http://jp.gateway.astralane.io/iris",
-    "http://ny.gateway.astralane.io/iris",
-    "http://lax.gateway.astralane.io/iris",
-    "http://lim.gateway.astralane.io/iris",
+    "http://ny.gateway.astralane.io/irisb",
+    "http://fr.gateway.astralane.io/irisb",
+    "http://ams.gateway.astralane.io/irisb",
+    "http://ny.gateway.astralane.io/irisb",
+    "http://jp.gateway.astralane.io/irisb",
+    "http://ny.gateway.astralane.io/irisb",
+    "http://lax.gateway.astralane.io/irisb",
+    "http://lim.gateway.astralane.io/irisb",
 ];
 
 pub const SWQOS_ENDPOINTS_STELLIUM: [&str; 8] = [
