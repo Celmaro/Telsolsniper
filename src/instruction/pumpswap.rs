@@ -1,7 +1,7 @@
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::pumpswap::{
-        accounts, fee_recipient_ata, get_user_volume_accumulator_pda,
+        accounts, fee_recipient_ata, get_pool_v2_pda, get_user_volume_accumulator_pda,
         get_user_volume_accumulator_wsol_ata, BUY_DISCRIMINATOR,
         BUY_EXACT_QUOTE_IN_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
@@ -190,6 +190,11 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 accounts.push(AccountMeta::new(wsol_ata, false));
             }
         }
+        // Program upgrade: pool_v2 (readonly) at end of account list
+        accounts.push(AccountMeta::new_readonly(
+            get_pool_v2_pda(&base_mint).unwrap(),
+            false,
+        ));
 
         // Create instruction data
         let mut data = [0u8; 24];
@@ -392,6 +397,11 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 accounts.push(AccountMeta::new(accumulator, false));
             }
         }
+        // Program upgrade: pool_v2 (readonly) at end of account list
+        accounts.push(AccountMeta::new_readonly(
+            get_pool_v2_pda(&base_mint).unwrap(),
+            false,
+        ));
 
         // Create instruction data
         let mut data = [0u8; 24];

@@ -7,6 +7,8 @@ use std::sync::Arc;
 pub mod seeds {
     /// Seed for bonding curve PDAs
     pub const BONDING_CURVE_SEED: &[u8] = b"bonding-curve";
+    /// Seed for bonding curve v2 PDA (required by program upgrade, readonly at end of account list)
+    pub const BONDING_CURVE_V2_SEED: &[u8] = b"bonding-curve-v2";
 
     /// Seed for creator vault PDAs
     pub const CREATOR_VAULT_SEED: &[u8] = b"creator-vault";
@@ -171,6 +173,20 @@ pub fn get_bonding_curve_pda(mint: &Pubkey) -> Option<Pubkey> {
         crate::common::fast_fn::PdaCacheKey::PumpFunBondingCurve(*mint),
         || {
             let seeds: &[&[u8]; 2] = &[seeds::BONDING_CURVE_SEED, mint.as_ref()];
+            let program_id: &Pubkey = &accounts::PUMPFUN;
+            let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
+            pda.map(|pubkey| pubkey.0)
+        },
+    )
+}
+
+/// Bonding curve v2 PDA (seeds: ["bonding-curve-v2", mint]). Required at end of buy/sell/buy_exact_sol_in accounts.
+#[inline]
+pub fn get_bonding_curve_v2_pda(mint: &Pubkey) -> Option<Pubkey> {
+    crate::common::fast_fn::get_cached_pda(
+        crate::common::fast_fn::PdaCacheKey::PumpFunBondingCurveV2(*mint),
+        || {
+            let seeds: &[&[u8]; 2] = &[seeds::BONDING_CURVE_V2_SEED, mint.as_ref()];
             let program_id: &Pubkey = &accounts::PUMPFUN;
             let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
             pda.map(|pubkey| pubkey.0)

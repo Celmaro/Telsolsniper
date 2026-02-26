@@ -6,20 +6,19 @@ Rust SDK for Solana DEX trading (Pump.fun, PumpSwap, Raydium, Bonk, Meteora, etc
 
 ### Performance
 
-- **Hot-path timing**: `Instant::now()` for build/submit/total/confirm only when `log_enabled` or (for total) simulate, reducing cold-path syscalls.
-- **Fewer clones**: `execute_parallel` now takes `&[Arc<SwqosClient>]` instead of `Vec<Arc<SwqosClient>>`; caller no longer clones the client list.
-- **SWQoS HTTP**: Named constants for pool idle timeout, connect/request timeouts, and HTTP/2 keepalive in `swqos/common.rs`.
+- **Executor hot path**: Sample `Instant::now()` only when `log_enabled` or `simulate` (total, build, submit, confirm) to reduce cold-path syscalls.
+- **SWQOS**: `execute_parallel` now takes `&[Arc<SwqosClient>]` to avoid cloning the client list on each swap.
+- **Constants**: Named constants for instruction/account sizes and HTTP client timeouts; no magic numbers in hot paths.
 
-### Code quality
+### Code Quality
 
-- **Protocol params**: Single `validate_protocol_params(dex_type, params)` used by both buy and sell; removed duplicated match blocks.
-- **Constants**: `BYTES_PER_ACCOUNT`, `MAX_INSTRUCTIONS_WARN` in execution; HTTP timeout constants in swqos common.
-- **Comments**: Prefetch and branch-hint safety/usage documented; `SYSCALL_BYPASS` marked as reserved for future use.
+- **Protocol params**: Single `validate_protocol_params()` used for both buy and sell; removed duplicate match blocks in `lib.rs`.
+- **Comments**: Bilingual (English + 中文) doc and inline comments across execution, executor, perf (hardware_optimizations, syscall_bypass), and swqos/common.
+- **Prefetch/safety**: Clearer docs for cache prefetch and `unsafe` usage (valid read-only ref, no concurrent write).
 
 ### Documentation
 
-- **Bilingual docs**: English + 中文 doc comments in `trading/core/execution.rs`, `trading/core/executor.rs`, `perf/hardware_optimizations.rs`, `perf/mod.rs`, `perf/syscall_bypass.rs`, `swqos/common.rs`.
-- **README**: Version references and "What's new in 3.5.0" (EN) / "3.5.0 更新说明" (CN) updated.
+- README (EN/CN): Version references updated to 3.5.0 for path and crates.io usage.
 
 ---
 
@@ -30,7 +29,7 @@ Rust SDK for Solana DEX trading (Pump.fun, PumpSwap, Raydium, Bonk, Meteora, etc
 sol-trade-sdk = { git = "https://github.com/0xfnzero/sol-trade-sdk", tag = "v3.5.0" }
 ```
 
-**From crates.io** (when published):
+**From crates.io:**
 ```toml
 sol-trade-sdk = "3.5.0"
 ```

@@ -153,10 +153,12 @@ pub fn _create_associated_token_account_idempotent_fast(
 pub enum PdaCacheKey {
     PumpFunUserVolume(Pubkey),
     PumpFunBondingCurve(Pubkey),
+    PumpFunBondingCurveV2(Pubkey),
     PumpFunCreatorVault(Pubkey),
     BonkPool(Pubkey, Pubkey),
     BonkVault(Pubkey, Pubkey),
     PumpSwapUserVolume(Pubkey),
+    PumpSwapPoolV2(Pubkey),
 }
 
 /// Global lock-free PDA cache for storing computation results
