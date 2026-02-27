@@ -20,6 +20,8 @@ members = [
     "examples/shared_infrastructure",
     "examples/middleware_system",
     "examples/pumpswap_trading",
+    "examples/pumpfun_copy_trading",
+    "examples/pumpfun_sniper_trading",
     "examples/bonk_sniper_trading",
     "examples/bonk_copy_trading",
     "examples/raydium_cpmm_trading",
@@ -43,23 +45,23 @@ perf-trace = []  # 性能追踪特性，生产环境应禁用以获得最佳性�
 
 [dependencies]
 solana-sdk = "3.0.0"
-solana-client = "3.0.8"
+solana-client = "3.1.9"
 solana-program = "3.0.0"
-solana-rpc-client = "3.0.8"
-solana-rpc-client-api = "3.0.8"
-solana-transaction-status = "3.0.8"
-solana-account-decoder = "3.0.8"
+solana-rpc-client = "3.1.9"
+solana-rpc-client-api = "3.1.9"
+solana-transaction-status = "3.1.9"
+solana-account-decoder = "3.1.9"
 solana-hash = "3.0.0"
-solana-entry = "3.0.8"
-solana-rpc-client-nonce-utils = "3.0.8"
-solana-perf = "3.0.8"
-solana-metrics = "3.0.8"
-solana-nonce = "3.0.0"
-solana-address-lookup-table-interface = "3.0.0"
+solana-entry = "3.1.9"
+solana-rpc-client-nonce-utils = "3.1.9"
+solana-perf = "3.1.9"
+solana-metrics = "3.1.9"
+solana-nonce = "3.1.0"
+solana-address-lookup-table-interface = "3.0.1"
 solana-compute-budget-interface = "3.0.0"
-solana-commitment-config = { version = "3.0.0", features = ["serde"] }
-solana-transaction-status-client-types = "3.0.0"
-solana-tls-utils = "3.0.8"
+solana-commitment-config = { version = "3.1.1", features = ["serde"] }
+solana-transaction-status-client-types = "3.1.9"
+solana-tls-utils = "3.1.9"
 
 borsh = { version = "1.5.3", features = ["derive"] }
 isahc = "1.7.2"

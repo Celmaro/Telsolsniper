@@ -1,5 +1,18 @@
+use std::{
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
+
+use sol_parser_sdk::grpc::{
+    AccountFilter, ClientConfig, EventType, EventTypeFilter, OrderMode, Protocol,
+    TransactionFilter, YellowstoneGrpc,
+};
+use sol_parser_sdk::DexEvent;
 use sol_trade_sdk::common::address_lookup::fetch_address_lookup_table_account;
-use sol_trade_sdk::common::{gas_fee_strategy, GasFeeStrategy, TradeConfig};
+use sol_trade_sdk::common::{GasFeeStrategy, TradeConfig};
 use sol_trade_sdk::{
     common::AnyResult,
     swqos::SwqosConfig,
@@ -9,95 +22,82 @@ use sol_trade_sdk::{
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
-use solana_streamer_sdk::match_event;
-use solana_streamer_sdk::streaming::event_parser::common::filter::EventTypeFilter;
-use solana_streamer_sdk::streaming::event_parser::common::EventType;
-use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::parser::PUMPFUN_PROGRAM_ID;
-use solana_streamer_sdk::streaming::event_parser::protocols::pumpfun::PumpFunTradeEvent;
-use solana_streamer_sdk::streaming::event_parser::{Protocol, UnifiedEvent};
-use solana_streamer_sdk::streaming::yellowstone_grpc::{AccountFilter, TransactionFilter};
-use solana_streamer_sdk::streaming::YellowstoneGrpc;
-use std::{
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
 
-// Global static flag to ensure transaction is executed only once
 static ALREADY_EXECUTED: AtomicBool = AtomicBool::new(false);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Subscribing to GRPC events...");
+    println!("Subscribing to GRPC events (sol-parser-sdk, is_cashback_coin from event)...");
 
-    let grpc = YellowstoneGrpc::new(
-        "https://solana-yellowstone-grpc.publicnode.com:443".to_string(),
-        None,
-    )?;
-
-    let callback = create_event_callback();
-    let protocols = vec![Protocol::PumpFun];
-    // Filter accounts
-    let account_include = vec![
-        PUMPFUN_PROGRAM_ID.to_string(), // Listen to pumpfun program ID
-    ];
-    let account_exclude = vec![];
-    let account_required = vec![];
-
-    // Listen to transaction data
-    let transaction_filter = TransactionFilter {
-        account_include: account_include.clone(),
-        account_exclude,
-        account_required,
+    let config = ClientConfig {
+        enable_metrics: false,
+        connection_timeout_ms: 10000,
+        request_timeout_ms: 30000,
+        enable_tls: true,
+        order_mode: OrderMode::Unordered,
+        ..Default::default()
     };
 
-    // Listen to account data belonging to owner programs -> account event monitoring
-    let account_filter = AccountFilter { account: vec![], owner: vec![], filters: vec![] };
+    let grpc_endpoint = std::env::var("GRPC_ENDPOINT")
+        .unwrap_or_else(|_| "https://solana-yellowstone-grpc.publicnode.com:443".to_string());
+    let grpc = YellowstoneGrpc::new_with_config(
+        grpc_endpoint,
+        std::env::var("GRPC_AUTH_TOKEN").ok(),
+        config,
+    )?;
 
-    // listen to specific event type
-    let event_type_filter =
-        EventTypeFilter { include: vec![EventType::PumpFunBuy, EventType::PumpFunSell] };
+    let protocols = vec![Protocol::PumpFun];
+    let transaction_filter = TransactionFilter::for_protocols(&protocols);
+    let account_filter = AccountFilter::for_protocols(&protocols);
+    let event_filter = EventTypeFilter::include_only(vec![
+        EventType::PumpFunBuy,
+        EventType::PumpFunSell,
+        EventType::PumpFunBuyExactSolIn,
+        EventType::PumpFunTrade,
+    ]);
 
-    grpc.subscribe_events_immediate(
-        protocols,
-        None,
-        vec![transaction_filter],
-        vec![account_filter],
-        Some(event_type_filter),
-        None,
-        callback,
-    )
-    .await?;
+    let queue = grpc
+        .subscribe_dex_events(vec![transaction_filter], vec![account_filter], Some(event_filter))
+        .await?;
+
+    loop {
+        if let Some(event) = queue.pop() {
+            let run = match &event {
+                DexEvent::PumpFunBuy(e) | DexEvent::PumpFunSell(e) | DexEvent::PumpFunBuyExactSolIn(e) => {
+                    if !ALREADY_EXECUTED.swap(true, Ordering::SeqCst) {
+                        Some(e.clone())
+                    } else {
+                        None
+                    }
+                }
+                DexEvent::PumpFunTrade(e) => {
+                    if !ALREADY_EXECUTED.swap(true, Ordering::SeqCst) {
+                        Some(e.clone())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            if let Some(e) = run {
+                tokio::spawn(async move {
+                    if let Err(err) = pumpfun_copy_trade_with_grpc(e).await {
+                        eprintln!("Error in copy trade: {:?}", err);
+                        std::process::exit(1);
+                    }
+                    std::process::exit(0);
+                });
+                break;
+            }
+        } else {
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+    }
 
     tokio::signal::ctrl_c().await?;
-
     Ok(())
 }
 
-/// Create an event callback function that handles different types of events
-fn create_event_callback() -> impl Fn(Box<dyn UnifiedEvent>) {
-    |event: Box<dyn UnifiedEvent>| {
-        match_event!(event, {
-            PumpFunTradeEvent => |e: PumpFunTradeEvent| {
-                // Test code, only test one transaction
-                if !ALREADY_EXECUTED.swap(true, Ordering::SeqCst) {
-                    let event_clone = e.clone();
-                    tokio::spawn(async move {
-                        if let Err(err) = pumpfun_copy_trade_with_grpc(event_clone).await {
-                            eprintln!("Error in copy trade: {:?}", err);
-                            std::process::exit(0);
-                        }
-                    });
-                }
-            },
-        });
-    }
-}
-
-/// Create SolanaTrade client
-/// Initializes a new SolanaTrade client with configuration
 async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
     println!("🚀 Initializing SolanaTrade client...");
     let payer = Keypair::from_base58_string("use_your_payer_keypair_here");
@@ -110,9 +110,10 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
     Ok(solana_trade)
 }
 
-/// PumpFun sniper trade
-/// This function demonstrates how to snipe a new token from a PumpFun trade event
-async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResult<()> {
+/// PumpFun copy trade: use is_cashback_coin from gRPC event (sol-parser-sdk)
+async fn pumpfun_copy_trade_with_grpc(
+    trade_info: sol_parser_sdk::core::events::PumpFunTradeEvent,
+) -> AnyResult<()> {
     println!("Testing PumpFun trading...");
 
     let client = create_solana_trade_client().await?;
@@ -127,15 +128,13 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
     let gas_fee_strategy = GasFeeStrategy::new();
     gas_fee_strategy.set_global_fee_strategy(150000, 150000, 500000, 500000, 0.001, 0.001);
 
-    // Buy tokens
-    println!("Buying tokens from PumpFun...");
-    let buy_sol_amount = 100_000;
+    // is_cashback_coin from gRPC event (sol-parser-sdk parses it from trade event)
     let buy_params = sol_trade_sdk::TradeBuyParams {
         dex_type: DexType::PumpFun,
         input_token_type: sol_trade_sdk::TradeTokenType::SOL,
         mint: mint_pubkey,
-        input_token_amount: buy_sol_amount,
-        slippage_basis_points: slippage_basis_points,
+        input_token_amount: 100_000,
+        slippage_basis_points,
         recent_blockhash: Some(recent_blockhash),
         extension_params: DexParamEnum::PumpFun(PumpFunParams::from_trade(
             trade_info.bonding_curve,
@@ -150,21 +149,21 @@ async fn pumpfun_copy_trade_with_grpc(trade_info: PumpFunTradeEvent) -> AnyResul
             None,
             trade_info.fee_recipient,
             trade_info.token_program,
-            false, // is_cashback_coin: set from event/parser when available
+            trade_info.is_cashback_coin,
         )),
-        address_lookup_table_account: address_lookup_table_account,
+        address_lookup_table_account,
         wait_transaction_confirmed: true,
         create_input_token_ata: false,
         close_input_token_ata: false,
         create_mint_ata: true,
         durable_nonce: None,
         fixed_output_token_amount: None,
-        gas_fee_strategy: gas_fee_strategy,
+        gas_fee_strategy,
         simulate: false,
         use_exact_sol_amount: None,
+        grpc_recv_us: None,
     };
     client.buy(buy_params).await?;
 
-    // Exit program
     std::process::exit(0);
 }

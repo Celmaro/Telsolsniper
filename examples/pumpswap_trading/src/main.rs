@@ -1,6 +1,7 @@
 use sol_trade_sdk::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed;
 use sol_trade_sdk::common::TradeConfig;
 use sol_trade_sdk::TradeTokenType;
+use sol_trade_sdk::instruction::utils::pumpswap::fetch_pool;
 use sol_trade_sdk::{
     common::AnyResult,
     swqos::SwqosConfig,
@@ -136,7 +137,9 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
 }
 
 async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> AnyResult<()> {
-    let params = PumpSwapParams::new(
+    let client = create_solana_trade_client().await?;
+    let pool_data = fetch_pool(&client.infrastructure.rpc, &trade_info.pool).await?;
+    let params = PumpSwapParams::from_trade(
         trade_info.pool,
         trade_info.base_mint,
         trade_info.quote_mint,
@@ -149,6 +152,7 @@ async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> Any
         trade_info.base_token_program,
         trade_info.quote_token_program,
         trade_info.protocol_fee_recipient,
+        pool_data.is_cashback_coin,
     );
     let mint = if trade_info.base_mint == sol_trade_sdk::constants::USDC_TOKEN_ACCOUNT
         || trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT
@@ -157,12 +161,14 @@ async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> Any
     } else {
         trade_info.base_mint
     };
-    pumpswap_trade_with_grpc(mint, params).await?;
+    pumpswap_trade_with_grpc(&client, mint, params).await?;
     Ok(())
 }
 
 async fn pumpswap_trade_with_grpc_sell_event(trade_info: PumpSwapSellEvent) -> AnyResult<()> {
-    let params = PumpSwapParams::new(
+    let client = create_solana_trade_client().await?;
+    let pool_data = fetch_pool(&client.infrastructure.rpc, &trade_info.pool).await?;
+    let params = PumpSwapParams::from_trade(
         trade_info.pool,
         trade_info.base_mint,
         trade_info.quote_mint,
@@ -175,6 +181,7 @@ async fn pumpswap_trade_with_grpc_sell_event(trade_info: PumpSwapSellEvent) -> A
         trade_info.base_token_program,
         trade_info.quote_token_program,
         trade_info.protocol_fee_recipient,
+        pool_data.is_cashback_coin,
     );
     let mint = if trade_info.base_mint == sol_trade_sdk::constants::USDC_TOKEN_ACCOUNT
         || trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT
@@ -183,14 +190,16 @@ async fn pumpswap_trade_with_grpc_sell_event(trade_info: PumpSwapSellEvent) -> A
     } else {
         trade_info.base_mint
     };
-    pumpswap_trade_with_grpc(mint, params).await?;
+    pumpswap_trade_with_grpc(&client, mint, params).await?;
     Ok(())
 }
 
-async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -> AnyResult<()> {
+async fn pumpswap_trade_with_grpc(
+    client: &SolanaTrade,
+    mint_pubkey: Pubkey,
+    params: PumpSwapParams,
+) -> AnyResult<()> {
     println!("Testing PumpSwap trading...");
-
-    let client = create_solana_trade_client().await?;
     let slippage_basis_points = Some(500);
     let recent_blockhash = client.infrastructure.rpc.get_latest_blockhash().await?;
 
@@ -221,6 +230,7 @@ async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -
         gas_fee_strategy: gas_fee_strategy.clone(),
         simulate: false,
         use_exact_sol_amount: None,
+        grpc_recv_us: None,
     };
     client.buy(buy_params).await?;
 
@@ -255,6 +265,7 @@ async fn pumpswap_trade_with_grpc(mint_pubkey: Pubkey, params: PumpSwapParams) -
         fixed_output_token_amount: None,
         gas_fee_strategy: gas_fee_strategy,
         simulate: false,
+        grpc_recv_us: None,
     };
     client.sell(sell_params).await?;
 
