@@ -303,13 +303,13 @@ pub const SWQOS_ENDPOINTS_SPEEDLANDING: [&str; 8] = [
 /// Helius Sender: POST /fast, dual routing to validators and Jito. API key optional (custom TPS only).
 /// Region order: NewYork(EWR), Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles(SG), Default(Global).
 pub const SWQOS_ENDPOINTS_HELIUS: [&str; 8] = [
-    "https://ewr-sender.helius-rpc.com/fast",
-    "https://fra-sender.helius-rpc.com/fast",
-    "https://ams-sender.helius-rpc.com/fast",
-    "https://slc-sender.helius-rpc.com/fast",
-    "https://tyo-sender.helius-rpc.com/fast",
-    "https://lon-sender.helius-rpc.com/fast",
-    "https://sg-sender.helius-rpc.com/fast",
+    "http://ewr-sender.helius-rpc.com/fast",
+    "http://fra-sender.helius-rpc.com/fast",
+    "http://ams-sender.helius-rpc.com/fast",
+    "http://slc-sender.helius-rpc.com/fast",
+    "http://tyo-sender.helius-rpc.com/fast",
+    "http://lon-sender.helius-rpc.com/fast",
+    "http://sg-sender.helius-rpc.com/fast",
     "https://sender.helius-rpc.com/fast",
 ];
 
