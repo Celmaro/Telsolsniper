@@ -71,6 +71,8 @@ pub struct SwapParams {
     pub log_enabled: bool,
     /// Whether to pin parallel submit tasks to cores (from TradeConfig.use_core_affinity).
     pub use_core_affinity: bool,
+    /// Whether to check minimum tip per SWQOS (from TradeConfig.check_min_tip). When false, skip filter for lower latency.
+    pub check_min_tip: bool,
     /// Optional event receive time in microseconds (same scale as sol-parser-sdk clock::now_micros). Used as timing start when log_enabled.
     pub grpc_recv_us: Option<i64>,
     /// Use exact SOL amount instructions (buy_exact_sol_in for PumpFun, buy_exact_quote_in for PumpSwap).

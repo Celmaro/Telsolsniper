@@ -76,6 +76,8 @@ pub struct TradeConfig {
     pub use_core_affinity: bool,
     /// Whether to output all SDK logs (timing, SWQOS submit/confirm, WSOL, blacklist, etc.). Default true.
     pub log_enabled: bool,
+    /// Whether to check minimum tip per SWQOS provider (filter out configs below min). Default false to save latency.
+    pub check_min_tip: bool,
 }
 
 impl TradeConfig {
@@ -96,6 +98,7 @@ impl TradeConfig {
             use_seed_optimize: true,           // default: use seed optimization
             use_core_affinity: true,           // default: pin parallel submit tasks to cores
             log_enabled: true,                 // default: enable all SDK logs
+            check_min_tip: false,              // default: skip min tip check to reduce latency
         }
     }
 
@@ -107,6 +110,12 @@ impl TradeConfig {
     ) -> Self {
         self.create_wsol_ata_on_startup = create_wsol_ata_on_startup;
         self.use_seed_optimize = use_seed_optimize;
+        self
+    }
+
+    /// Set whether to check minimum tip per SWQOS (filter out configs below min). Default false for lower latency.
+    pub fn with_check_min_tip(mut self, check_min_tip: bool) -> Self {
+        self.check_min_tip = check_min_tip;
         self
     }
 }

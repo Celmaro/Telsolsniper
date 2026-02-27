@@ -129,6 +129,7 @@ impl TradeExecutor for GenericTradeExecutor {
             if is_buy { true } else { params.with_tip },
             params.gas_fee_strategy,
             params.use_core_affinity,
+            params.check_min_tip,
         )
         .await;
         let send_elapsed = send_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);

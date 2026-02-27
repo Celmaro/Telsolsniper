@@ -13,6 +13,20 @@ pub const JITO_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"),
 ];
 
+/// Helius Sender tip accounts (fee recipient addresses).
+pub const HELIUS_TIP_ACCOUNTS: &[Pubkey] = &[
+    pubkey!("4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE"),
+    pubkey!("D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ"),
+    pubkey!("9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta"),
+    pubkey!("5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn"),
+    pubkey!("2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD"),
+    pubkey!("2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ"),
+    pubkey!("wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF"),
+    pubkey!("3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT"),
+    pubkey!("4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey"),
+    pubkey!("4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or"),
+];
+
 pub const NEXTBLOCK_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("NextbLoCkVtMGcV47JzewQdvBpLqT9TxQFozQkN98pE"),
     pubkey!("NexTbLoCkWykbLuB1NkjXgFWkX9oAtcoagQegygXXA2"),
@@ -286,6 +300,19 @@ pub const SWQOS_ENDPOINTS_SPEEDLANDING: [&str; 8] = [
     "fra.speedlanding.trade:17778",
 ];
 
+/// Helius Sender: POST /fast, dual routing to validators and Jito. API key optional (custom TPS only).
+/// Region order: NewYork(EWR), Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles(SG), Default(Global).
+pub const SWQOS_ENDPOINTS_HELIUS: [&str; 8] = [
+    "https://ewr-sender.helius-rpc.com/fast",
+    "https://fra-sender.helius-rpc.com/fast",
+    "https://ams-sender.helius-rpc.com/fast",
+    "https://slc-sender.helius-rpc.com/fast",
+    "https://tyo-sender.helius-rpc.com/fast",
+    "https://lon-sender.helius-rpc.com/fast",
+    "https://sg-sender.helius-rpc.com/fast",
+    "https://sender.helius-rpc.com/fast",
+];
+
 pub const SWQOS_MIN_TIP_DEFAULT: f64 = 0.00001; // 其它SWQOS默认最低小费
 pub const SWQOS_MIN_TIP_JITO: f64 = 0.00001;
 pub const SWQOS_MIN_TIP_NEXTBLOCK: f64 = 0.001;
@@ -300,3 +327,7 @@ pub const SWQOS_MIN_TIP_STELLIUM: f64 = 0.0001; // Stellium requires minimum 0.0
 pub const SWQOS_MIN_TIP_LIGHTSPEED: f64 = 0.0001; // Lightspeed requires minimum 0.001 SOL tip
 pub const SWQOS_MIN_TIP_SOYAS: f64 = 0.001; // Soyas requires minimum 0.001 SOL tip
 pub const SWQOS_MIN_TIP_SPEEDLANDING: f64 = 0.001; // Speedlanding requires minimum 0.001 SOL tip
+/// Helius Sender: 0.0002 SOL when not swqos_only; use SWQOS_MIN_TIP_HELIUS_SWQOS_ONLY when swqos_only=true.
+pub const SWQOS_MIN_TIP_HELIUS: f64 = 0.0002;
+/// Helius Sender with swqos_only: minimum 0.000005 SOL (much lower tip allowed).
+pub const SWQOS_MIN_TIP_HELIUS_SWQOS_ONLY: f64 = 0.000005;

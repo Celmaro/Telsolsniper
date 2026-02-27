@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         SwqosConfig::Default(rpc_url.clone()),
         SwqosConfig::Jito("your_uuid".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::Bloxroute("your_api_token".to_string(), SwqosRegion::Frankfurt, None),
+        SwqosConfig::Helius("".to_string(), SwqosRegion::Default, None, Some(true)),
     ];
 
     // Step 1: Create shared infrastructure (expensive, do once)

@@ -15,22 +15,6 @@ use crate::{
     common::{GasFeeStrategy, SolanaRpcClient},
     swqos::{SwqosClient, SwqosType, TradeType},
     trading::{common::build_transaction, MiddlewareManager},
-    constants::swqos::{
-        SWQOS_MIN_TIP_DEFAULT,
-        SWQOS_MIN_TIP_JITO,
-        SWQOS_MIN_TIP_NEXTBLOCK,
-        SWQOS_MIN_TIP_ZERO_SLOT,
-        SWQOS_MIN_TIP_TEMPORAL,
-        SWQOS_MIN_TIP_BLOXROUTE,
-        SWQOS_MIN_TIP_NODE1,
-        SWQOS_MIN_TIP_FLASHBLOCK,
-        SWQOS_MIN_TIP_BLOCKRAZOR,
-        SWQOS_MIN_TIP_ASTRALANE,
-        SWQOS_MIN_TIP_STELLIUM,
-        SWQOS_MIN_TIP_LIGHTSPEED,
-        SWQOS_MIN_TIP_SOYAS,
-        SWQOS_MIN_TIP_SPEEDLANDING
-    },
 };
 
 #[repr(align(64))]
@@ -220,6 +204,7 @@ pub async fn execute_parallel(
     with_tip: bool,
     gas_fee_strategy: GasFeeStrategy,
     use_core_affinity: bool,
+    check_min_tip: bool,
 ) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>)> {
     let _exec_start = Instant::now();
 
@@ -247,33 +232,23 @@ pub async fn execute_parallel(
             with_tip || matches!(swqos_client.get_swqos_type(), SwqosType::Default)
         })
         .flat_map(|(i, swqos_client)| {
+            let swqos_type = swqos_client.get_swqos_type();
             let gas_fee_strategy_configs = gas_fee_strategy.get_strategies(if is_buy {
                 TradeType::Buy
             } else {
                 TradeType::Sell
             });
+            let check_tip = with_tip && !matches!(swqos_type, SwqosType::Default) && check_min_tip;
+            let min_tip = if check_tip {
+                swqos_client.min_tip_sol()
+            } else {
+                0.0
+            };
             gas_fee_strategy_configs
                 .into_iter()
-                .filter(|config| config.0.eq(&swqos_client.get_swqos_type()))
-                .filter(|config| {
-                    // When tip required and not Default, filter by provider minimum tip
-                    if with_tip && !matches!(config.0, SwqosType::Default) {
-                        let min_tip = match config.0 {
-                            SwqosType::Jito => SWQOS_MIN_TIP_JITO,
-                            SwqosType::NextBlock => SWQOS_MIN_TIP_NEXTBLOCK,
-                            SwqosType::ZeroSlot => SWQOS_MIN_TIP_ZERO_SLOT,
-                            SwqosType::Temporal => SWQOS_MIN_TIP_TEMPORAL,
-                            SwqosType::Bloxroute => SWQOS_MIN_TIP_BLOXROUTE,
-                            SwqosType::Node1 => SWQOS_MIN_TIP_NODE1,
-                            SwqosType::FlashBlock => SWQOS_MIN_TIP_FLASHBLOCK,
-                            SwqosType::BlockRazor => SWQOS_MIN_TIP_BLOCKRAZOR,
-                            SwqosType::Astralane => SWQOS_MIN_TIP_ASTRALANE,
-                            SwqosType::Stellium => SWQOS_MIN_TIP_STELLIUM,
-                            SwqosType::Lightspeed => SWQOS_MIN_TIP_LIGHTSPEED,
-                            SwqosType::Soyas => SWQOS_MIN_TIP_SOYAS,
-                            SwqosType::Speedlanding => SWQOS_MIN_TIP_SPEEDLANDING,
-                            SwqosType::Default => SWQOS_MIN_TIP_DEFAULT,
-                        };
+                .filter(move |config| config.0 == swqos_type)
+                .filter(move |config| {
+                    if check_tip {
                         if config.2.tip < min_tip && crate::common::sdk_log::sdk_log_enabled() {
                             println!(
                                 "⚠️ Config filtered: {:?} tip {} is below minimum required {}",

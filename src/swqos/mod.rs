@@ -14,6 +14,7 @@ pub mod stellium;
 pub mod lightspeed;
 pub mod soyas;
 pub mod speedlanding;
+pub mod helius;
 
 use std::sync::Arc;
 
@@ -37,7 +38,23 @@ use crate::{
         SWQOS_ENDPOINTS_ASTRALANE,
         SWQOS_ENDPOINTS_STELLIUM,
         SWQOS_ENDPOINTS_SOYAS,
-        SWQOS_ENDPOINTS_SPEEDLANDING
+        SWQOS_ENDPOINTS_SPEEDLANDING,
+        SWQOS_ENDPOINTS_HELIUS,
+        SWQOS_MIN_TIP_DEFAULT,
+        SWQOS_MIN_TIP_JITO,
+        SWQOS_MIN_TIP_NEXTBLOCK,
+        SWQOS_MIN_TIP_ZERO_SLOT,
+        SWQOS_MIN_TIP_TEMPORAL,
+        SWQOS_MIN_TIP_BLOXROUTE,
+        SWQOS_MIN_TIP_NODE1,
+        SWQOS_MIN_TIP_FLASHBLOCK,
+        SWQOS_MIN_TIP_BLOCKRAZOR,
+        SWQOS_MIN_TIP_ASTRALANE,
+        SWQOS_MIN_TIP_STELLIUM,
+        SWQOS_MIN_TIP_LIGHTSPEED,
+        SWQOS_MIN_TIP_SOYAS,
+        SWQOS_MIN_TIP_SPEEDLANDING,
+        SWQOS_MIN_TIP_HELIUS,
     },
     swqos::{
         bloxroute::BloxrouteClient,
@@ -54,6 +71,7 @@ use crate::{
         lightspeed::LightspeedClient,
         soyas::SoyasClient,
         speedlanding::SpeedlandingClient,
+        helius::HeliusClient,
     }
 };
 
@@ -103,6 +121,7 @@ pub enum SwqosType {
     Lightspeed,
     Soyas,
     Speedlanding,
+    Helius,
     Default,
 }
 
@@ -121,6 +140,8 @@ impl SwqosType {
             Self::Stellium,
             Self::Lightspeed,
             Self::Soyas,
+            Self::Speedlanding,
+            Self::Helius,
             Self::Default,
         ]
     }
@@ -134,6 +155,27 @@ pub trait SwqosClientTrait {
     async fn send_transactions(&self, trade_type: TradeType, transactions: &Vec<VersionedTransaction>, wait_confirmation: bool) -> Result<()>;
     fn get_tip_account(&self) -> Result<String>;
     fn get_swqos_type(&self) -> SwqosType;
+    /// Minimum tip in SOL required by this provider. Helius returns lower value when swqos_only is true.
+    #[inline]
+    fn min_tip_sol(&self) -> f64 {
+        match self.get_swqos_type() {
+            SwqosType::Jito => SWQOS_MIN_TIP_JITO,
+            SwqosType::NextBlock => SWQOS_MIN_TIP_NEXTBLOCK,
+            SwqosType::ZeroSlot => SWQOS_MIN_TIP_ZERO_SLOT,
+            SwqosType::Temporal => SWQOS_MIN_TIP_TEMPORAL,
+            SwqosType::Bloxroute => SWQOS_MIN_TIP_BLOXROUTE,
+            SwqosType::Node1 => SWQOS_MIN_TIP_NODE1,
+            SwqosType::FlashBlock => SWQOS_MIN_TIP_FLASHBLOCK,
+            SwqosType::BlockRazor => SWQOS_MIN_TIP_BLOCKRAZOR,
+            SwqosType::Astralane => SWQOS_MIN_TIP_ASTRALANE,
+            SwqosType::Stellium => SWQOS_MIN_TIP_STELLIUM,
+            SwqosType::Lightspeed => SWQOS_MIN_TIP_LIGHTSPEED,
+            SwqosType::Soyas => SWQOS_MIN_TIP_SOYAS,
+            SwqosType::Speedlanding => SWQOS_MIN_TIP_SPEEDLANDING,
+            SwqosType::Helius => SWQOS_MIN_TIP_HELIUS,
+            SwqosType::Default => SWQOS_MIN_TIP_DEFAULT,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -180,6 +222,9 @@ pub enum SwqosConfig {
     /// To apply for an API key, please contact -> https://t.me/speedlanding_bot?start=0xzero
     /// Minimum tip: 0.001 SOL
     Speedlanding(String, SwqosRegion, Option<String>),
+    /// Helius Sender: dual routing to validators and Jito. API key optional (custom TPS only).
+    /// (api_key, region, custom_url, swqos_only). swqos_only: None => false (min tip 0.0002 SOL); Some(true) => SWQOS-only (min tip 0.000005 SOL, much lower).
+    Helius(String, SwqosRegion, Option<String>, Option<bool>),
 }
 
 impl SwqosConfig {
@@ -199,6 +244,7 @@ impl SwqosConfig {
             SwqosConfig::Lightspeed(_, _, _) => SwqosType::Lightspeed,
             SwqosConfig::Soyas(_, _, _) => SwqosType::Soyas,
             SwqosConfig::Speedlanding(_, _, _) => SwqosType::Speedlanding,
+            SwqosConfig::Helius(_, _, _, _) => SwqosType::Helius,
         }
     }
 
@@ -226,6 +272,7 @@ impl SwqosConfig {
             SwqosType::Lightspeed => "".to_string(), // Lightspeed requires custom URL with api_key
             SwqosType::Soyas => SWQOS_ENDPOINTS_SOYAS[region as usize].to_string(),
             SwqosType::Speedlanding => SWQOS_ENDPOINTS_SPEEDLANDING[region as usize].to_string(),
+            SwqosType::Helius => SWQOS_ENDPOINTS_HELIUS[region as usize].to_string(),
             SwqosType::Default => "".to_string(),
         }
     }
@@ -348,6 +395,18 @@ impl SwqosConfig {
                     auth_token
                 ).await?;
                 Ok(Arc::new(speedlanding_client))
+            },
+            SwqosConfig::Helius(api_key, region, url, swqos_only) => {
+                let swqos_only = swqos_only.unwrap_or(false);
+                let endpoint = SwqosConfig::get_endpoint(SwqosType::Helius, region, url.clone());
+                let api_key_opt = if api_key.is_empty() { None } else { Some(api_key.clone()) };
+                let helius_client = HeliusClient::new(
+                    rpc_url.clone(),
+                    endpoint,
+                    api_key_opt,
+                    swqos_only,
+                );
+                Ok(Arc::new(helius_client))
             },
             SwqosConfig::Default(endpoint) => {
                 let rpc = SolanaRpcClient::new_with_commitment(

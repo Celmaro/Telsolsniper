@@ -49,6 +49,8 @@ async fn create_trading_client_simple() -> AnyResult<TradingClient> {
         SwqosConfig::Node1("your_api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::BlockRazor("your_api_token".to_string(), SwqosRegion::Frankfurt, None),
         SwqosConfig::Astralane("your_api_token".to_string(), SwqosRegion::Frankfurt, None),
+        // Helius Sender: 4th param swqos_only Some(true) => min tip 0.000005 SOL; None => 0.0002 SOL
+        SwqosConfig::Helius("".to_string(), SwqosRegion::Default, None, Some(true)),
     ];
 
     // Optional: Customize WSOL ATA and Seed optimization settings

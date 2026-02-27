@@ -1,9 +1,9 @@
 use anyhow::Result;
 use sol_trade_sdk::{
     common::{AnyResult, TradeConfig},
-    swqos::{SwqosConfig, SwqosRegion},
+    swqos::SwqosConfig,
     trading::{
-        core::params::{PumpSwapParams, DexParamEnum}, factory::DexType, middleware::builtin::LoggingMiddleware,
+        core::params::{PumpSwapParams, DexParamEnum}, factory::DexType,
         InstructionMiddleware, MiddlewareManager,
     },
     SolanaTrade, TradeTokenType,
@@ -30,8 +30,8 @@ impl InstructionMiddleware for CustomMiddleware {
     fn process_protocol_instructions(
         &self,
         protocol_instructions: Vec<Instruction>,
-        protocol_name: String,
-        is_buy: bool,
+        _protocol_name: String,
+        _is_buy: bool,
     ) -> Result<Vec<Instruction>> {
         // do anything you want here
         // you can modify the instructions here
@@ -41,8 +41,8 @@ impl InstructionMiddleware for CustomMiddleware {
     fn process_full_instructions(
         &self,
         full_instructions: Vec<Instruction>,
-        protocol_name: String,
-        is_buy: bool,
+        _protocol_name: String,
+        _is_buy: bool,
     ) -> Result<Vec<Instruction>> {
         // do anything you want here
         // you can modify the instructions here
