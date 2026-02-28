@@ -89,14 +89,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.6" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "3.5.7" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "3.5.6"
+sol-trade-sdk = "3.5.7"
 ```
 
 ## 🛠️ Usage Examples
@@ -332,6 +332,10 @@ MIT License
 - Project Repository: https://github.com/0xfnzero/sol-trade-sdk
 - Telegram Group: https://t.me/fnzero_group
 - Discord: https://discord.gg/vuazbGkqQE
+
+## ⏱️ Timing metrics (v3.5.0+)
+
+When `log_enabled` and SDK log are on, the executor prints `[SDK] Buy/Sell timing(...)`. **Semantics changed in v3.5.0**: `submit` is now only the send to SWQOS/RPC; `confirm` is separate; `start_to_submit` (when `grpc_recv_us` is set) is **end-to-end from gRPC event to submit**, so it is larger than in-process timings. See [docs/TIMING_METRICS.md](docs/TIMING_METRICS.md) for definitions and how to compare with older versions.
 
 ## ⚠️ Important Notes
 
