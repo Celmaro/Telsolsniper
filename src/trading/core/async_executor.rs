@@ -22,9 +22,10 @@ struct TaskResult {
     success: bool,
     signature: Signature,
     error: Option<anyhow::Error>,
-    #[allow(dead_code)]
     swqos_type: SwqosType,
     landed_on_chain: bool,
+    /// Microsecond timestamp when this task finished (SWQOS returned); for per-SWQOS event→submit timing.
+    submit_done_us: i64,
 }
 
 /// Check if an error indicates the transaction landed on-chain (vs network/timeout error)
@@ -87,7 +88,7 @@ impl ResultCollector {
         self.completed_count.fetch_add(1, Ordering::Release);
     }
 
-    async fn wait_for_success(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
+    async fn wait_for_success(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
         let start = Instant::now();
         let timeout = std::time::Duration::from_secs(5);
         let poll_interval = std::time::Duration::from_millis(1000);
@@ -96,14 +97,16 @@ impl ResultCollector {
             if self.success_flag.load(Ordering::Acquire) {
                 let mut signatures = Vec::new();
                 let mut has_success = false;
+                let mut submit_timings = Vec::new();
                 while let Some(result) = self.results.pop() {
                     signatures.push(result.signature);
+                    submit_timings.push((result.swqos_type, result.submit_done_us));
                     if result.success {
                         has_success = true;
                     }
                 }
                 if has_success && !signatures.is_empty() {
-                    return Some((true, signatures, None));
+                    return Some((true, signatures, None, submit_timings));
                 }
             }
 
@@ -112,15 +115,17 @@ impl ResultCollector {
             if self.landed_failed_flag.load(Ordering::Acquire) {
                 let mut signatures = Vec::new();
                 let mut landed_error = None;
+                let mut submit_timings = Vec::new();
                 while let Some(result) = self.results.pop() {
                     signatures.push(result.signature);
+                    submit_timings.push((result.swqos_type, result.submit_done_us));
                     // Prefer the error from the tx that actually landed
                     if result.landed_on_chain && result.error.is_some() {
                         landed_error = result.error;
                     }
                 }
                 if !signatures.is_empty() {
-                    return Some((false, signatures, landed_error));
+                    return Some((false, signatures, landed_error, submit_timings));
                 }
             }
 
@@ -129,8 +134,10 @@ impl ResultCollector {
                 let mut signatures = Vec::new();
                 let mut last_error = None;
                 let mut any_success = false;
+                let mut submit_timings = Vec::new();
                 while let Some(result) = self.results.pop() {
                     signatures.push(result.signature);
+                    submit_timings.push((result.swqos_type, result.submit_done_us));
                     if result.success {
                         any_success = true;
                     }
@@ -139,7 +146,7 @@ impl ResultCollector {
                     }
                 }
                 if !signatures.is_empty() {
-                    return Some((any_success, signatures, last_error));
+                    return Some((any_success, signatures, last_error, submit_timings));
                 }
                 return None;
             }
@@ -151,13 +158,15 @@ impl ResultCollector {
         }
     }
 
-    fn get_first(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
+    fn get_first(&self) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
         let mut signatures = Vec::new();
         let mut has_success = false;
         let mut last_error = None;
-        
+        let mut submit_timings = Vec::new();
+
         while let Some(result) = self.results.pop() {
             signatures.push(result.signature);
+            submit_timings.push((result.swqos_type, result.submit_done_us));
             if result.success {
                 has_success = true;
             }
@@ -165,19 +174,20 @@ impl ResultCollector {
                 last_error = result.error;
             }
         }
-        
+
         if !signatures.is_empty() {
-            Some((has_success, signatures, last_error))
+            Some((has_success, signatures, last_error, submit_timings))
         } else {
             None
         }
     }
 
     /// 等待全部任务完成（不等待链上确认），然后收集并返回所有签名。用于「多路提交」时返回多笔签名。
-    async fn wait_for_all_submitted(&self, timeout_secs: u64) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>)> {
+    /// 轮询间隔 2ms，避免 50ms 间隔在最后一笔返回时多等几十 ms 拉高 submit 耗时。
+    async fn wait_for_all_submitted(&self, timeout_secs: u64) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
         let start = Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        let poll_interval = std::time::Duration::from_millis(50);
+        let poll_interval = std::time::Duration::from_millis(2);
         while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
             if start.elapsed() > timeout {
                 break;
@@ -205,7 +215,7 @@ pub async fn execute_parallel(
     gas_fee_strategy: GasFeeStrategy,
     use_core_affinity: bool,
     check_min_tip: bool,
-) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>)> {
+) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
     let _exec_start = Instant::now();
 
     if swqos_clients.is_empty() {
@@ -334,6 +344,7 @@ pub async fn execute_parallel(
                         error: Some(e),
                         swqos_type,
                         landed_on_chain: false,
+                        submit_done_us: crate::common::clock::now_micros(),
                     });
                     return;
                 }
@@ -375,6 +386,7 @@ pub async fn execute_parallel(
                 error: err,
                 swqos_type,
                 landed_on_chain,
+                submit_done_us: crate::common::clock::now_micros(),
             });
         });
     }
@@ -383,15 +395,17 @@ pub async fn execute_parallel(
 
     if !wait_transaction_confirmed {
         const SUBMIT_TIMEOUT_SECS: u64 = 30;
-        let (success, signatures, last_error) = collector
+        let ret = collector
             .wait_for_all_submitted(SUBMIT_TIMEOUT_SECS)
             .await
-            .unwrap_or((false, vec![], Some(anyhow!("No SWQOS result within {}s", SUBMIT_TIMEOUT_SECS))));
-        return Ok((success, signatures, last_error));
+            .unwrap_or((false, vec![], Some(anyhow!("No SWQOS result within {}s", SUBMIT_TIMEOUT_SECS)), vec![]));
+        let (success, signatures, last_error, submit_timings) = ret;
+        return Ok((success, signatures, last_error, submit_timings));
     }
 
     if let Some(result) = collector.wait_for_success().await {
-        Ok(result)
+        let (success, signatures, last_error, submit_timings) = result;
+        Ok((success, signatures, last_error, submit_timings))
     } else {
         Err(anyhow!("All transactions failed"))
     }

@@ -69,7 +69,7 @@ impl TradeExecutor for GenericTradeExecutor {
         } else {
             self.instruction_builder.build_sell_instructions(&params).await?
         };
-        let build_elapsed = build_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
+        let _build_elapsed = build_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
 
         InstructionProcessor::preprocess(&instructions)?;
 
@@ -83,7 +83,11 @@ impl TradeExecutor for GenericTradeExecutor {
             None => instructions,
         };
 
-        let before_submit_elapsed = total_start.as_ref().map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
+        let build_end_us = (params.log_enabled && crate::common::sdk_log::sdk_log_enabled())
+            .then(crate::common::clock::now_micros);
+        let _before_submit_elapsed = total_start.as_ref().map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
+        let before_submit_us = (params.log_enabled && crate::common::sdk_log::sdk_log_enabled())
+            .then(crate::common::clock::now_micros);
 
         if params.simulate {
             let send_start = crate::common::sdk_log::sdk_log_enabled().then(Instant::now);
@@ -106,14 +110,20 @@ impl TradeExecutor for GenericTradeExecutor {
 
             if crate::common::sdk_log::sdk_log_enabled() {
                 let dir = if is_buy { "Buy" } else { "Sell" };
-                println!(" [SDK] {} timing(sim) build_instructions: {:.2}ms before_submit: {:.2}ms simulate: {:.2}ms total: {:.2}ms", dir, build_elapsed.as_secs_f64() * 1000.0, before_submit_elapsed.as_secs_f64() * 1000.0, send_elapsed.as_secs_f64() * 1000.0, total_elapsed.as_secs_f64() * 1000.0);
+                if let (Some(start_us), Some(end_us)) = (timing_start_us, build_end_us) {
+                    println!(" [SDK] {} build_instructions: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                }
+                if let (Some(start_us), Some(end_us)) = (timing_start_us, before_submit_us) {
+                    println!(" [SDK] {} before_submit: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                }
+                println!(" [SDK] {} simulate (dry-run): {:.4} ms", dir, send_elapsed.as_secs_f64() * 1000.0);
+                println!(" [SDK] {} total: {:.4} ms", dir, total_elapsed.as_secs_f64() * 1000.0);
             }
 
             return result;
         }
 
         let need_confirm = params.wait_transaction_confirmed;
-        let send_start = params.log_enabled.then(Instant::now);
         let result = execute_parallel(
             &params.swqos_clients,
             params.payer,
@@ -132,25 +142,17 @@ impl TradeExecutor for GenericTradeExecutor {
             params.check_min_tip,
         )
         .await;
-        let send_elapsed = send_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
 
-        if params.log_enabled && crate::common::sdk_log::sdk_log_enabled() {
-            let dir = if is_buy { "Buy" } else { "Sell" };
-            let build_ms = build_elapsed.as_secs_f64() * 1000.0;
-            let before_ms = before_submit_elapsed.as_secs_f64() * 1000.0;
-            let send_ms = send_elapsed.as_secs_f64() * 1000.0;
-            if let Some(start_us) = timing_start_us {
-                let now_us = crate::common::clock::now_micros();
-                let start_to_submit_us = (now_us - start_us).max(0);
-                println!(" [SDK] {} timing(after_submit) build_instructions: {:.2}ms before_submit: {:.2}ms submit: {:.2}ms start_to_submit: {} μs", dir, build_ms, before_ms, send_ms, start_to_submit_us);
-            } else {
-                println!(" [SDK] {} timing(after_submit) build_instructions: {:.2}ms before_submit: {:.2}ms submit: {:.2}ms", dir, build_ms, before_ms, send_ms);
-            }
-        }
+        let log_enabled = params.log_enabled && crate::common::sdk_log::sdk_log_enabled();
+        let submit_timings = if log_enabled {
+            result.as_ref().ok().map(|(_, _, _, t)| t.clone()).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let result = if need_confirm {
             let (ok, sigs, err) = match &result {
-                Ok((success, signatures, last_error)) => (
+                Ok((success, signatures, last_error, _)) => (
                     *success,
                     signatures.clone(),
                     last_error.as_ref().map(|e| anyhow::anyhow!("{}", e)),
@@ -161,14 +163,26 @@ impl TradeExecutor for GenericTradeExecutor {
                 if sigs.is_empty() {
                     (ok, sigs, err)
                 } else {
-                let confirm_start = (params.log_enabled && crate::common::sdk_log::sdk_log_enabled()).then(Instant::now);
                 let poll_res = poll_any_transaction_confirmation(rpc, &sigs, true).await;
-                let confirm_elapsed = confirm_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
-                if params.log_enabled && crate::common::sdk_log::sdk_log_enabled() {
+                let confirm_done_us = log_enabled.then(crate::common::clock::now_micros);
+                if log_enabled {
                     let dir = if is_buy { "Buy" } else { "Sell" };
-                    let confirm_ms = confirm_elapsed.as_secs_f64() * 1000.0;
-                    let total_ms = total_start.as_ref().map(|s| s.elapsed()).unwrap_or(Duration::ZERO).as_secs_f64() * 1000.0;
-                    println!(" [SDK] {} timing(after_confirm) confirm: {:.2}ms total: {:.2}ms", dir, confirm_ms, total_ms);
+                    if let Some(start_us) = timing_start_us {
+                        if let Some(end_us) = build_end_us {
+                            println!(" [SDK] {} build_instructions: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                        }
+                        if let Some(end_us) = before_submit_us {
+                            println!(" [SDK] {} before_submit: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                        }
+                        if let Some(confirm_us) = confirm_done_us {
+                            let total_ms = (confirm_us - start_us) as f64 / 1000.0;
+                            for (swqos_type, submit_done_us) in &submit_timings {
+                                let submit_ms = (*submit_done_us - start_us).max(0) as f64 / 1000.0;
+                                let confirmed_ms = (confirm_us - *submit_done_us).max(0) as f64 / 1000.0;
+                                println!(" [SDK] {} {:?} submit: {:.4} ms, confirmed: {:.4} ms, total: {:.4} ms", dir, swqos_type, submit_ms, confirmed_ms, total_ms);
+                            }
+                        }
+                    }
                 }
                 match poll_res {
                     Ok(_) => (true, sigs, None),
@@ -180,12 +194,22 @@ impl TradeExecutor for GenericTradeExecutor {
             };
             Ok(confirm_result)
         } else {
-            if params.log_enabled && crate::common::sdk_log::sdk_log_enabled() {
-                let total_ms = total_start.as_ref().map(|s| s.elapsed()).unwrap_or(Duration::ZERO).as_secs_f64() * 1000.0;
+            if log_enabled {
                 let dir = if is_buy { "Buy" } else { "Sell" };
-                println!(" [SDK] {} timing total: {:.2}ms", dir, total_ms);
+                if let Some(start_us) = timing_start_us {
+                    if let Some(end_us) = build_end_us {
+                        println!(" [SDK] {} build_instructions: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                    }
+                    if let Some(end_us) = before_submit_us {
+                        println!(" [SDK] {} before_submit: {:.4} ms", dir, (end_us - start_us) as f64 / 1000.0);
+                    }
+                    for (swqos_type, submit_done_us) in &submit_timings {
+                        let submit_ms = (*submit_done_us - start_us).max(0) as f64 / 1000.0;
+                        println!(" [SDK] {} {:?} submit: {:.4} ms, confirmed: -, total: {:.4} ms", dir, swqos_type, submit_ms, submit_ms);
+                    }
+                }
             }
-            result
+            result.map(|(a, b, c, _)| (a, b, c))
         };
 
         result
@@ -303,4 +327,50 @@ async fn simulate_transaction(
     }
 
     Ok((true, vec![signature], None))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::swqos::SwqosType;
+
+    /// 运行 `cargo test -p sol-trade-sdk log_timing_preview -- --nocapture` 查看日志打印效果
+    #[test]
+    fn log_timing_preview() {
+        let dir = "Buy";
+        let build_ms = 12.34;
+        let before_submit_ms = 15.67;
+        println!("\n--- 1. 构建指令耗时 / 提交前耗时（各打印一次，统一 ms，保留 4 位小数）---\n");
+        println!(" [SDK] {} build_instructions: {:.4} ms", dir, build_ms);
+        println!(" [SDK] {} before_submit: {:.4} ms", dir, before_submit_ms);
+
+        println!("\n--- 2. 每个 SWQOS 独立耗时：submit=起点→该通道返回, confirmed=该通道提交→链上确认, total=起点→链上确认 ---\n");
+        for (swqos_type, submit_ms, confirmed_ms, total_ms) in [
+            (SwqosType::Jito, 45.12, 83.38, 128.50),
+            (SwqosType::Helius, 52.30, 76.20, 128.50),
+            (SwqosType::ZeroSlot, 48.90, 79.60, 128.50),
+        ] {
+            println!(
+                " [SDK] {} {:?} submit: {:.4} ms, confirmed: {:.4} ms, total: {:.4} ms",
+                dir, swqos_type, submit_ms, confirmed_ms, total_ms
+            );
+        }
+
+        println!("\n--- 3. 不等待链上确认时：每行 total = 该通道 submit 耗时（独立）---\n");
+        for (swqos_type, submit_ms, total_ms) in [
+            (SwqosType::Jito, 44.20, 44.20),
+            (SwqosType::Helius, 51.80, 51.80),
+        ] {
+            println!(
+                " [SDK] {} {:?} submit: {:.4} ms, confirmed: -, total: {:.4} ms",
+                dir, swqos_type, submit_ms, total_ms
+            );
+        }
+
+        println!("\n--- 4. Simulate 模式（build/before_submit 仍从 grpc_recv_us 起算）---\n");
+        println!(" [SDK] {} build_instructions: {:.4} ms", dir, build_ms);
+        println!(" [SDK] {} before_submit: {:.4} ms", dir, before_submit_ms);
+        println!(" [SDK] {} simulate (dry-run): {:.4} ms", dir, 8.50);
+        println!(" [SDK] {} total: {:.4} ms", dir, 36.51);
+        println!();
+    }
 }
