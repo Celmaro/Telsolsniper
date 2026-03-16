@@ -25,8 +25,8 @@ fn sol_f64_to_lamports(sol: f64) -> u64 {
     (lamports.min(u64::MAX as f64)).round() as u64
 }
 
-/// Build standard RPC transaction.
-/// Takes Arc/context by reference to avoid clone in worker hot path (Arc::clone is cheap but ref is zero-cost).
+/// Build standard RPC transaction (worker hot path).
+/// Takes Arc/refs only; one Vec allocation (with_capacity), extend_from_slice for business_instructions, no extra clone of payer/rpc/middleware.
 pub async fn build_transaction(
     payer: &Arc<Keypair>,
     _rpc: Option<&Arc<SolanaRpcClient>>,

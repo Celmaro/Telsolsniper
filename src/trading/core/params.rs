@@ -3,7 +3,16 @@ use crate::common::nonce_cache::DurableNonceInfo;
 use crate::common::spl_associated_token_account::get_associated_token_address_with_program_id;
 use crate::common::{GasFeeStrategy, SolanaRpcClient};
 use crate::constants::TOKEN_PROGRAM;
+use core_affinity::CoreId;
 use crate::instruction::utils::pumpfun::global_constants::MAYHEM_FEE_RECIPIENT;
+
+/// Concurrency + core binding config for parallel submit (precomputed at SDK init, one param on hot path). Uses Arc so no borrow of SwapParams.
+#[derive(Clone)]
+pub struct SenderConcurrencyConfig {
+    pub sender_thread_cores: Option<Arc<Vec<usize>>>,
+    pub effective_core_ids: Arc<Vec<CoreId>>,
+    pub max_sender_concurrency: usize,
+}
 use crate::instruction::utils::pumpswap::accounts::MAYHEM_FEE_RECIPIENT as MAYHEM_FEE_RECIPIENT_SWAP;
 use crate::swqos::{SwqosClient, TradeType};
 use crate::trading::common::get_multi_token_balances;
@@ -70,12 +79,14 @@ pub struct SwapParams {
     pub simulate: bool,
     /// Whether to output SDK logs (from TradeConfig.log_enabled).
     pub log_enabled: bool,
-    /// Whether to pin parallel submit tasks to cores (from TradeConfig.use_core_affinity).
-    pub use_core_affinity: bool,
-    /// Use dedicated sender threads (from TradeConfig.use_dedicated_sender_threads).
+    /// Use dedicated sender threads (internal; set via client.with_dedicated_sender_threads()).
     pub use_dedicated_sender_threads: bool,
     /// Core indices for dedicated sender threads (from TradeConfig.sender_thread_cores). Arc avoids cloning the Vec on hot path.
     pub sender_thread_cores: Option<Arc<Vec<usize>>>,
+    /// Precomputed at SDK init: min(swqos_count, 2/3*cores). Avoids get_core_ids() on trade hot path.
+    pub max_sender_concurrency: usize,
+    /// Precomputed at SDK init: first max_sender_concurrency CoreIds for job affinity. Arc clone only.
+    pub effective_core_ids: Arc<Vec<CoreId>>,
     /// Whether to check minimum tip per SWQOS (from TradeConfig.check_min_tip). When false, skip filter for lower latency.
     pub check_min_tip: bool,
     /// Optional event receive time in microseconds (same scale as sol-parser-sdk clock::now_micros). Used as timing start when log_enabled.
@@ -85,6 +96,18 @@ pub struct SwapParams {
     /// When Some(false), uses regular buy instruction where slippage is applied to SOL/quote input.
     /// This option only applies to PumpFun and PumpSwap DEXes; it is ignored for other DEXes.
     pub use_exact_sol_amount: Option<bool>,
+}
+
+impl SwapParams {
+    /// One struct for execute_parallel: merges sender_thread_cores, effective_core_ids, max_sender_concurrency. Arc clone only.
+    #[inline]
+    pub fn sender_concurrency_config(&self) -> SenderConcurrencyConfig {
+        SenderConcurrencyConfig {
+            sender_thread_cores: self.sender_thread_cores.clone(),
+            effective_core_ids: self.effective_core_ids.clone(),
+            max_sender_concurrency: self.max_sender_concurrency,
+        }
+    }
 }
 
 impl std::fmt::Debug for SwapParams {

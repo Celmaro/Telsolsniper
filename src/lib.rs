@@ -90,6 +90,10 @@ pub struct TradingInfrastructure {
     pub swqos_clients: Arc<Vec<Arc<SwqosClient>>>,
     /// Configuration used to create this infrastructure
     pub config: InfrastructureConfig,
+    /// Precomputed at init: min(swqos_clients.len(), 2/3 * num_cores). Not computed on trade hot path.
+    pub max_sender_concurrency: usize,
+    /// Precomputed at init: first max_sender_concurrency CoreIds for job affinity. Empty if no cores. Not computed on trade hot path.
+    pub effective_core_ids: Arc<Vec<core_affinity::CoreId>>,
 }
 
 impl TradingInfrastructure {
@@ -175,10 +179,23 @@ impl TradingInfrastructure {
             }
         }
 
+        let swqos_count = swqos_clients.len();
+        let (max_sender_concurrency, effective_core_ids) = {
+            let num_cores = core_affinity::get_core_ids().map(|c| c.len()).unwrap_or(0);
+            let max_by_cores = (num_cores * 2 / 3).max(1);
+            let cap = swqos_count.min(max_by_cores).max(1);
+            let ids = core_affinity::get_core_ids()
+                .map(|all| all.into_iter().take(cap).collect::<Vec<_>>())
+                .unwrap_or_default();
+            (cap, Arc::new(ids))
+        };
+
         Self {
             rpc,
             swqos_clients: Arc::new(swqos_clients),
             config,
+            max_sender_concurrency,
+            effective_core_ids,
         }
     }
 }
@@ -199,12 +216,14 @@ pub struct TradingClient {
     /// Whether to use seed optimization for all ATA operations (default: true)
     /// Applies to all token account creations across buy and sell operations
     pub use_seed_optimize: bool,
-    /// Whether to pin parallel submit tasks to CPU cores (from TradeConfig.use_core_affinity). Default true.
-    pub use_core_affinity: bool,
-    /// Use dedicated sender threads (from TradeConfig.use_dedicated_sender_threads). Default false.
+    /// Internal: use dedicated sender threads (default false). Set via with_dedicated_sender_threads() for advanced use.
     pub use_dedicated_sender_threads: bool,
-    /// Core indices for dedicated sender threads (from TradeConfig.sender_thread_cores). Arc avoids cloning the Vec when building SwapParams.
+    /// Internal: core indices for dedicated sender threads. Trimmed to ≤ max_sender_concurrency at set.
     pub sender_thread_cores: Option<Arc<Vec<usize>>>,
+    /// Internal: precomputed at infra init (min(swqos_count, 2/3*cores)). Not user-configurable.
+    pub max_sender_concurrency: usize,
+    /// Internal: precomputed at infra init for job affinity. Not user-configurable.
+    pub effective_core_ids: Arc<Vec<core_affinity::CoreId>>,
     /// Whether to output all SDK logs (from TradeConfig.log_enabled).
     pub log_enabled: bool,
     /// Whether to check minimum tip per SWQOS (from TradeConfig.check_min_tip). Default false for lower latency.
@@ -223,9 +242,10 @@ impl Clone for TradingClient {
             infrastructure: self.infrastructure.clone(),
             middleware_manager: self.middleware_manager.clone(),
             use_seed_optimize: self.use_seed_optimize,
-            use_core_affinity: self.use_core_affinity,
             use_dedicated_sender_threads: self.use_dedicated_sender_threads,
             sender_thread_cores: self.sender_thread_cores.clone(),
+            max_sender_concurrency: self.max_sender_concurrency,
+            effective_core_ids: self.effective_core_ids.clone(),
             log_enabled: self.log_enabled,
             check_min_tip: self.check_min_tip,
         }
@@ -348,15 +368,18 @@ impl TradingClient {
     ) -> Self {
         // Initialize wallet-specific caches (fast, synchronous)
         crate::common::fast_fn::fast_init(&payer.pubkey());
+        let max_sender_concurrency = infrastructure.max_sender_concurrency;
+        let effective_core_ids = infrastructure.effective_core_ids.clone();
 
         Self {
             payer,
             infrastructure,
             middleware_manager: None,
             use_seed_optimize,
-            use_core_affinity: true,
             use_dedicated_sender_threads: false,
             sender_thread_cores: None,
+            max_sender_concurrency,
+            effective_core_ids,
             log_enabled: true,
             check_min_tip: false,
         }
@@ -391,14 +414,18 @@ impl TradingClient {
             }
         }
 
+        let max_sender_concurrency = infrastructure.max_sender_concurrency;
+        let effective_core_ids = infrastructure.effective_core_ids.clone();
+
         Self {
             payer,
             infrastructure,
             middleware_manager: None,
             use_seed_optimize,
-            use_core_affinity: true,
             use_dedicated_sender_threads: false,
             sender_thread_cores: None,
+            max_sender_concurrency,
+            effective_core_ids,
             log_enabled: true,
             check_min_tip: false,
         }
@@ -568,14 +595,16 @@ impl TradingClient {
             }
         }
 
+        // 并发/核心相关由 infrastructure 预计算，用户无需配置
         let instance = Self {
             payer,
-            infrastructure,
+            infrastructure: infrastructure.clone(),
             middleware_manager: None,
             use_seed_optimize: trade_config.use_seed_optimize,
-            use_core_affinity: trade_config.use_core_affinity,
-            use_dedicated_sender_threads: trade_config.use_dedicated_sender_threads,
-            sender_thread_cores: trade_config.sender_thread_cores.clone(),
+            use_dedicated_sender_threads: false,
+            sender_thread_cores: None,
+            max_sender_concurrency: infrastructure.max_sender_concurrency,
+            effective_core_ids: infrastructure.effective_core_ids.clone(),
             log_enabled: trade_config.log_enabled,
             check_min_tip: trade_config.check_min_tip,
         };
@@ -598,6 +627,31 @@ impl TradingClient {
     /// Returns the modified SolanaTrade instance with middleware manager attached
     pub fn with_middleware_manager(mut self, middleware_manager: MiddlewareManager) -> Self {
         self.middleware_manager = Some(Arc::new(middleware_manager));
+        self
+    }
+
+    /// **Advanced.** Use dedicated OS threads for sender pool (and optionally pin to cores).  
+    /// By default the SDK uses a shared tokio pool; this can reduce scheduling contention when sending many txs.  
+    /// Concurrency and core count are capped internally (≤ swqos count, ≤ 2/3 of CPU cores).  
+    /// - `None`: keep default (shared tokio pool).  
+    /// - `Some(vec![])`: dedicated threads with default count, no core pinning.  
+    /// - `Some(indices)`: dedicated threads pinned to those core indices (trimmed to cap).
+    pub fn with_dedicated_sender_threads(mut self, core_indices: Option<Vec<usize>>) -> Self {
+        match core_indices {
+            None => {
+                self.use_dedicated_sender_threads = false;
+                self.sender_thread_cores = None;
+            }
+            Some(v) if v.is_empty() => {
+                self.use_dedicated_sender_threads = true;
+                self.sender_thread_cores = None;
+            }
+            Some(v) => {
+                self.use_dedicated_sender_threads = true;
+                let cap = v.len().min(self.max_sender_concurrency);
+                self.sender_thread_cores = Some(Arc::new(if cap < v.len() { v[..cap].to_vec() } else { v }));
+            }
+        }
         self
     }
 
@@ -721,9 +775,10 @@ impl TradingClient {
             gas_fee_strategy: params.gas_fee_strategy,
             simulate: params.simulate,
             log_enabled: self.log_enabled,
-            use_core_affinity: self.use_core_affinity,
             use_dedicated_sender_threads: self.use_dedicated_sender_threads,
             sender_thread_cores: self.sender_thread_cores.clone(),
+            max_sender_concurrency: self.max_sender_concurrency,
+            effective_core_ids: self.effective_core_ids.clone(),
             check_min_tip: self.check_min_tip,
             grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: params.use_exact_sol_amount,
@@ -827,9 +882,10 @@ impl TradingClient {
             gas_fee_strategy: params.gas_fee_strategy,
             simulate: params.simulate,
             log_enabled: self.log_enabled,
-            use_core_affinity: self.use_core_affinity,
             use_dedicated_sender_threads: self.use_dedicated_sender_threads,
             sender_thread_cores: self.sender_thread_cores.clone(),
+            max_sender_concurrency: self.max_sender_concurrency,
+            effective_core_ids: self.effective_core_ids.clone(),
             check_min_tip: self.check_min_tip,
             grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: None,

@@ -1,9 +1,10 @@
 //! Parallel executor for multi-SWQOS submit.
 //!
+//! **Hot path (submit):** no lock (OnceCell + lock-free ArrayQueue), no `get_core_ids()`, only Arc clones and queue push.
 //! - **Pool**: Pre-spawned workers (default 18); hot path only enqueues jobs (no per-call tokio::spawn).
-//! - **Dedicated threads** (opt-in via TradeConfig): When `use_dedicated_sender_threads` is true, N OS threads (default 18) run sender work only, optionally pinned to cores via `sender_thread_cores`, reducing scheduling contention when sending many txs.
-//! - **Arc**: Shared data is behind `Arc` so "clone" is just a refcount increment (no data copy).
-//! - **Refs**: `build_transaction` takes `&Arc<..>`, `Option<&DurableNonceInfo>`, `Option<&AddressLookupTableAccount>` so the worker passes refs only (zero clone on worker path).
+//! - **Dedicated threads** (opt-in via `with_dedicated_sender_threads`): N OS threads run sender work only, optionally pinned to cores.
+//! - **Arc**: Shared data behind `Arc` → clone = refcount increment (no data copy).
+//! - **Refs**: `build_transaction` takes refs only; worker path avoids extra clones.
 
 use anyhow::{anyhow, Result};
 use crossbeam_queue::ArrayQueue;
@@ -15,8 +16,8 @@ use solana_sdk::{
 };
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Mutex;
 use std::{str::FromStr, sync::Arc, time::Instant};
 use tokio::sync::Notify;
 
@@ -28,6 +29,7 @@ use crate::{
     common::nonce_cache::DurableNonceInfo,
     common::{GasFeeStrategy, SolanaRpcClient},
     swqos::{SwqosClient, SwqosType, TradeType},
+    trading::core::params::SenderConcurrencyConfig,
     trading::{common::build_transaction, MiddlewareManager},
 };
 
@@ -154,28 +156,35 @@ static DEDICATED_NOTIFY: OnceCell<Arc<Notify>> = OnceCell::new();
 /// JoinHandles kept so dedicated threads are not detached; only touched during init under lock.
 static DEDICATED_INIT: Mutex<Option<Vec<std::thread::JoinHandle<()>>>> = Mutex::new(None);
 
-fn ensure_dedicated_pool(sender_thread_cores: Option<&[usize]>) -> (Arc<ArrayQueue<SwqosJob>>, Arc<Notify>) {
+fn ensure_dedicated_pool(
+    sender_thread_cores: Option<&[usize]>,
+    max_sender_concurrency: usize,
+) -> (Arc<ArrayQueue<SwqosJob>>, Arc<Notify>) {
     if let (Some(q), Some(n)) = (DEDICATED_QUEUE.get(), DEDICATED_NOTIFY.get()) {
         return (q.clone(), n.clone());
     }
-    let mut guard = DEDICATED_INIT.lock().expect("dedicated init mutex");
+    let mut guard = DEDICATED_INIT.lock();
     if let (Some(q), Some(n)) = (DEDICATED_QUEUE.get(), DEDICATED_NOTIFY.get()) {
         return (q.clone(), n.clone());
     }
     let n = sender_thread_cores
-        .map(|v| v.len())
-        .unwrap_or(SWQOS_DEDICATED_DEFAULT_THREADS)
-        .min(32);
+        .map(|v| v.len().min(max_sender_concurrency))
+        .unwrap_or_else(|| SWQOS_DEDICATED_DEFAULT_THREADS.min(max_sender_concurrency))
+        .min(32)
+        .max(1);
     let queue = Arc::new(ArrayQueue::new(SWQOS_QUEUE_CAP));
     let notify = Arc::new(Notify::new());
-    let core_ids: Vec<core_affinity::CoreId> = sender_thread_cores
-        .and_then(|indices| {
-            core_affinity::get_core_ids().map(|ids| {
-                indices
-                    .iter()
-                    .filter_map(|&i| ids.get(i).cloned())
-                    .collect()
-            })
+    let core_ids: Vec<core_affinity::CoreId> = core_affinity::get_core_ids()
+        .map(|all_ids| {
+            sender_thread_cores
+                .map(|indices| {
+                    indices
+                        .iter()
+                        .take(n)
+                        .filter_map(|&i| all_ids.get(i).cloned())
+                        .collect()
+                })
+                .unwrap_or_else(|| all_ids.into_iter().take(n).collect())
         })
         .unwrap_or_default();
     let mut handles = Vec::with_capacity(n);
@@ -201,12 +210,13 @@ fn ensure_dedicated_pool(sender_thread_cores: Option<&[usize]>) -> (Arc<ArrayQue
     (queue, notify)
 }
 
-fn ensure_swqos_pool(queue: Arc<ArrayQueue<SwqosJob>>) {
+fn ensure_swqos_pool(queue: Arc<ArrayQueue<SwqosJob>>, max_sender_concurrency: usize) {
     if SWQOS_WORKERS_STARTED.swap(true, Ordering::AcqRel) {
         return;
     }
+    let n = SWQOS_POOL_WORKERS.min(max_sender_concurrency).max(1);
     let notify = SWQOS_NOTIFY.get_or_init(|| Arc::new(Notify::new())).clone();
-    for _ in 0..SWQOS_POOL_WORKERS {
+    for _ in 0..n {
         tokio::spawn(swqos_worker_loop(queue.clone(), notify.clone()));
     }
 }
@@ -400,6 +410,8 @@ impl ResultCollector {
 }
 
 /// Execute trade on multiple SWQOS clients in parallel; returns success flag, all signatures, and last error.
+///
+/// `sender_config` merges sender_thread_cores, effective_core_ids, max_sender_concurrency (precomputed at SDK init; no get_core_ids on hot path).
 pub async fn execute_parallel(
     swqos_clients: &[Arc<SwqosClient>],
     payer: Arc<Keypair>,
@@ -414,13 +426,10 @@ pub async fn execute_parallel(
     wait_transaction_confirmed: bool,
     with_tip: bool,
     gas_fee_strategy: GasFeeStrategy,
-    use_core_affinity: bool,
     use_dedicated_sender_threads: bool,
-    sender_thread_cores: Option<&[usize]>,
+    sender_config: SenderConcurrencyConfig,
     check_min_tip: bool,
 ) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
-    let _exec_start = Instant::now();
-
     if swqos_clients.is_empty() {
         return Err(anyhow!("swqos_clients is empty"));
     }
@@ -434,44 +443,40 @@ pub async fn execute_parallel(
         return Err(anyhow!("No Rpc Default Swqos configured."));
     }
 
-    let cores = core_affinity::get_core_ids().unwrap_or_default();
     let instructions = Arc::new(instructions);
 
-    // Precompute all valid (client, gas config) combinations
-    let task_configs: Vec<_> = swqos_clients
-        .iter()
-        .enumerate()
-        .filter(|(_, swqos_client)| {
-            with_tip || matches!(swqos_client.get_swqos_type(), SwqosType::Default)
-        })
-        .flat_map(|(i, swqos_client)| {
-            let swqos_type = swqos_client.get_swqos_type();
-            let gas_fee_strategy_configs = gas_fee_strategy.get_strategies(if is_buy {
-                TradeType::Buy
-            } else {
-                TradeType::Sell
-            });
-            let check_tip = with_tip && !matches!(swqos_type, SwqosType::Default) && check_min_tip;
-            let min_tip = if check_tip { swqos_client.min_tip_sol() } else { 0.0 };
-            gas_fee_strategy_configs
-                .into_iter()
-                .filter(move |config| config.0 == swqos_type)
-                .filter(move |config| {
-                    if check_tip {
-                        if config.2.tip < min_tip && crate::common::sdk_log::sdk_log_enabled() {
-                            println!(
-                                "⚠️ Config filtered: {:?} tip {} is below minimum required {}",
-                                config.0, config.2.tip, min_tip
-                            );
-                        }
-                        config.2.tip >= min_tip
-                    } else {
-                        true
-                    }
-                })
-                .map(move |config| (i, swqos_client.clone(), config))
-        })
-        .collect();
+    // One get_strategies call per batch (avoid N calls in loop).
+    let gas_fee_configs = gas_fee_strategy.get_strategies(if is_buy {
+        TradeType::Buy
+    } else {
+        TradeType::Sell
+    });
+    let mut task_configs = Vec::with_capacity(swqos_clients.len() * 3);
+    for (i, swqos_client) in swqos_clients.iter().enumerate() {
+        if !with_tip && !matches!(swqos_client.get_swqos_type(), SwqosType::Default) {
+            continue;
+        }
+        let swqos_type = swqos_client.get_swqos_type();
+        let check_tip = with_tip && !matches!(swqos_type, SwqosType::Default) && check_min_tip;
+        let min_tip = if check_tip { swqos_client.min_tip_sol() } else { 0.0 };
+        for config in &gas_fee_configs {
+            if config.0 != swqos_type {
+                continue;
+            }
+            if check_tip {
+                if config.2.tip < min_tip && crate::common::sdk_log::sdk_log_enabled() {
+                    println!(
+                        "⚠️ Config filtered: {:?} tip {} is below minimum required {}",
+                        config.0, config.2.tip, min_tip
+                    );
+                }
+                if config.2.tip < min_tip {
+                    continue;
+                }
+            }
+            task_configs.push((i, swqos_client.clone(), *config));
+        }
+    }
 
     if task_configs.is_empty() {
         return Err(anyhow!("No available gas fee strategy configs"));
@@ -499,23 +504,27 @@ pub async fn execute_parallel(
     });
 
     let (queue, notify) = if use_dedicated_sender_threads {
-        ensure_dedicated_pool(sender_thread_cores)
+        ensure_dedicated_pool(
+            sender_config.sender_thread_cores.as_ref().map(|a| a.as_slice()),
+            sender_config.max_sender_concurrency,
+        )
     } else {
         let q = SWQOS_QUEUE.get_or_init(|| Arc::new(ArrayQueue::new(SWQOS_QUEUE_CAP)));
-        ensure_swqos_pool(q.clone());
+        ensure_swqos_pool(q.clone(), sender_config.max_sender_concurrency);
         (q.clone(), SWQOS_NOTIFY.get_or_init(|| Arc::new(Notify::new())).clone())
     };
 
     {
-        // Cache tip_account per client (one get_tip_account/from_str per unique client per batch). Dropped before await so future stays Send.
+        let effective_core_ids = sender_config.effective_core_ids.as_slice();
+        let core_len = effective_core_ids.len().max(1);
         let mut tip_cache: FnvHashMap<*const (), Arc<Pubkey>> =
             FnvHashMap::with_capacity_and_hasher(task_configs.len(), BuildHasherDefault::default());
         for (i, swqos_client, gas_fee_strategy_config) in task_configs {
-            let core_id = cores.get(i % cores.len().max(1)).copied();
+            let core_id = effective_core_ids.get(i % core_len).copied();
             let swqos_type = swqos_client.get_swqos_type();
             let key = Arc::as_ptr(&swqos_client) as *const ();
             let tip_account = match tip_cache.get(&key) {
-                Some(tip) => tip.clone(),
+                Some(t) => t.clone(),
                 None => {
                     let s = swqos_client.get_tip_account()?;
                     let tip = Arc::new(Pubkey::from_str(&s).unwrap_or_default());
@@ -537,7 +546,7 @@ pub async fn execute_parallel(
                 swqos_client,
                 swqos_type,
                 core_id,
-                use_affinity: use_core_affinity,
+                use_affinity: !effective_core_ids.is_empty(),
             };
             let _ = queue.push(job);
         }

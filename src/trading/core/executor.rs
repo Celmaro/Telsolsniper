@@ -144,6 +144,7 @@ impl TradeExecutor for GenericTradeExecutor {
         }
 
         let need_confirm = params.wait_transaction_confirmed;
+        let sender_config = params.sender_concurrency_config();
         let result = execute_parallel(
             params.swqos_clients.as_slice(),
             params.payer,
@@ -158,9 +159,8 @@ impl TradeExecutor for GenericTradeExecutor {
             false, // submit only here; confirmation and log timing handled below
             if is_buy { true } else { params.with_tip },
             params.gas_fee_strategy,
-            params.use_core_affinity,
             params.use_dedicated_sender_threads,
-            params.sender_thread_cores.as_ref().map(|a| a.as_slice()),
+            sender_config,
             params.check_min_tip,
         )
         .await;
