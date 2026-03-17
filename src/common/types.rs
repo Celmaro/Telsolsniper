@@ -9,6 +9,8 @@ pub struct InfrastructureConfig {
     pub rpc_url: String,
     pub swqos_configs: Vec<SwqosConfig>,
     pub commitment: CommitmentConfig,
+    /// When true, SWQOS sender threads use the *last* N cores instead of the first N. Reduces contention with main thread / default tokio workers that often use low-numbered cores. Default false.
+    pub swqos_cores_from_end: bool,
 }
 
 impl InfrastructureConfig {
@@ -17,7 +19,12 @@ impl InfrastructureConfig {
         swqos_configs: Vec<SwqosConfig>,
         commitment: CommitmentConfig,
     ) -> Self {
-        Self { rpc_url, swqos_configs, commitment }
+        Self {
+            rpc_url,
+            swqos_configs,
+            commitment,
+            swqos_cores_from_end: false,
+        }
     }
 
     /// Create from TradeConfig (extract infrastructure-only settings)
@@ -26,6 +33,7 @@ impl InfrastructureConfig {
             rpc_url: config.rpc_url.clone(),
             swqos_configs: config.swqos_configs.clone(),
             commitment: config.commitment.clone(),
+            swqos_cores_from_end: config.swqos_cores_from_end,
         }
     }
 
@@ -43,8 +51,8 @@ impl Hash for InfrastructureConfig {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.rpc_url.hash(state);
         self.swqos_configs.hash(state);
-        // Hash commitment level as string since CommitmentConfig doesn't impl Hash
         format!("{:?}", self.commitment).hash(state);
+        self.swqos_cores_from_end.hash(state);
     }
 }
 
@@ -53,6 +61,7 @@ impl PartialEq for InfrastructureConfig {
         self.rpc_url == other.rpc_url
             && self.swqos_configs == other.swqos_configs
             && self.commitment == other.commitment
+            && self.swqos_cores_from_end == other.swqos_cores_from_end
     }
 }
 
@@ -72,6 +81,8 @@ pub struct TradeConfig {
     pub log_enabled: bool,
     /// Whether to check minimum tip per SWQOS provider (filter out configs below min). Default false to save latency.
     pub check_min_tip: bool,
+    /// When true, SWQOS uses the *last* N cores (instead of the first N). Use when main thread / tokio use low-numbered cores to reduce CPU contention. Default false.
+    pub swqos_cores_from_end: bool,
 }
 
 impl TradeConfig {
@@ -91,7 +102,8 @@ impl TradeConfig {
             create_wsol_ata_on_startup: true, // default: check and create on startup
             use_seed_optimize: true, // default: use seed optimization
             log_enabled: true,      // default: enable all SDK logs
-            check_min_tip: false,             // default: skip min tip check to reduce latency
+            check_min_tip: false,   // default: skip min tip check to reduce latency
+            swqos_cores_from_end: false,
         }
     }
 
@@ -109,6 +121,12 @@ impl TradeConfig {
     /// Set whether to check minimum tip per SWQOS (filter out configs below min). Default false for lower latency.
     pub fn with_check_min_tip(mut self, check_min_tip: bool) -> Self {
         self.check_min_tip = check_min_tip;
+        self
+    }
+
+    /// Use the *last* N cores for SWQOS (instead of the first N). Call this when the main thread or tokio workers use low-numbered cores to avoid binding SWQOS to busy cores. Default false.
+    pub fn with_swqos_cores_from_end(mut self, from_end: bool) -> Self {
+        self.swqos_cores_from_end = from_end;
         self
     }
 }

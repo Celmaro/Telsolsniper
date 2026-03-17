@@ -5,6 +5,11 @@
 //! - **Dedicated threads** (opt-in via `with_dedicated_sender_threads`): N OS threads run sender work only, optionally pinned to cores.
 //! - **Arc**: Shared data behind `Arc` → clone = refcount increment (no data copy).
 //! - **Refs**: `build_transaction` takes refs only; worker path avoids extra clones.
+//!
+//! **Core affinity & latency:** Each job is assigned a core (round-robin from `effective_core_ids`). When a worker runs a job,
+//! it sets thread affinity to that core. If that core is busy with other work (e.g. node sync, bot logic), SWQOS submit on that
+//! core will compete for CPU and latency can increase. For lowest latency, reserve a subset of cores for SWQOS only via
+//! `with_dedicated_sender_threads(Some(indices))` and avoid running other CPU-heavy work on those core indices.
 
 use anyhow::{anyhow, Result};
 use crossbeam_queue::ArrayQueue;

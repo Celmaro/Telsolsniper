@@ -185,7 +185,15 @@ impl TradingInfrastructure {
             let max_by_cores = (num_cores * 2 / 3).max(1);
             let cap = swqos_count.min(max_by_cores).max(1);
             let ids = core_affinity::get_core_ids()
-                .map(|all| all.into_iter().take(cap).collect::<Vec<_>>())
+                .map(|all| {
+                    let v: Vec<_> = all.into_iter().collect();
+                    let len = v.len();
+                    if config.swqos_cores_from_end && len >= cap {
+                        v.into_iter().skip(len - cap).collect()
+                    } else {
+                        v.into_iter().take(cap).collect()
+                    }
+                })
                 .unwrap_or_default();
             (cap, Arc::new(ids))
         };
@@ -198,6 +206,23 @@ impl TradingInfrastructure {
             effective_core_ids,
         }
     }
+}
+
+/// When using `TradeConfig::with_swqos_cores_from_end(true)`, returns the same "last N" core indices
+/// that the infrastructure uses. Pass the result to `TradingClient::with_dedicated_sender_threads`
+/// for 方式 C (组合使用): SWQOS on last N cores and dedicated sender threads pinned to those cores.
+///
+/// Returns `None` if core count cannot be determined. `swqos_count` is typically `swqos_configs.len()`.
+pub fn recommended_sender_thread_core_indices(swqos_count: usize) -> Option<Vec<usize>> {
+    let all = core_affinity::get_core_ids()?;
+    let num_cores = all.len();
+    if num_cores == 0 {
+        return None;
+    }
+    let max_by_cores = (num_cores * 2 / 3).max(1);
+    let cap = swqos_count.min(max_by_cores).max(1).min(num_cores);
+    let start = num_cores.saturating_sub(cap);
+    Some((start..num_cores).collect())
 }
 
 /// Main trading client for Solana DeFi protocols
@@ -635,7 +660,10 @@ impl TradingClient {
     /// Concurrency and core count are capped internally (≤ swqos count, ≤ 2/3 of CPU cores).  
     /// - `None`: keep default (shared tokio pool).  
     /// - `Some(vec![])`: dedicated threads with default count, no core pinning.  
-    /// - `Some(indices)`: dedicated threads pinned to those core indices (trimmed to cap).
+    /// - `Some(indices)`: dedicated threads pinned to those core indices (trimmed to cap).  
+    ///  
+    /// **Latency note:** If a core is busy with other work (node, bot), SWQOS submit on that core can be delayed.  
+    /// For lowest latency, pass core indices that are *reserved* for SWQOS (do not run other CPU-heavy work on those cores).
     pub fn with_dedicated_sender_threads(mut self, core_indices: Option<Vec<usize>>) -> Self {
         match core_indices {
             None => {
