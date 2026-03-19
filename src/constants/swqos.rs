@@ -277,6 +277,19 @@ pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 8] = [
     "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
 ];
 
+/// BlockRazor gRPC endpoints. Region order: NewYork, Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles, Default.
+/// Port 80 for gRPC protocol. Auth: apikey metadata in gRPC headers.
+pub const SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC: [&str; 8] = [
+    "http://newyork.solana-grpc.blockrazor.xyz:80",
+    "http://frankfurt.solana-grpc.blockrazor.xyz:80",
+    "http://amsterdam.solana-grpc.blockrazor.xyz:80",
+    "http://newyork.solana-grpc.blockrazor.xyz:80",
+    "http://tokyo.solana-grpc.blockrazor.xyz:80",
+    "http://london.solana-grpc.blockrazor.xyz:80",
+    "http://newyork.solana-grpc.blockrazor.xyz:80",
+    "http://frankfurt.solana-grpc.blockrazor.xyz:80",
+];
+
 /// Astralane binary API path (no Base64; use with ?api-key=...&method=sendTransaction|getHealth).
 pub const ASTRALANE_PATH_IRISB: &str = "irisb";
 

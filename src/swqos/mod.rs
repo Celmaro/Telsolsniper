@@ -30,15 +30,16 @@ use crate::{
     common::SolanaRpcClient,
     constants::swqos::{
         SWQOS_ENDPOINTS_ASTRALANE, SWQOS_ENDPOINTS_ASTRALANE_QUIC, SWQOS_ENDPOINTS_BLOCKRAZOR,
-        SWQOS_ENDPOINTS_BLOX, SWQOS_ENDPOINTS_FLASHBLOCK, SWQOS_ENDPOINTS_HELIUS,
-        SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK, SWQOS_ENDPOINTS_NODE1,
-        SWQOS_ENDPOINTS_NODE1_QUIC, SWQOS_ENDPOINTS_SOYAS, SWQOS_ENDPOINTS_SPEEDLANDING,
-        SWQOS_ENDPOINTS_STELLIUM, SWQOS_ENDPOINTS_TEMPORAL, SWQOS_ENDPOINTS_ZERO_SLOT,
-        SWQOS_MIN_TIP_ASTRALANE, SWQOS_MIN_TIP_BLOCKRAZOR, SWQOS_MIN_TIP_BLOXROUTE,
-        SWQOS_MIN_TIP_DEFAULT, SWQOS_MIN_TIP_FLASHBLOCK, SWQOS_MIN_TIP_HELIUS, SWQOS_MIN_TIP_JITO,
-        SWQOS_MIN_TIP_LIGHTSPEED, SWQOS_MIN_TIP_NEXTBLOCK, SWQOS_MIN_TIP_NODE1,
-        SWQOS_MIN_TIP_SOYAS, SWQOS_MIN_TIP_SPEEDLANDING, SWQOS_MIN_TIP_STELLIUM,
-        SWQOS_MIN_TIP_TEMPORAL, SWQOS_MIN_TIP_ZERO_SLOT,
+        SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC, SWQOS_ENDPOINTS_BLOX, SWQOS_ENDPOINTS_FLASHBLOCK,
+        SWQOS_ENDPOINTS_HELIUS, SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK,
+        SWQOS_ENDPOINTS_NODE1, SWQOS_ENDPOINTS_NODE1_QUIC, SWQOS_ENDPOINTS_SOYAS,
+        SWQOS_ENDPOINTS_SPEEDLANDING, SWQOS_ENDPOINTS_STELLIUM, SWQOS_ENDPOINTS_TEMPORAL,
+        SWQOS_ENDPOINTS_ZERO_SLOT, SWQOS_MIN_TIP_ASTRALANE, SWQOS_MIN_TIP_BLOCKRAZOR,
+        SWQOS_MIN_TIP_BLOXROUTE, SWQOS_MIN_TIP_DEFAULT, SWQOS_MIN_TIP_FLASHBLOCK,
+        SWQOS_MIN_TIP_HELIUS, SWQOS_MIN_TIP_JITO, SWQOS_MIN_TIP_LIGHTSPEED,
+        SWQOS_MIN_TIP_NEXTBLOCK, SWQOS_MIN_TIP_NODE1, SWQOS_MIN_TIP_SOYAS,
+        SWQOS_MIN_TIP_SPEEDLANDING, SWQOS_MIN_TIP_STELLIUM, SWQOS_MIN_TIP_TEMPORAL,
+        SWQOS_MIN_TIP_ZERO_SLOT,
     },
     swqos::{
         astralane::AstralaneClient, blockrazor::BlockRazorClient, bloxroute::BloxrouteClient,
@@ -63,11 +64,14 @@ pub const SWQOS_BLACKLIST: &[SwqosType] = &[
     SwqosType::NextBlock, // NextBlock is disabled by default
 ];
 
-/// SWQOS 提交通道：HTTP 或 QUIC（低延迟）。部分提供商（如 Astralane）支持 QUIC。
+/// SWQOS 提交通道：HTTP、gRPC 或 QUIC（低延迟）。
+/// BlockRazor 支持 gRPC 和 HTTP。
+/// Astralane 和 Node1 支持 QUIC。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SwqosTransport {
     #[default]
     Http,
+    Grpc,
     Quic,
 }
 
@@ -224,7 +228,7 @@ pub enum SwqosConfig {
     Node1(String, SwqosRegion, Option<String>, Option<SwqosTransport>),
     /// FlashBlock(api_token, region, custom_url)
     FlashBlock(String, SwqosRegion, Option<String>),
-    /// BlockRazor(api_token, region, custom_url, transport). transport=None => gRPC; Some(Http) => HTTP.
+    /// BlockRazor(api_token, region, custom_url, transport). transport=None 或 Grpc => gRPC; Some(Http) => HTTP.
     BlockRazor(String, SwqosRegion, Option<String>, Option<SwqosTransport>),
     /// Astralane(api_token, region, custom_url, transport). transport=None 表示 Http。
     Astralane(String, SwqosRegion, Option<String>, Option<SwqosTransport>),
@@ -294,6 +298,46 @@ impl SwqosConfig {
         }
     }
 
+    pub fn get_endpoint_with_transport(
+        swqos_type: SwqosType,
+        region: SwqosRegion,
+        url: Option<String>,
+        transport: Option<SwqosTransport>,
+    ) -> String {
+        if let Some(custom_url) = url {
+            return custom_url;
+        }
+
+        match swqos_type {
+            SwqosType::BlockRazor => {
+                // transport=None 或 transport=Grpc => gRPC; transport=Http => HTTP
+                let use_http = transport.map_or(false, |t| t == SwqosTransport::Http);
+                if use_http {
+                    SWQOS_ENDPOINTS_BLOCKRAZOR[region as usize].to_string()
+                } else {
+                    SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC[region as usize].to_string()
+                }
+            }
+            SwqosType::Node1 => {
+                let use_quic = transport.map_or(false, |t| t == SwqosTransport::Quic);
+                if use_quic {
+                    SWQOS_ENDPOINTS_NODE1_QUIC[region as usize].to_string()
+                } else {
+                    SWQOS_ENDPOINTS_NODE1[region as usize].to_string()
+                }
+            }
+            SwqosType::Astralane => {
+                let use_quic = transport.map_or(false, |t| t == SwqosTransport::Quic);
+                if use_quic {
+                    SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                } else {
+                    SWQOS_ENDPOINTS_ASTRALANE[region as usize].to_string()
+                }
+            }
+            _ => Self::get_endpoint(swqos_type, region, url),
+        }
+    }
+
     pub async fn get_swqos_client(
         rpc_url: String,
         commitment: CommitmentConfig,
@@ -352,17 +396,15 @@ impl SwqosConfig {
                 Ok(Arc::new(flashblock_client))
             }
             SwqosConfig::BlockRazor(auth_token, region, url, transport) => {
-                // BlockRazor: transport=None 或 transport=Http 时使用 HTTP，否则使用 gRPC
-                // 默认使用 HTTP，避免 gRPC FRAME_SIZE_ERROR
-                let use_http = transport.map_or(true, |t| t == SwqosTransport::Http);
+                // BlockRazor: transport=None 或 transport=Grpc 时使用 gRPC，transport=Http 时使用 HTTP
+                let use_http = transport.map_or(false, |t| t == SwqosTransport::Http);
+                let endpoint = SwqosConfig::get_endpoint_with_transport(SwqosType::BlockRazor, region, url, transport);
                 if use_http {
-                    let endpoint = SwqosConfig::get_endpoint(SwqosType::BlockRazor, region, url);
                     let blockrazor_client =
                         BlockRazorClient::new_http(rpc_url.clone(), endpoint.to_string(), auth_token);
                     Ok(Arc::new(blockrazor_client))
                 } else {
-                    // 使用 gRPC 模式（用户明确指定了非 Http 的 transport）
-                    let endpoint = SwqosConfig::get_endpoint(SwqosType::BlockRazor, region, url);
+                    // 使用 gRPC 模式（默认或用户明确指定了 gRPC）
                     let blockrazor_client =
                         BlockRazorClient::new_grpc(rpc_url.clone(), endpoint.to_string(), auth_token).await?;
                     Ok(Arc::new(blockrazor_client))
