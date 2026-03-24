@@ -6,8 +6,9 @@ use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Connection, Endpoint, IdleTimeout, TransportConfig};
 use rcgen::{CertificateParams, KeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -40,47 +41,169 @@ pub struct AstralaneQuicClient {
     endpoint: Endpoint,
     connection: Mutex<Connection>,
     server_addr: SocketAddr,
+    server_candidates: Vec<SocketAddr>,
+    next_server_idx: AtomicUsize,
     #[allow(dead_code)]
     api_key: String,
 }
 
 impl AstralaneQuicClient {
+    #[inline]
+    fn astralane_quic_ip_candidates(host: &str, port: u16) -> Vec<SocketAddr> {
+        // Official recommended direct-IP list (faster/more stable than DNS-only for QUIC).
+        // We intentionally avoid fr2/ams2 per prior guidance.
+        match host {
+            "fr.gateway.astralane.io" => vec![
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(185, 191, 117, 97)), 7000),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(45, 139, 132, 160)), 7000),
+            ],
+            "ny.gateway.astralane.io" => {
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 45, 19)), 7000)]
+            }
+            "ams.gateway.astralane.io" => vec![
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 43, 43)), 7000),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 186, 73)), 7000),
+            ],
+            "la.gateway.astralane.io" => {
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(74, 118, 142, 151)), 7000)]
+            }
+            "lim.gateway.astralane.io" => {
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(162, 19, 222, 232)), 7000)]
+            }
+            "sg.gateway.astralane.io" => {
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(67, 209, 54, 176)), 7000)]
+            }
+            "lit.gateway.astralane.io" => {
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 97, 47)), 7000)]
+            }
+            _ => {
+                let _ = port; // keep signature consistent; fall back to DNS below.
+                Vec::new()
+            }
+        }
+    }
+
+    #[inline]
+    fn parse_host_port(server_addr: &str) -> Option<(&str, u16)> {
+        let (host, port_str) = server_addr.rsplit_once(':')?;
+        let port = port_str.parse::<u16>().ok()?;
+        Some((host, port))
+    }
+
+    /// Resolve `host:port` and prefer IPv4 result to avoid v6-remote/v4-local mismatch.
+    #[inline]
+    fn resolve_server_candidates(server_addr: &str) -> Result<Vec<SocketAddr>> {
+        if let Ok(addr) = SocketAddr::from_str(server_addr) {
+            return Ok(vec![addr]);
+        }
+
+        let mut candidates: Vec<SocketAddr> = Vec::with_capacity(8);
+        if let Some((host, port)) = Self::parse_host_port(server_addr) {
+            candidates.extend(Self::astralane_quic_ip_candidates(host, port));
+        }
+
+        use std::net::ToSocketAddrs;
+        let mut addrs: Vec<SocketAddr> = server_addr
+            .to_socket_addrs()
+            .with_context(|| format!("Cannot resolve address: {}", server_addr))?
+            .collect();
+        if addrs.is_empty() && candidates.is_empty() {
+            anyhow::bail!("Cannot resolve address: {}", server_addr);
+        }
+        // QUIC in many bot/VPS environments is primarily IPv4; prefer A over AAAA.
+        addrs.sort_by_key(|a| if a.is_ipv4() { 0 } else { 1 });
+        for addr in addrs {
+            if !candidates.contains(&addr) {
+                candidates.push(addr);
+            }
+        }
+        Ok(candidates)
+    }
+
+    #[inline]
+    fn local_bind_for_remote(remote: SocketAddr) -> SocketAddr {
+        match remote.ip() {
+            IpAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            IpAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+        }
+    }
+
     /// Connect to an Astralane QUIC server.
     /// Generates a self-signed TLS certificate with the API key as the Common Name (CN).
     pub async fn connect(server_addr: &str, api_key: &str) -> Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let addr = SocketAddr::from_str(server_addr)
-            .or_else(|_| {
-                use std::net::ToSocketAddrs;
-                server_addr
-                    .to_socket_addrs()
-                    .ok()
-                    .and_then(|mut addrs| addrs.next())
-                    .ok_or_else(|| anyhow::anyhow!("Cannot resolve address: {}", server_addr))
-            })
+        let candidates = Self::resolve_server_candidates(server_addr)
             .context("Invalid server address")?;
+        let addr = candidates[0];
 
         info!("[astralane-quic] Building TLS config (CN = api_key)");
         let client_config = Self::build_client_config(api_key)?;
 
-        let mut endpoint =
-            Endpoint::client("0.0.0.0:0".parse()?).context("Failed to create QUIC endpoint")?;
+        let mut endpoint = Endpoint::client(Self::local_bind_for_remote(addr))
+            .context("Failed to create QUIC endpoint")?;
         endpoint.set_default_client_config(client_config);
 
         info!("[astralane-quic] Connecting to {} ...", addr);
-        let connection = endpoint
-            .connect(addr, "astralane")?
-            .await
-            .context("Failed to connect to Astralane QUIC server")?;
+        let mut last_err: Option<anyhow::Error> = None;
+        let mut selected_addr = addr;
+        let mut connection_opt: Option<Connection> = None;
+        for candidate in &candidates {
+            selected_addr = *candidate;
+            match endpoint.connect(*candidate, "astralane") {
+                Ok(connecting) => match connecting.await {
+                    Ok(conn) => {
+                        connection_opt = Some(conn);
+                        break;
+                    }
+                    Err(e) => {
+                        warn!("[astralane-quic] connect failed for {}: {}", candidate, e);
+                        last_err = Some(e.into());
+                    }
+                },
+                Err(e) => {
+                    warn!("[astralane-quic] connect setup failed for {}: {}", candidate, e);
+                    last_err = Some(e.into());
+                }
+            }
+        }
+        let connection = connection_opt.ok_or_else(|| {
+            last_err.unwrap_or_else(|| anyhow::anyhow!("Failed to connect to Astralane QUIC server"))
+        })?;
 
-        info!("[astralane-quic] Connected at {}", addr);
+        info!("[astralane-quic] Connected at {}", selected_addr);
 
         Ok(Self {
             endpoint,
             connection: Mutex::new(connection),
-            server_addr: addr,
+            server_addr: selected_addr,
+            server_candidates: candidates,
+            next_server_idx: AtomicUsize::new(0),
             api_key: api_key.to_string(),
         })
+    }
+
+    async fn reconnect_next_candidate(&self) -> Result<Connection> {
+        let total = self.server_candidates.len().max(1);
+        let start = self.next_server_idx.fetch_add(1, Ordering::Relaxed) % total;
+        let mut last_err: Option<anyhow::Error> = None;
+        for offset in 0..total {
+            let idx = (start + offset) % total;
+            let addr = self.server_candidates[idx];
+            match self.endpoint.connect(addr, "astralane") {
+                Ok(connecting) => match connecting.await {
+                    Ok(conn) => return Ok(conn),
+                    Err(e) => {
+                        warn!("[astralane-quic] reconnect failed for {}: {}", addr, e);
+                        last_err = Some(e.into());
+                    }
+                },
+                Err(e) => {
+                    warn!("[astralane-quic] reconnect setup failed for {}: {}", addr, e);
+                    last_err = Some(e.into());
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("Failed to reconnect to Astralane QUIC server")))
     }
 
     /// Send a single bincode-serialized `VersionedTransaction`.
@@ -108,12 +231,9 @@ impl AstralaneQuicClient {
                     }
                 }
                 warn!("[astralane-quic] Connection dead, reconnecting to {} ...", self.server_addr);
-                *guard = self
-                    .endpoint
-                    .connect(self.server_addr, "astralane")?
-                    .await
-                    .context("Failed to reconnect to Astralane QUIC server")?;
-                info!("[astralane-quic] Reconnected to {}", self.server_addr);
+                let new_conn = self.reconnect_next_candidate().await?;
+                *guard = new_conn.clone();
+                info!("[astralane-quic] Reconnected");
             }
             guard.clone()
         };
@@ -137,12 +257,8 @@ impl AstralaneQuicClient {
         let mut guard = self.connection.lock().await;
         if guard.close_reason().is_some() {
             info!("[astralane-quic] Reconnecting at {}", self.server_addr);
-            *guard = self
-                .endpoint
-                .connect(self.server_addr, "astralane")?
-                .await
-                .context("Failed to reconnect to Astralane QUIC server")?;
-            info!("[astralane-quic] Reconnected to {}", self.server_addr);
+            *guard = self.reconnect_next_candidate().await?;
+            info!("[astralane-quic] Reconnected");
         }
         Ok(())
     }
