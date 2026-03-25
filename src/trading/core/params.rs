@@ -404,8 +404,21 @@ impl PumpSwapParams {
         pool_address: &Pubkey,
     ) -> Result<Self, anyhow::Error> {
         let pool_data = crate::instruction::utils::pumpswap::fetch_pool(rpc, pool_address).await?;
+        Self::from_pool_data(rpc, pool_address, &pool_data).await
+    }
+
+    /// Build params from an already-decoded Pool, only fetching token balances.
+    ///
+    /// Saves 1 RPC `getAccount` call vs `from_pool_address_by_rpc` when pool data
+    /// is already available (e.g. from `pumpswap::find_by_mint` which returns the
+    /// decoded Pool).
+    pub async fn from_pool_data(
+        rpc: &SolanaRpcClient,
+        pool_address: &Pubkey,
+        pool_data: &crate::instruction::utils::pumpswap_types::Pool,
+    ) -> Result<Self, anyhow::Error> {
         let (pool_base_token_reserves, pool_quote_token_reserves) =
-            crate::instruction::utils::pumpswap::get_token_balances(&pool_data, rpc).await?;
+            crate::instruction::utils::pumpswap::get_token_balances(pool_data, rpc).await?;
         let creator = pool_data.coin_creator;
         let coin_creator_vault_ata = crate::instruction::utils::pumpswap::coin_creator_vault_ata(
             creator,
@@ -415,12 +428,12 @@ impl PumpSwapParams {
             crate::instruction::utils::pumpswap::coin_creator_vault_authority(creator);
 
         let base_token_program_ata = get_associated_token_address_with_program_id(
-            &pool_address,
+            pool_address,
             &pool_data.base_mint,
             &crate::constants::TOKEN_PROGRAM,
         );
         let quote_token_program_ata = get_associated_token_address_with_program_id(
-            &pool_address,
+            pool_address,
             &pool_data.quote_mint,
             &crate::constants::TOKEN_PROGRAM,
         );
@@ -431,10 +444,10 @@ impl PumpSwapParams {
             quote_mint: pool_data.quote_mint,
             pool_base_token_account: pool_data.pool_base_token_account,
             pool_quote_token_account: pool_data.pool_quote_token_account,
-            pool_base_token_reserves: pool_base_token_reserves,
-            pool_quote_token_reserves: pool_quote_token_reserves,
-            coin_creator_vault_ata: coin_creator_vault_ata,
-            coin_creator_vault_authority: coin_creator_vault_authority,
+            pool_base_token_reserves,
+            pool_quote_token_reserves,
+            coin_creator_vault_ata,
+            coin_creator_vault_authority,
             base_token_program: if pool_data.pool_base_token_account == base_token_program_ata {
                 crate::constants::TOKEN_PROGRAM
             } else {

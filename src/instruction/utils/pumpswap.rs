@@ -10,9 +10,7 @@ use rand::seq::IndexedRandom;
 use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey};
 
-/// PumpSwap 池账户总长度（见 pump-public-docs Breaking Change）：8 字节 discriminator + 244 字节 Pool。
-/// 官方文档：pool structure needs to be 244 bytes (was 243)，含 is_mayhem_mode。DataSize 必须与此一致，否则 getProgramAccounts 会返回 0。
-const POOL_ACCOUNT_DATA_LEN: u64 = 8 + 244;
+// Pool account sizes moved to find_by_base_mint/find_by_quote_mint (POOL_DATA_LEN_SPL, POOL_DATA_LEN_T22)
 
 /// Constants used as seeds for deriving PDAs (Program Derived Addresses)
 pub mod seeds {
@@ -301,116 +299,90 @@ pub async fn fetch_pool(
     Ok(pool)
 }
 
-pub async fn find_by_base_mint(
+/// Known pool account sizes: 252 (SPL Token) and 643 (Token2022)
+const POOL_DATA_LEN_SPL: u64 = 8 + 244;
+const POOL_DATA_LEN_T22: u64 = 643;
+
+/// Run getProgramAccounts with a Memcmp filter, querying both pool sizes in parallel.
+async fn get_program_accounts_both_sizes(
     rpc: &SolanaRpcClient,
-    base_mint: &Pubkey,
-) -> Result<(Pubkey, Pool), anyhow::Error> {
-    // Use getProgramAccounts to find pools for the given mint.
-    // base_mint 在账户布局中的偏移：8(discriminator) + 1(bump) + 2(index) + 32(creator) = 43
-    let filters = vec![
-        solana_rpc_client_api::filter::RpcFilterType::DataSize(POOL_ACCOUNT_DATA_LEN),
-        solana_rpc_client_api::filter::RpcFilterType::Memcmp(
-            solana_client::rpc_filter::Memcmp::new_base58_encoded(43, base_mint.as_ref()),
-        ),
-    ];
-    let config = solana_rpc_client_api::config::RpcProgramAccountsConfig {
-        filters: Some(filters),
-        account_config: solana_rpc_client_api::config::RpcAccountInfoConfig {
-            encoding: Some(UiAccountEncoding::Base64),
-            data_slice: None,
-            commitment: None,
-            min_context_slot: None,
-        },
-        with_context: None,
-        sort_results: None,
+    memcmp_offset: usize,
+    mint: &Pubkey,
+) -> Result<Vec<(Pubkey, solana_sdk::account::Account)>, anyhow::Error> {
+    let make_config = |data_size: u64| {
+        solana_rpc_client_api::config::RpcProgramAccountsConfig {
+            filters: Some(vec![
+                solana_rpc_client_api::filter::RpcFilterType::DataSize(data_size),
+                solana_rpc_client_api::filter::RpcFilterType::Memcmp(
+                    solana_client::rpc_filter::Memcmp::new_base58_encoded(memcmp_offset, mint.as_ref()),
+                ),
+            ]),
+            account_config: solana_rpc_client_api::config::RpcAccountInfoConfig {
+                encoding: Some(UiAccountEncoding::Base64),
+                data_slice: None,
+                commitment: None,
+                min_context_slot: None,
+            },
+            with_context: None,
+            sort_results: None,
+        }
     };
     let program_id = accounts::AMM_PROGRAM;
     #[allow(deprecated)]
-    let accounts = rpc.get_program_accounts_with_config(&program_id, config).await?;
-    if accounts.is_empty() {
-        return Err(anyhow!("No pool found for mint {}", base_mint));
-    }
-    let accounts_count = accounts.len(); // 🔧 保存长度，因为 into_iter() 会消耗 accounts
-    let mut pools: Vec<_> = accounts
+    let (spl_result, t22_result) = tokio::join!(
+        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_SPL)),
+        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_T22)),
+    );
+    let mut all = spl_result.unwrap_or_default();
+    all.extend(t22_result.unwrap_or_default());
+    Ok(all)
+}
+
+fn decode_pool_accounts(accounts: Vec<(Pubkey, solana_sdk::account::Account)>) -> Vec<(Pubkey, Pool)> {
+    accounts
         .into_iter()
         .filter_map(|(addr, acc)| {
-            // 🔧 修复：跳过8字节的discriminator
             if acc.data.len() > 8 {
                 pool_decode(&acc.data[8..]).map(|pool| (addr, pool))
             } else {
                 None
             }
         })
-        .collect();
+        .collect()
+}
 
-    // 🔧 修复：检查过滤后的 pools 是否为空（accounts 可能不为空但解码全部失败）
-    if pools.is_empty() {
-        return Err(anyhow!(
-            "No valid pool decoded for mint {} (found {} accounts but all decode failed)",
-            base_mint,
-            accounts_count
-        ));
+pub async fn find_by_base_mint(
+    rpc: &SolanaRpcClient,
+    base_mint: &Pubkey,
+) -> Result<(Pubkey, Pool), anyhow::Error> {
+    // base_mint offset: 8(discriminator) + 1(bump) + 2(index) + 32(creator) = 43
+    let accounts = get_program_accounts_both_sizes(rpc, 43, base_mint).await?;
+    if accounts.is_empty() {
+        return Err(anyhow!("No pool found for mint {}", base_mint));
     }
-
+    let mut pools = decode_pool_accounts(accounts);
+    if pools.is_empty() {
+        return Err(anyhow!("No valid pool decoded for mint {}", base_mint));
+    }
     pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
-    let first = &pools[0];
-    Ok((first.0, first.1.clone()))
+    Ok((pools[0].0, pools[0].1.clone()))
 }
 
 pub async fn find_by_quote_mint(
     rpc: &SolanaRpcClient,
     quote_mint: &Pubkey,
 ) -> Result<(Pubkey, Pool), anyhow::Error> {
-    // Use getProgramAccounts to find pools for the given mint.
-    // quote_mint 在账户布局中的偏移：8 + 1 + 2 + 32 + 32 = 75
-    let filters = vec![
-        solana_rpc_client_api::filter::RpcFilterType::DataSize(POOL_ACCOUNT_DATA_LEN),
-        solana_rpc_client_api::filter::RpcFilterType::Memcmp(
-            solana_client::rpc_filter::Memcmp::new_base58_encoded(75, quote_mint.as_ref()),
-        ),
-    ];
-    let config = solana_rpc_client_api::config::RpcProgramAccountsConfig {
-        filters: Some(filters),
-        account_config: solana_rpc_client_api::config::RpcAccountInfoConfig {
-            encoding: Some(UiAccountEncoding::Base64),
-            data_slice: None,
-            commitment: None,
-            min_context_slot: None,
-        },
-        with_context: None,
-        sort_results: None,
-    };
-    let program_id = accounts::AMM_PROGRAM;
-    #[allow(deprecated)]
-    let accounts = rpc.get_program_accounts_with_config(&program_id, config).await?;
+    // quote_mint offset: 8 + 1 + 2 + 32 + 32 = 75
+    let accounts = get_program_accounts_both_sizes(rpc, 75, quote_mint).await?;
     if accounts.is_empty() {
         return Err(anyhow!("No pool found for mint {}", quote_mint));
     }
-    let accounts_count = accounts.len(); // 🔧 保存长度，因为 into_iter() 会消耗 accounts
-    let mut pools: Vec<_> = accounts
-        .into_iter()
-        .filter_map(|(addr, acc)| {
-            // 🔧 修复：跳过8字节的discriminator
-            if acc.data.len() > 8 {
-                pool_decode(&acc.data[8..]).map(|pool| (addr, pool))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // 🔧 修复：检查过滤后的 pools 是否为空（accounts 可能不为空但解码全部失败）
+    let mut pools = decode_pool_accounts(accounts);
     if pools.is_empty() {
-        return Err(anyhow!(
-            "No valid pool decoded for quote_mint {} (found {} accounts but all decode failed)",
-            quote_mint,
-            accounts_count
-        ));
+        return Err(anyhow!("No valid pool decoded for quote_mint {}", quote_mint));
     }
-
     pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
-    let first = &pools[0];
-    Ok((first.0, first.1.clone()))
+    Ok((pools[0].0, pools[0].1.clone()))
 }
 
 /// 按 mint 查找 PumpSwap 池（本函数仅用于 PumpSwap，其他 DEX 勿用）。
@@ -444,20 +416,24 @@ pub async fn find_by_mint(
         Err(e) => diag.push(format!("canonical get_account/decode 失败: {}", e)),
     }
 
-    // 3. 回退：getProgramAccounts 按 base_mint / quote_mint
-    match find_by_base_mint(rpc, mint).await {
-        Ok((address, pool)) => return Ok((address, pool)),
-        Err(e) => diag.push(format!("getProgramAccounts(base_mint): {}", e)),
+    // 3. Fallback: getProgramAccounts by base_mint / quote_mint (with 3s timeout to avoid blocking)
+    match tokio::time::timeout(std::time::Duration::from_secs(3), find_by_base_mint(rpc, mint)).await {
+        Ok(Ok((address, pool))) => return Ok((address, pool)),
+        Ok(Err(e)) => diag.push(format!("getProgramAccounts(base_mint): {}", e)),
+        Err(_) => diag.push("getProgramAccounts(base_mint): timed out (3s)".into()),
     }
-    match find_by_quote_mint(rpc, mint).await {
-        Ok((address, pool)) => return Ok((address, pool)),
-        Err(e) => diag.push(format!("getProgramAccounts(quote_mint): {}", e)),
+    match tokio::time::timeout(std::time::Duration::from_secs(3), find_by_quote_mint(rpc, mint)).await {
+        Ok(Ok((address, pool))) => return Ok((address, pool)),
+        Ok(Err(e)) => diag.push(format!("getProgramAccounts(quote_mint): {}", e)),
+        Err(_) => diag.push("getProgramAccounts(quote_mint): timed out (3s)".into()),
     }
 
+    let diag_str = diag.join("; ");
+    eprintln!("[find_by_mint] {} failed: {}", mint, diag_str);
     Err(anyhow!(
-        "No pool found for mint {}. 诊断: {}。若使用自建 RPC 请确认已开启 getProgramAccounts 或换用公共 RPC 重试；若代币未在 PumpSwap 建池请先在 pump.fun/DEX 上确认",
+        "No pool found for mint {}. diag: {}",
         mint,
-        diag.join("; ")
+        diag_str
     ))
 }
 
