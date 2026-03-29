@@ -7,6 +7,7 @@ use std::{sync::Arc, time::Instant};
 
 use solana_transaction_status::UiTransactionEncoding;
 use std::time::Duration;
+use arc_swap::ArcSwap;
 
 use crate::swqos::SwqosClientTrait;
 use crate::swqos::{SwqosType, TradeType};
@@ -85,7 +86,7 @@ pub enum BlockRazorBackend {
     Grpc {
         endpoint: String,
         auth_token: String,
-        grpc_client: Arc<BlockRazorGrpcClient>,
+        grpc_client: ArcSwap<BlockRazorGrpcClient>,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
     },
@@ -157,7 +158,7 @@ impl BlockRazorClient {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to gRPC endpoint: {}", e))?;
 
-        let grpc_client = Arc::new(BlockRazorGrpcClient::new(channel, auth_token.clone()));
+        let grpc_client = ArcSwap::from_pointee(BlockRazorGrpcClient::new(channel, auth_token.clone()));
         let ping_handle = Arc::new(tokio::sync::Mutex::new(None));
         let stop_ping = Arc::new(AtomicBool::new(false));
 
@@ -211,27 +212,67 @@ impl BlockRazorClient {
                 grpc_client,
                 ping_handle,
                 stop_ping,
-                ..
+                endpoint,
+                auth_token,
             } => {
                 let grpc_client = grpc_client.clone();
                 let ping_handle = ping_handle.clone();
                 let stop_ping = stop_ping.clone();
+                let endpoint = endpoint.clone();
+                let auth_token = auth_token.clone();
 
                 let handle = tokio::spawn(async move {
-                    if let Err(e) = grpc_client.get_health().await {
-                        if crate::common::sdk_log::sdk_log_enabled() {
-                            eprintln!("BlockRazor gRPC ping request failed: {}", e);
+                    let mut delay = 1u64;
+
+                    // 初始健康检查
+                    {
+                        let client = grpc_client.load();
+                        if let Err(e) = client.get_health().await {
+                            if crate::common::sdk_log::sdk_log_enabled() {
+                                eprintln!("BlockRazor gRPC initial health check failed: {}", e);
+                            }
                         }
                     }
+
                     let mut interval = tokio::time::interval(Duration::from_secs(30));
                     loop {
                         interval.tick().await;
+
                         if stop_ping.load(Ordering::Relaxed) {
                             break;
                         }
-                        if let Err(e) = grpc_client.get_health().await {
-                            if crate::common::sdk_log::sdk_log_enabled() {
-                                eprintln!("BlockRazor gRPC ping request failed: {}", e);
+
+                        // 健康检查（使用 load() 无锁读取）
+                        let client = grpc_client.load();
+                        match client.get_health().await {
+                            Ok(_) => {
+                                delay = 1; // 成功，重置延迟
+                            }
+                            Err(e) => {
+                                if crate::common::sdk_log::sdk_log_enabled() {
+                                    eprintln!("BlockRazor gRPC health check failed: {} - reconnecting in {}s", e, delay);
+                                }
+
+                                // 等待指数退避时间
+                                tokio::time::sleep(Duration::from_secs(delay)).await;
+                                delay = (delay * 2).min(60);
+
+                                // 尝试重连
+                                match Self::reconnect_grpc(&endpoint, &auth_token).await {
+                                    Ok(new_client) => {
+                                        // 使用 swap() 无锁替换客户端
+                                        grpc_client.swap(Arc::new(new_client));
+                                        delay = 1; // 重置延迟
+                                        if crate::common::sdk_log::sdk_log_enabled() {
+                                            eprintln!("BlockRazor gRPC reconnected successfully");
+                                        }
+                                    }
+                                    Err(reconnect_err) => {
+                                        if crate::common::sdk_log::sdk_log_enabled() {
+                                            eprintln!("BlockRazor gRPC reconnect failed: {}", reconnect_err);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -307,6 +348,18 @@ impl BlockRazorClient {
         Ok(())
     }
 
+    /// 重新建立 gRPC 连接
+    async fn reconnect_grpc(endpoint: &str, auth_token: &str) -> Result<BlockRazorGrpcClient> {
+        let channel = tonic::transport::Channel::from_shared(endpoint.to_string())
+            .map_err(|e| anyhow::anyhow!("Invalid gRPC endpoint: {}", e))?
+            .timeout(Duration::from_secs(30))
+            .connect()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to reconnect to gRPC endpoint: {}", e))?;
+
+        Ok(BlockRazorGrpcClient::new(channel, auth_token.to_string()))
+    }
+
     async fn send_transaction_impl(
         &self,
         trade_type: TradeType,
@@ -323,7 +376,9 @@ impl BlockRazorClient {
                 let (content, _signature) =
                     serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
 
-                let signature = grpc_client.send_transaction(
+                // 使用 load() 无锁获取客户端引用
+                let client = grpc_client.load();
+                let signature = client.send_transaction(
                     content,
                     "fast".to_string(),
                     None,
