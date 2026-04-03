@@ -86,7 +86,7 @@ pub enum BlockRazorBackend {
     Grpc {
         endpoint: String,
         auth_token: String,
-        grpc_client: ArcSwap<BlockRazorGrpcClient>,
+        grpc_client: Arc<ArcSwap<BlockRazorGrpcClient>>,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
     },
@@ -158,7 +158,10 @@ impl BlockRazorClient {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to gRPC endpoint: {}", e))?;
 
-        let grpc_client = ArcSwap::from_pointee(BlockRazorGrpcClient::new(channel, auth_token.clone()));
+        let grpc_client = Arc::new(ArcSwap::from_pointee(BlockRazorGrpcClient::new(
+            channel,
+            auth_token.clone(),
+        )));
         let ping_handle = Arc::new(tokio::sync::Mutex::new(None));
         let stop_ping = Arc::new(AtomicBool::new(false));
 
