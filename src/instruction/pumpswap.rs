@@ -139,8 +139,18 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let mut instructions = Vec::with_capacity(6);
 
         if create_wsol_ata {
+            // Determine wrap amount based on instruction type:
+            // - buy_exact_quote_in: program spends exactly input_amount, wrap input_amount
+            // - buy: program may spend up to max_quote, wrap max_quote
+            let wrap_amount = if quote_is_wsol_or_usdc
+                && params.use_exact_sol_amount.unwrap_or(true)
+            {
+                params.input_amount.unwrap_or(0)
+            } else {
+                sol_amount
+            };
             instructions
-                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), sol_amount));
+                .extend(crate::trading::common::handle_wsol(&params.payer.pubkey(), wrap_amount));
         }
 
         if params.create_output_mint_ata {

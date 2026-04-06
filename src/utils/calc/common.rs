@@ -28,6 +28,10 @@ pub const fn ceil_div(a: u128, b: u128) -> u128 {
     (a + b - 1) / b
 }
 
+/// Maximum slippage in basis points (99.99% = 9999 bps)
+/// This prevents the wrap amount from doubling when slippage is 100%
+pub const MAX_SLIPPAGE_BASIS_POINTS: u64 = 9999;
+
 /// Calculate buy amount with slippage protection
 /// Add slippage percentage to the amount to ensure successful purchase
 ///
@@ -40,9 +44,18 @@ pub const fn ceil_div(a: u128, b: u128) -> u128 {
 /// * basis_points = 10  -> 0.1% slippage
 /// * basis_points = 100 -> 1% slippage
 /// * basis_points = 500 -> 5% slippage
+///
+/// # Note
+/// Basis points are clamped to MAX_SLIPPAGE_BASIS_POINTS (9999 = 99.99%)
+/// to prevent the amount from doubling when basis_points = 10000.
 #[inline(always)]
 pub const fn calculate_with_slippage_buy(amount: u64, basis_points: u64) -> u64 {
-    amount + (amount * basis_points / 10000)
+    let bps = if basis_points > MAX_SLIPPAGE_BASIS_POINTS {
+        MAX_SLIPPAGE_BASIS_POINTS
+    } else {
+        basis_points
+    };
+    amount + (amount * bps / 10000)
 }
 
 /// Calculate sell amount with slippage protection
