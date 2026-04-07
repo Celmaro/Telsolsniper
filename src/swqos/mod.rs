@@ -29,7 +29,8 @@ use anyhow::Result;
 use crate::{
     common::SolanaRpcClient,
     constants::swqos::{
-        SWQOS_ENDPOINTS_ASTRALANE, SWQOS_ENDPOINTS_ASTRALANE_QUIC, SWQOS_ENDPOINTS_BLOCKRAZOR,
+        SWQOS_ENDPOINTS_ASTRALANE, SWQOS_ENDPOINTS_ASTRALANE_QUIC,
+        SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV, SWQOS_ENDPOINTS_BLOCKRAZOR,
         SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC, SWQOS_ENDPOINTS_BLOX, SWQOS_ENDPOINTS_FLASHBLOCK,
         SWQOS_ENDPOINTS_HELIUS, SWQOS_ENDPOINTS_JITO, SWQOS_ENDPOINTS_NEXTBLOCK,
         SWQOS_ENDPOINTS_NODE1, SWQOS_ENDPOINTS_NODE1_QUIC, SWQOS_ENDPOINTS_SOYAS,
@@ -303,6 +304,7 @@ impl SwqosConfig {
         region: SwqosRegion,
         url: Option<String>,
         transport: Option<SwqosTransport>,
+        mev_protection: bool,
     ) -> String {
         if let Some(custom_url) = url {
             return custom_url;
@@ -329,12 +331,17 @@ impl SwqosConfig {
             SwqosType::Astralane => {
                 let use_quic = transport.map_or(false, |t| t == SwqosTransport::Quic);
                 if use_quic {
-                    SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                    // MEV protection: port 9000; standard: port 7000
+                    if mev_protection {
+                        SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[region as usize].to_string()
+                    } else {
+                        SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                    }
                 } else {
                     SWQOS_ENDPOINTS_ASTRALANE[region as usize].to_string()
                 }
             }
-            _ => Self::get_endpoint(swqos_type, region, url),
+            _ => Self::get_endpoint(swqos_type, region, None),
         }
     }
 
@@ -342,6 +349,7 @@ impl SwqosConfig {
         rpc_url: String,
         commitment: CommitmentConfig,
         swqos_config: SwqosConfig,
+        mev_protection: bool,
     ) -> Result<Arc<SwqosClient>> {
         match swqos_config {
             SwqosConfig::Jito(auth_token, region, url) => {
@@ -398,15 +406,15 @@ impl SwqosConfig {
             SwqosConfig::BlockRazor(auth_token, region, url, transport) => {
                 // BlockRazor: transport=None 或 transport=Grpc 时使用 gRPC，transport=Http 时使用 HTTP
                 let use_http = transport.map_or(false, |t| t == SwqosTransport::Http);
-                let endpoint = SwqosConfig::get_endpoint_with_transport(SwqosType::BlockRazor, region, url, transport);
+                let endpoint = SwqosConfig::get_endpoint_with_transport(SwqosType::BlockRazor, region, url, transport, mev_protection);
                 if use_http {
                     let blockrazor_client =
-                        BlockRazorClient::new_http(rpc_url.clone(), endpoint.to_string(), auth_token);
+                        BlockRazorClient::new_http(rpc_url.clone(), endpoint.to_string(), auth_token, mev_protection);
                     Ok(Arc::new(blockrazor_client))
                 } else {
                     // 使用 gRPC 模式（默认或用户明确指定了 gRPC）
                     let blockrazor_client =
-                        BlockRazorClient::new_grpc(rpc_url.clone(), endpoint.to_string(), auth_token).await?;
+                        BlockRazorClient::new_grpc(rpc_url.clone(), endpoint.to_string(), auth_token, mev_protection).await?;
                     Ok(Arc::new(blockrazor_client))
                 }
             }
@@ -414,7 +422,12 @@ impl SwqosConfig {
                 let use_quic = transport.map_or(false, |t| t == SwqosTransport::Quic);
                 if use_quic {
                     let quic_endpoint = url.unwrap_or_else(|| {
-                        SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                        // MEV protection: port 9000; standard: port 7000
+                        if mev_protection {
+                            SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[region as usize].to_string()
+                        } else {
+                            SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                        }
                     });
                     let astralane_client =
                         AstralaneClient::new_quic(rpc_url.clone(), &quic_endpoint, auth_token)

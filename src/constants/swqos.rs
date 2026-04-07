@@ -323,6 +323,19 @@ pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC: [&str; 8] = [
     "lim.gateway.astralane.io:7000", // Default
 ];
 
+/// Astralane QUIC MEV-protected endpoints (port 9000). Same region order as SWQOS_ENDPOINTS_ASTRALANE_QUIC.
+/// Use these when mev_protection=true to route through Astralane's MEV-protected path.
+pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV: [&str; 8] = [
+    "ny.gateway.astralane.io:9000",  // NewYork
+    "fr.gateway.astralane.io:9000",  // Frankfurt
+    "ams.gateway.astralane.io:9000", // Amsterdam
+    "lim.gateway.astralane.io:9000", // SLC (no slc, use lim)
+    "sg.gateway.astralane.io:9000",  // Tokyo (Asia)
+    "ams.gateway.astralane.io:9000", // London (Europe)
+    "la.gateway.astralane.io:9000",  // LosAngeles
+    "lim.gateway.astralane.io:9000", // Default
+];
+
 pub const SWQOS_ENDPOINTS_STELLIUM: [&str; 8] = [
     "http://ewr1.flashrpc.com",
     "http://fra1.flashrpc.com",

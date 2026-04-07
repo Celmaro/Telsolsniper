@@ -52,32 +52,32 @@ impl AstralaneQuicClient {
     fn astralane_quic_ip_candidates(host: &str, port: u16) -> Vec<SocketAddr> {
         // Official recommended direct-IP list (faster/more stable than DNS-only for QUIC).
         // We intentionally avoid fr2/ams2 per prior guidance.
+        // Both port 7000 (standard) and port 9000 (MEV-protected) use the same IPs.
         match host {
             "fr.gateway.astralane.io" => vec![
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(185, 191, 117, 97)), 7000),
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(45, 139, 132, 160)), 7000),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(185, 191, 117, 97)), port),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(45, 139, 132, 160)), port),
             ],
             "ny.gateway.astralane.io" => {
-                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 45, 19)), 7000)]
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 45, 19)), port)]
             }
             "ams.gateway.astralane.io" => vec![
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 43, 43)), 7000),
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 186, 73)), 7000),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(64, 130, 43, 43)), port),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 186, 73)), port),
             ],
             "la.gateway.astralane.io" => {
-                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(74, 118, 142, 151)), 7000)]
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(74, 118, 142, 151)), port)]
             }
             "lim.gateway.astralane.io" => {
-                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(162, 19, 222, 232)), 7000)]
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(162, 19, 222, 232)), port)]
             }
             "sg.gateway.astralane.io" => {
-                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(67, 209, 54, 176)), 7000)]
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(67, 209, 54, 176)), port)]
             }
             "lit.gateway.astralane.io" => {
-                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 97, 47)), 7000)]
+                vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::new(84, 32, 97, 47)), port)]
             }
             _ => {
-                let _ = port; // keep signature consistent; fall back to DNS below.
                 Vec::new()
             }
         }

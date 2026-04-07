@@ -104,7 +104,14 @@ async fn create_solana_trade_client() -> AnyResult<SolanaTrade> {
         .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
     let commitment = CommitmentConfig::confirmed();
     let swqos_configs: Vec<SwqosConfig> = vec![SwqosConfig::Default(rpc_url.clone())];
-    let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment);
+    let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+        // .create_wsol_ata_on_startup(true)  // default: true
+        // .use_seed_optimize(true)            // default: true
+        // .log_enabled(true)                  // default: true
+        // .check_min_tip(false)               // default: false
+        // .swqos_cores_from_end(false)        // default: false
+        // .mev_protection(false)              // default: false
+        .build();
     Ok(SolanaTrade::new(Arc::new(payer), trade_config).await)
 }
 

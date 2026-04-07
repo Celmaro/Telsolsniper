@@ -152,6 +152,7 @@ impl TradingInfrastructure {
                     config.rpc_url.clone(),
                     config.commitment.clone(),
                     swqos.clone(),
+                    config.mev_protection,
                 ),
             )
             .await

@@ -58,11 +58,10 @@ async fn create_trading_client_simple() -> AnyResult<TradingClient> {
         SwqosConfig::Helius("".to_string(), SwqosRegion::Default, None, Some(true)),
     ];
 
-    // Optional: Customize WSOL ATA and Seed optimization settings
-    let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment).with_wsol_ata_config(
-        true, // create_wsol_ata_on_startup: Check and create WSOL ATA on startup
-        true, // use_seed_optimize: Enable seed optimization for all ATA operations
-    );
+    let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+        .create_wsol_ata_on_startup(true)
+        .use_seed_optimize(true)
+        .build();
 
     // Creates new infrastructure internally
     let client = TradingClient::new(Arc::new(payer), trade_config).await;

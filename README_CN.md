@@ -141,11 +141,14 @@ let swqos_configs: Vec<SwqosConfig> = vec![
     ), // QUIC
 ];
 // 创建 TradeConfig 实例
-let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment);
-
-// 可选：自定义 WSOL ATA 与 Seed 优化
-// let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment)
-//     .with_wsol_ata_config(true, true);  // create_wsol_ata_on_startup, use_seed_optimize
+let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+    // .create_wsol_ata_on_startup(true)  // 默认: true  - 初始化时检查并创建 WSOL ATA
+    // .use_seed_optimize(true)            // 默认: true  - ATA 操作启用 seed 优化
+    // .log_enabled(true)                  // 默认: true  - SDK 计时 / SWQOS 日志
+    // .check_min_tip(false)               // 默认: false - 过滤低于最低小费的 SWQOS
+    // .swqos_cores_from_end(false)        // 默认: false - 将 SWQOS 绑定到末尾 N 个 CPU 核心
+    // .mev_protection(false)              // 默认: false - MEV 保护（Astralane 端口 9000 / BlockRazor sandwichMitigation）
+    .build();
 
 // 创建 TradingClient
 let client = TradingClient::new(Arc::new(payer), trade_config).await;

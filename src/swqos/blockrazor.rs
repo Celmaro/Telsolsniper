@@ -89,6 +89,8 @@ pub enum BlockRazorBackend {
         grpc_client: Arc<ArcSwap<BlockRazorGrpcClient>>,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
+        /// When true, gRPC send_transaction sets revert_protection=true for MEV protection.
+        mev_protection: bool,
     },
     Http {
         endpoint: String,
@@ -96,6 +98,8 @@ pub enum BlockRazorBackend {
         http_client: Client,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
+        /// When true, HTTP request adds revertProtection=true query param for MEV protection.
+        mev_protection: bool,
     },
 }
 
@@ -144,10 +148,10 @@ impl SwqosClientTrait for BlockRazorClient {
 impl BlockRazorClient {
     pub async fn new(rpc_url: String, endpoint: String, auth_token: String) -> Result<Self> {
         // 默认使用 HTTP 模式，避免 gRPC FRAME_SIZE_ERROR
-        Ok(Self::new_http(rpc_url, endpoint, auth_token))
+        Ok(Self::new_http(rpc_url, endpoint, auth_token, false))
     }
 
-    pub async fn new_grpc(rpc_url: String, endpoint: String, auth_token: String) -> Result<Self> {
+    pub async fn new_grpc(rpc_url: String, endpoint: String, auth_token: String, mev_protection: bool) -> Result<Self> {
         let rpc_client = SolanaRpcClient::new(rpc_url);
 
         // 配置 Channel，增加连接超时
@@ -173,6 +177,7 @@ impl BlockRazorClient {
                 grpc_client,
                 ping_handle,
                 stop_ping,
+                mev_protection,
             },
         };
 
@@ -184,7 +189,7 @@ impl BlockRazorClient {
         Ok(client)
     }
 
-    pub fn new_http(rpc_url: String, endpoint: String, auth_token: String) -> Self {
+    pub fn new_http(rpc_url: String, endpoint: String, auth_token: String, mev_protection: bool) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = default_http_client_builder().user_agent("").build().unwrap();
         let ping_handle = Arc::new(tokio::sync::Mutex::new(None));
@@ -198,6 +203,7 @@ impl BlockRazorClient {
                 http_client,
                 ping_handle,
                 stop_ping,
+                mev_protection,
             },
         };
 
@@ -217,6 +223,7 @@ impl BlockRazorClient {
                 stop_ping,
                 endpoint,
                 auth_token,
+                ..
             } => {
                 let grpc_client = grpc_client.clone();
                 let ping_handle = ping_handle.clone();
@@ -293,6 +300,7 @@ impl BlockRazorClient {
                 http_client,
                 ping_handle,
                 stop_ping,
+                ..
             } => {
                 let endpoint = endpoint.clone();
                 let auth_token = auth_token.clone();
@@ -374,6 +382,7 @@ impl BlockRazorClient {
         match &self.backend {
             BlockRazorBackend::Grpc {
                 grpc_client,
+                mev_protection,
                 ..
             } => {
                 let (content, _signature) =
@@ -383,7 +392,9 @@ impl BlockRazorClient {
                 let client = grpc_client.load();
                 let signature = client.send_transaction(
                     content,
-                    "fast".to_string(),
+                    // mev_protection=true: sandwichMitigation mode skips blacklisted Leader slots (MEV protection).
+                    // revert_protection is unrelated to MEV; keep false.
+                    if *mev_protection { "sandwichMitigation".to_string() } else { "fast".to_string() },
                     None,
                     false,
                 ).await;
@@ -412,14 +423,22 @@ impl BlockRazorClient {
                 endpoint,
                 auth_token,
                 http_client,
+                mev_protection,
                 ..
             } => {
                 let (content, _signature) =
                     serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
 
+                let mut query_params: Vec<(&str, &str)> = vec![
+                    ("auth", auth_token.as_str()),
+                    // mev_protection=true: sandwichMitigation mode skips blacklisted Leader slots (MEV protection).
+                    // revertProtection is unrelated to MEV; not set.
+                    ("mode", if *mev_protection { "sandwichMitigation" } else { "fast" }),
+                ];
+
                 let response = http_client
                     .post(endpoint)
-                    .query(&[("auth", auth_token.as_str())])
+                    .query(&query_params)
                     .header("Content-Type", "text/plain")
                     .body(content)
                     .send()

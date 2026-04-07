@@ -141,11 +141,14 @@ let swqos_configs: Vec<SwqosConfig> = vec![
     ), // QUIC
 ];
 // Create TradeConfig instance
-let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment);
-
-// Optional: customize WSOL ATA and seed optimization
-// let trade_config = TradeConfig::new(rpc_url, swqos_configs, commitment)
-//     .with_wsol_ata_config(true, true);  // create_wsol_ata_on_startup, use_seed_optimize
+let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+    // .create_wsol_ata_on_startup(true)  // default: true  - check & create WSOL ATA on init
+    // .use_seed_optimize(true)            // default: true  - seed optimization for ATA ops
+    // .log_enabled(true)                  // default: true  - SDK timing / SWQOS logs
+    // .check_min_tip(false)               // default: false - filter SWQOS below min tip
+    // .swqos_cores_from_end(false)        // default: false - bind SWQOS to last N CPU cores
+    // .mev_protection(false)              // default: false - MEV protection (Astralane port 9000 / BlockRazor sandwichMitigation)
+    .build();
 
 // Create TradingClient
 let client = TradingClient::new(Arc::new(payer), trade_config).await;
