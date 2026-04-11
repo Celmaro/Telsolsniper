@@ -55,6 +55,9 @@ pub mod seeds {
     pub const GLOBAL_VOLUME_ACCUMULATOR_SEED: &[u8] = b"global_volume_accumulator";
 
     pub const FEE_CONFIG_SEED: &[u8] = b"fee_config";
+
+    /// `feeSharingConfig` PDA under pump-fees (`@pump-fun/pump-sdk` `feeSharingConfigPda`)
+    pub const SHARING_CONFIG_SEED: &[u8] = b"sharing-config";
 }
 
 pub mod global_constants {
@@ -342,18 +345,39 @@ pub fn get_creator_vault_pda(creator: &Pubkey) -> Option<Pubkey> {
     )
 }
 
-/// Creator vault for buy/sell must be `PDA(["creator-vault", bonding_curve.creator])` (same as on-chain).
-/// Use gRPC `from_event` only when it equals that PDA; if it differs (wrong mint / stale parse), use derived.
+/// `feeSharingConfig` PDA per mint (`pump-sdk` `feeSharingConfigPda` → `pump-fees` program).
 #[inline]
-pub fn resolve_creator_vault_for_ix(creator: &Pubkey, from_event: Pubkey) -> Option<Pubkey> {
-    let derived = get_creator_vault_pda(creator)?;
+pub fn get_fee_sharing_config_pda(mint: &Pubkey) -> Option<Pubkey> {
+    Pubkey::try_find_program_address(
+        &[seeds::SHARING_CONFIG_SEED, mint.as_ref()],
+        &accounts::FEE_PROGRAM,
+    )
+    .map(|(p, _)| p)
+}
+
+/// Creator vault for buy/sell must be `PDA(["creator-vault", bonding_curve.creator])` (IDL `bonding_curve.creator`).
+/// After fee-sharing migration, on-chain `creator` may be [`get_fee_sharing_config_pda`]`(mint)` while gRPC
+/// still sends the wallet — accept `from_event` when it matches either `PDA(wallet)` or `PDA(sharing_cfg)`.
+#[inline]
+pub fn resolve_creator_vault_for_ix(
+    creator: &Pubkey,
+    from_event: Pubkey,
+    mint: &Pubkey,
+) -> Option<Pubkey> {
+    let v_creator = get_creator_vault_pda(creator)?;
+    let sharing = get_fee_sharing_config_pda(mint)?;
+    let v_sharing = get_creator_vault_pda(&sharing)?;
+
     if from_event == Pubkey::default() {
-        Some(derived)
-    } else if from_event == derived {
-        Some(from_event)
-    } else {
-        Some(derived)
+        return Some(v_creator);
     }
+    if from_event == v_creator || from_event == v_sharing {
+        return Some(from_event);
+    }
+    if v_creator == v_sharing {
+        return Some(v_creator);
+    }
+    Some(v_creator)
 }
 
 #[inline]
@@ -434,6 +458,14 @@ mod tests {
         let creator = Pubkey::new_unique();
         let a = get_creator_vault_pda(&creator).unwrap();
         let b = get_creator_vault_pda(&creator).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn fee_sharing_config_pda_deterministic() {
+        let mint = Pubkey::new_unique();
+        let a = get_fee_sharing_config_pda(&mint).unwrap();
+        let b = get_fee_sharing_config_pda(&mint).unwrap();
         assert_eq!(a, b);
     }
 }

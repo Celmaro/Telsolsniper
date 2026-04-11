@@ -185,6 +185,7 @@ impl PumpFunParams {
         let creator_vault_resolved = crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix(
             &bonding_curve_account.creator,
             creator_vault,
+            &mint,
         )
         .unwrap_or_default();
         Self {
@@ -232,6 +233,7 @@ impl PumpFunParams {
         let creator_vault_resolved = crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix(
             &bonding_curve.creator,
             creator_vault,
+            &mint,
         )
         .unwrap_or_default();
         Self {

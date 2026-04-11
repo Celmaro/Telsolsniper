@@ -46,13 +46,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         // creator_vault must be PDA(creator) per bonding curve. Event vault: use only if == derived;
         // if stream sends a mismatched vault (wrong token / stale), fall back to derived.
         let creator = bonding_curve.creator;
-        let creator_vault_pda = resolve_creator_vault_for_ix(&creator, protocol_params.creator_vault)
-            .ok_or_else(|| {
-                anyhow!(
-                    "creator_vault PDA derivation failed (creator={})",
-                    creator
-                )
-            })?;
+        let creator_vault_pda = resolve_creator_vault_for_ix(
+            &creator,
+            protocol_params.creator_vault,
+            &params.output_mint,
+        )
+        .ok_or_else(|| {
+            anyhow!(
+                "creator_vault PDA derivation failed (creator={})",
+                creator
+            )
+        })?;
 
         // ========================================
         // Trade calculation and account address preparation
@@ -206,13 +210,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
 
         let bonding_curve = &protocol_params.bonding_curve;
         let creator = bonding_curve.creator;
-        let creator_vault_pda = resolve_creator_vault_for_ix(&creator, protocol_params.creator_vault)
-            .ok_or_else(|| {
-                anyhow!(
-                    "creator_vault PDA derivation failed (creator={})",
-                    creator
-                )
-            })?;
+        let creator_vault_pda = resolve_creator_vault_for_ix(
+            &creator,
+            protocol_params.creator_vault,
+            &params.input_mint,
+        )
+        .ok_or_else(|| {
+            anyhow!(
+                "creator_vault PDA derivation failed (creator={})",
+                creator
+            )
+        })?;
 
         // ========================================
         // Trade calculation and account address preparation
