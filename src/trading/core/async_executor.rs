@@ -15,7 +15,7 @@ use anyhow::{anyhow, Result};
 use crossbeam_queue::ArrayQueue;
 use once_cell::sync::OnceCell;
 use solana_hash::Hash;
-use solana_sdk::message::AddressLookupTableAccount;
+use solana_message::AddressLookupTableAccount;
 use solana_sdk::{
     instruction::Instruction, pubkey::Pubkey, signature::Keypair, signature::Signature,
 };

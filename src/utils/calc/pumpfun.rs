@@ -1,9 +1,21 @@
-use solana_sdk::{native_token::sol_str_to_lamports, pubkey::Pubkey};
+// Note: sol_to_lamports moved to solana_native_token crate in 3.x
+// Using manual conversion: 1 SOL = 1_000_000_000 lamports
+use solana_sdk::pubkey::Pubkey;
+
+fn sol_to_lamports(sol: f64) -> u64 {
+    (sol * 1_000_000_000.0) as u64
+}
 
 use crate::{
     instruction::utils::pumpfun::global_constants::{CREATOR_FEE, FEE_BASIS_POINTS},
     utils::calc::common::compute_fee,
 };
+
+/// Converts SOL string to lamports (wrapper for sol_to_lamports)
+#[inline]
+fn sol_str_to_lamports(sol: &str) -> Option<u64> {
+    sol.parse::<f64>().ok().map(|s| sol_to_lamports(s))
+}
 
 /// Calculates the amount of tokens that can be purchased with a given SOL amount
 /// using the bonding curve formula.

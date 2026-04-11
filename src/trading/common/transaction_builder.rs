@@ -1,9 +1,10 @@
 use solana_hash::Hash;
 use solana_sdk::{
-    instruction::Instruction, message::AddressLookupTableAccount, pubkey::Pubkey,
+    instruction::Instruction, pubkey::Pubkey,
     signature::Keypair, signer::Signer, transaction::VersionedTransaction,
 };
-use solana_system_interface::instruction::transfer;
+use solana_message::AddressLookupTableAccount;
+use solana_system_interface::instruction as system_instruction;
 use std::sync::Arc;
 
 use super::nonce_manager::{add_nonce_instruction, get_transaction_blockhash};
@@ -51,7 +52,7 @@ pub async fn build_transaction(
 
     if with_tip && tip_amount > 0.0 {
         let tip_lamports = sol_f64_to_lamports(tip_amount);
-        instructions.push(transfer(&payer.pubkey(), tip_account, tip_lamports));
+        instructions.push(system_instruction::transfer(&payer.pubkey(), tip_account, tip_lamports));
     }
 
     super::compute_budget_manager::extend_compute_budget_instructions(

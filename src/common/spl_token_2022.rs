@@ -1,6 +1,6 @@
 use solana_program::pubkey;
 use solana_sdk::{
-    message::{AccountMeta, Instruction},
+    instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
 };

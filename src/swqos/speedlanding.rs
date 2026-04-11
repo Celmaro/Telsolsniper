@@ -7,7 +7,6 @@ use quinn::{
 };
 use rand::seq::IndexedRandom as _;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
-use solana_tls_utils::{new_dummy_x509_certificate, SkipServerVerification};
 use std::time::Instant;
 use std::{
     net::{SocketAddr, ToSocketAddrs as _},
@@ -25,6 +24,66 @@ use crate::{
     constants::swqos::SPEEDLANDING_TIP_ACCOUNTS,
     swqos::{SwqosType, TradeType},
 };
+
+// Skip server verification implementation
+#[derive(Debug)]
+struct SkipServerVerification;
+
+impl SkipServerVerification {
+    fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        vec![rustls::SignatureScheme::ECDSA_NISTP256_SHA256]
+    }
+}
+
+// Generate dummy self-signed certificate using rcgen
+fn generate_self_signed_cert(_keypair: &Keypair) -> Result<(rustls::pki_types::CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>)> {
+    // Generate a new key pair for the certificate
+    let key_pair = rcgen::KeyPair::generate()?;
+    
+    let params = rcgen::CertificateParams::default();
+    let cert = params.self_signed(&key_pair)?;
+    
+    let cert_der = rustls::pki_types::CertificateDer::from(cert.der().to_vec());
+    let key_der = rustls::pki_types::PrivateKeyDer::try_from(key_pair.serialize_der())
+        .map_err(|e| anyhow::anyhow!("Failed to create private key: {:?}", e))?;
+    
+    Ok((cert_der, key_der))
+}
 
 const ALPN_TPU_PROTOCOL_ID: &[u8] = b"solana-tpu";
 /// Fallback SNI when endpoint is IP or cannot extract host (keeps legacy behavior).
@@ -66,7 +125,7 @@ impl SpeedlandingClient {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let server_name = Self::server_name_from_endpoint(&endpoint_string);
         let keypair = Keypair::from_base58_string(&api_key);
-        let (cert, key) = new_dummy_x509_certificate(&keypair);
+        let (cert, key) = generate_self_signed_cert(&keypair)?;
         let mut crypto = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(SkipServerVerification::new())

@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use fnv::FnvHasher;
 use once_cell::sync::Lazy;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey};
-use solana_system_interface::instruction::create_account_with_seed;
+use solana_system_interface::instruction as system_instruction;
 use std::hash::Hasher;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -92,9 +92,10 @@ pub fn create_associated_token_account_use_seed(
     let ata_like = Pubkey::create_with_seed(payer, seed, token_program)?;
 
     let len = 165;
-    // 但账户的 owner 仍然使用正确的 token_program（Token 或 Token-2022）
+    // 🔧 修复：create_account_with_seed 的第3个参数必须是 payer（与第92行生成地址时使用的 base 一致）
+    // 否则创建的账户地址与 ata_like 不匹配，导致 initializeAccount3 失败
     let create_acc =
-        create_account_with_seed(payer, &ata_like, owner, seed, rent, len, token_program);
+        system_instruction::create_account_with_seed(payer, &ata_like, payer, seed, rent, len, token_program);
 
     let init_acc = if is_2022_token {
         crate::common::spl_token_2022::initialize_account3(&token_program, &ata_like, mint, owner)?

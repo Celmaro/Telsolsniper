@@ -1,5 +1,5 @@
 use solana_sdk::{
-    message::{AccountMeta, Instruction},
+    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
 };
 

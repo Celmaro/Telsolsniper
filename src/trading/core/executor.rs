@@ -1,9 +1,10 @@
 use anyhow::Result;
 use solana_hash::Hash;
 use solana_sdk::{
-    instruction::Instruction, message::AddressLookupTableAccount, pubkey::Pubkey,
+    instruction::Instruction, pubkey::Pubkey,
     signature::Keypair, signature::Signature,
 };
+use solana_message::AddressLookupTableAccount;
 use std::{
     sync::Arc,
     time::{Duration, Instant},

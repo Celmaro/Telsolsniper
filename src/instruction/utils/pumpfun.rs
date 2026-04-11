@@ -172,6 +172,24 @@ pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];
 pub const BUY_EXACT_SOL_IN_DISCRIMINATOR: [u8; 8] = [56, 252, 116, 8, 158, 223, 205, 95];
 pub const SELL_DISCRIMINATOR: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
 
+/// Check if a pubkey is one of the Mayhem fee recipients
+#[inline]
+pub fn is_mayhem_fee_recipient(pubkey: &Pubkey) -> bool {
+    global_constants::MAYHEM_FEE_RECIPIENTS.iter().any(|p| p == pubkey)
+}
+
+/// Check if a pubkey is a Pump.fun AMM protocol fee recipient (PUMPFUN_AMM_FEE_1..7)
+#[inline]
+pub fn is_amm_fee_recipient(pubkey: &Pubkey) -> bool {
+    pubkey == &global_constants::PUMPFUN_AMM_FEE_1
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_2
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_3
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_4
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_5
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_6
+        || pubkey == &global_constants::PUMPFUN_AMM_FEE_7
+}
+
 /// Returns a random Mayhem fee recipient AccountMeta (pump-public-docs: Bonding Curve 2nd account = Mayhem fee recipient; use any one randomly).
 #[inline]
 pub fn get_mayhem_fee_recipient_meta_random() -> AccountMeta {

@@ -164,6 +164,7 @@ async fn pumpfun_copy_trade_with_grpc(
             trade_info.fee_recipient,
             trade_info.token_program,
             trade_info.is_cashback_coin,
+            Some(trade_info.mayhem_mode),
         )),
         address_lookup_table_account,
         wait_transaction_confirmed: true,

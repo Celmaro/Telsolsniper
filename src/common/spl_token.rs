@@ -1,6 +1,6 @@
 use solana_program::pubkey;
 use solana_sdk::{
-    message::{AccountMeta, Instruction},
+    instruction::{AccountMeta, Instruction},
     program_error::ProgramError,
     pubkey::Pubkey,
 };
@@ -18,14 +18,14 @@ pub fn close_account(
     let mut data = Vec::with_capacity(1);
     data.push(9);
     let mut accounts = Vec::with_capacity(3 + signer_pubkeys.len());
-    accounts.push(solana_sdk::message::AccountMeta::new(*account_pubkey, false));
-    accounts.push(solana_sdk::message::AccountMeta::new(*destination_pubkey, false));
-    accounts.push(solana_sdk::message::AccountMeta::new_readonly(
+    accounts.push(AccountMeta::new(*account_pubkey, false));
+    accounts.push(AccountMeta::new(*destination_pubkey, false));
+    accounts.push(AccountMeta::new_readonly(
         *owner_pubkey,
         signer_pubkeys.is_empty(),
     ));
     for signer_pubkey in signer_pubkeys.iter() {
-        accounts.push(solana_sdk::message::AccountMeta::new_readonly(**signer_pubkey, true));
+        accounts.push(AccountMeta::new_readonly(**signer_pubkey, true));
     }
     Ok(Instruction { program_id: *token_program_id, accounts, data })
 }

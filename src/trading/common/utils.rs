@@ -1,5 +1,5 @@
 use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer, transaction::Transaction};
-use solana_system_interface::instruction::transfer;
+use solana_system_interface::instruction as system_instruction;
 
 use crate::common::{
     fast_fn::{
@@ -88,7 +88,7 @@ pub async fn transfer_sol(
         return Err(anyhow!("Insufficient balance"));
     }
 
-    let transfer_instruction = transfer(&payer.pubkey(), receive_wallet, amount);
+    let transfer_instruction = system_instruction::transfer(&payer.pubkey(), receive_wallet, amount);
 
     let recent_blockhash = rpc.get_latest_blockhash().await?;
 

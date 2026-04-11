@@ -81,6 +81,7 @@ mkdir -p examples/pumpfun_buy_test/src
 cat > examples/pumpfun_buy_test/src/main.rs << 'EOF'
 use sol_trade_sdk::{
     common::{TradeConfig, AnyResult},
+    constants::TOKEN_PROGRAM,
     swqos::{SwqosConfig, SwqosRegion},
     trading::{core::params::PumpFunParams, factory::DexType},
     SolanaTrade, TradeTokenType, TradeBuyParams,
@@ -166,7 +167,7 @@ async fn main() -> AnyResult<()> {
     println!("📊 滑点: {} basis points", slippage);
     println!("================================\n");
 
-    // PumpFun买入参数 (买入不需要特殊参数，使用零值)
+    // PumpFun买入参数 (占位；实际路径应使用 RPC 或事件填充)
     let params = PumpFunParams::from_trade(
         Pubkey::default(),  // bonding_curve
         Pubkey::default(),  // associated_bonding_curve
@@ -178,6 +179,10 @@ async fn main() -> AnyResult<()> {
         0,                  // real_token_reserves
         0,                  // real_sol_reserves
         None,               // close_token_account_when_sell
+        Pubkey::default(),  // fee_recipient
+        TOKEN_PROGRAM,
+        false,              // is_cashback_coin
+        None,               // mayhem_mode（None=按 fee_recipient 推断）
     );
 
     let buy_params = TradeBuyParams {

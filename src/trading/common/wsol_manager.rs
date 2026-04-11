@@ -7,8 +7,8 @@ use crate::common::{
     spl_token::close_account,
 };
 use smallvec::SmallVec;
-use solana_sdk::{instruction::Instruction, message::AccountMeta, pubkey::Pubkey};
-use solana_system_interface::instruction::transfer;
+use solana_sdk::{instruction::Instruction, instruction::AccountMeta, pubkey::Pubkey};
+use solana_system_interface::instruction as system_instruction;
 
 #[inline]
 pub fn handle_wsol(payer: &Pubkey, amount_in: u64) -> SmallVec<[Instruction; 3]> {
@@ -27,7 +27,7 @@ pub fn handle_wsol(payer: &Pubkey, amount_in: u64) -> SmallVec<[Instruction; 3]>
         &crate::constants::TOKEN_PROGRAM,
     ));
     insts.extend([
-        transfer(&payer, &wsol_token_account, amount_in),
+        system_instruction::transfer(&payer, &wsol_token_account, amount_in),
         // sync_native
         Instruction {
             program_id: crate::constants::TOKEN_PROGRAM,
@@ -91,7 +91,7 @@ pub fn wrap_sol_only(payer: &Pubkey, amount_in: u64) -> SmallVec<[Instruction; 2
 
     let mut insts = SmallVec::<[Instruction; 2]>::new();
     insts.extend([
-        transfer(&payer, &wsol_token_account, amount_in),
+        system_instruction::transfer(&payer, &wsol_token_account, amount_in),
         // sync_native
         Instruction {
             program_id: crate::constants::TOKEN_PROGRAM,

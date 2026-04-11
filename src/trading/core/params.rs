@@ -4,7 +4,7 @@ use crate::common::spl_associated_token_account::get_associated_token_address_wi
 use crate::common::{GasFeeStrategy, SolanaRpcClient};
 use crate::constants::TOKEN_PROGRAM;
 use core_affinity::CoreId;
-use crate::instruction::utils::pumpfun::global_constants::MAYHEM_FEE_RECIPIENT;
+use crate::instruction::utils::pumpfun::is_mayhem_fee_recipient;
 
 /// Concurrency + core binding config for parallel submit (precomputed at SDK init, one param on hot path). Uses Arc so no borrow of SwapParams.
 #[derive(Clone)]
@@ -18,7 +18,7 @@ use crate::swqos::{SwqosClient, TradeType};
 use crate::trading::common::get_multi_token_balances;
 use crate::trading::MiddlewareManager;
 use solana_hash::Hash;
-use solana_sdk::message::AddressLookupTableAccount;
+use solana_message::AddressLookupTableAccount;
 use solana_sdk::{pubkey::Pubkey, signature::Keypair};
 use std::sync::Arc;
 
@@ -152,6 +152,8 @@ impl PumpFunParams {
 
     /// When building from event/parser (e.g. sol-parser-sdk), pass `is_cashback_coin` from the event
     /// so that sell instructions include the correct remaining accounts for cashback.
+    /// `mayhem_mode`: `Some` when known from Create/Trade event (`is_mayhem_mode` / `mayhem_mode`).
+    /// `None` falls back to detecting Mayhem via reserved fee recipient pubkeys only (not AMM protocol fee accounts).
     pub fn from_dev_trade(
         mint: Pubkey,
         token_amount: u64,
@@ -164,8 +166,10 @@ impl PumpFunParams {
         fee_recipient: Pubkey,
         token_program: Pubkey,
         is_cashback_coin: bool,
+        mayhem_mode: Option<bool>,
     ) -> Self {
-        let is_mayhem_mode = fee_recipient == MAYHEM_FEE_RECIPIENT;
+        let is_mayhem_mode =
+            mayhem_mode.unwrap_or_else(|| is_mayhem_fee_recipient(&fee_recipient));
         let bonding_curve_account = BondingCurveAccount::from_dev_trade(
             bonding_curve,
             &mint,
@@ -186,6 +190,7 @@ impl PumpFunParams {
 
     /// When building from event/parser (e.g. sol-parser-sdk), pass `is_cashback_coin` from the event
     /// so that sell instructions include the correct remaining accounts for cashback.
+    /// `mayhem_mode`: `Some` when known from Create/Trade event. `None` → infer from `fee_recipient` (Mayhem list only).
     pub fn from_trade(
         bonding_curve: Pubkey,
         associated_bonding_curve: Pubkey,
@@ -200,8 +205,10 @@ impl PumpFunParams {
         fee_recipient: Pubkey,
         token_program: Pubkey,
         is_cashback_coin: bool,
+        mayhem_mode: Option<bool>,
     ) -> Self {
-        let is_mayhem_mode = fee_recipient == MAYHEM_FEE_RECIPIENT;
+        let is_mayhem_mode =
+            mayhem_mode.unwrap_or_else(|| is_mayhem_fee_recipient(&fee_recipient));
         let bonding_curve = BondingCurveAccount::from_trade(
             bonding_curve,
             mint,
