@@ -8,8 +8,9 @@ use crate::{
 };
 use crate::{
     instruction::utils::pumpfun::{
-        accounts, get_bonding_curve_pda, get_bonding_curve_v2_pda, get_creator,
-        get_mayhem_fee_recipient_meta_random, get_user_volume_accumulator_pda,
+        accounts, get_bonding_curve_pda, get_bonding_curve_v2_pda, get_creator_vault_pda,
+        get_mayhem_fee_recipient_meta_random, get_standard_fee_recipient_meta_random,
+        get_user_volume_accumulator_pda,
         global_constants::{self},
         BUY_DISCRIMINATOR, BUY_EXACT_SOL_IN_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
@@ -42,8 +43,19 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         }
 
         let bonding_curve = &protocol_params.bonding_curve;
-        let creator_vault_pda = protocol_params.creator_vault;
-        let creator = get_creator(&creator_vault_pda);
+        // creator_vault must match PDA(["creator-vault", bonding_curve.creator_on_chain]). Events/gRPC
+        // sometimes have a stale `creator` but a correct `creator_vault` from parsed ix; prefer non-default.
+        let creator = bonding_curve.creator;
+        let creator_vault_pda = if protocol_params.creator_vault != Pubkey::default() {
+            protocol_params.creator_vault
+        } else {
+            get_creator_vault_pda(&creator).ok_or_else(|| {
+                anyhow!(
+                    "creator_vault PDA derivation failed (creator={})",
+                    creator
+                )
+            })?
+        };
 
         // ========================================
         // Trade calculation and account address preparation
@@ -106,6 +118,8 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         // ========================================
         // Build instructions
         // ========================================
+        // Hot path: no RPC here (latency). For legacy curves &lt;151 bytes, use
+        // `extend_bonding_curve_account_instruction` from a cold path or separate tx.
         let mut instructions = Vec::with_capacity(2);
 
         // Create associated token account
@@ -142,12 +156,19 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             buy_data[24..26].copy_from_slice(&track_volume);
         }
 
-        // Determine fee recipient based on mayhem mode (pump-public-docs: 2nd account = Mayhem fee recipient; use any one randomly)
-        let fee_recipient_meta = if is_mayhem_mode {
-            get_mayhem_fee_recipient_meta_random()
-        } else {
-            global_constants::FEE_RECIPIENT_META
-        };
+        // Fee recipient: prefer gRPC/event pubkey (matches live trades); else @pump-fun/pump-sdk getFeeRecipient.
+        let fee_recipient_meta =
+            if protocol_params.fee_recipient != Pubkey::default() {
+                AccountMeta {
+                    pubkey: protocol_params.fee_recipient,
+                    is_signer: false,
+                    is_writable: true,
+                }
+            } else if is_mayhem_mode {
+                get_mayhem_fee_recipient_meta_random()
+            } else {
+                get_standard_fee_recipient_meta_random()
+            };
 
         let bonding_curve_v2 = get_bonding_curve_v2_pda(&params.output_mint).ok_or_else(|| {
             anyhow!("bonding_curve_v2 PDA derivation failed for mint {}", params.output_mint)
@@ -197,8 +218,17 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         };
 
         let bonding_curve = &protocol_params.bonding_curve;
-        let creator_vault_pda = protocol_params.creator_vault;
-        let creator = get_creator(&creator_vault_pda);
+        let creator = bonding_curve.creator;
+        let creator_vault_pda = if protocol_params.creator_vault != Pubkey::default() {
+            protocol_params.creator_vault
+        } else {
+            get_creator_vault_pda(&creator).ok_or_else(|| {
+                anyhow!(
+                    "creator_vault PDA derivation failed (creator={})",
+                    creator
+                )
+            })?
+        };
 
         // ========================================
         // Trade calculation and account address preparation
@@ -264,12 +294,18 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
         sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
 
-        // Determine fee recipient based on mayhem mode (pump-public-docs: 2nd account = Mayhem fee recipient; use any one randomly)
-        let fee_recipient_meta = if is_mayhem_mode {
-            get_mayhem_fee_recipient_meta_random()
-        } else {
-            global_constants::FEE_RECIPIENT_META
-        };
+        let fee_recipient_meta =
+            if protocol_params.fee_recipient != Pubkey::default() {
+                AccountMeta {
+                    pubkey: protocol_params.fee_recipient,
+                    is_signer: false,
+                    is_writable: true,
+                }
+            } else if is_mayhem_mode {
+                get_mayhem_fee_recipient_meta_random()
+            } else {
+                get_standard_fee_recipient_meta_random()
+            };
 
         let mut accounts: Vec<AccountMeta> = vec![
             global_constants::GLOBAL_ACCOUNT_META,

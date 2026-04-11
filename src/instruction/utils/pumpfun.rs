@@ -1,8 +1,39 @@
 use crate::common::{bonding_curve::BondingCurveAccount, SolanaRpcClient};
 use anyhow::anyhow;
 use rand::seq::IndexedRandom;
-use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey};
+use solana_sdk::{
+    instruction::{AccountMeta, Instruction},
+    pubkey::Pubkey,
+};
 use std::sync::Arc;
+
+// --- Aligned with official `@pump-fun/pump-sdk` (npm) ---
+// - `src/fees.ts` `getFeeRecipient(global, mayhemMode)` — fee recipient pools
+// - `src/bondingCurve.ts` `CURRENT_FEE_RECIPIENTS` / `getStaticRandomFeeRecipient`
+// - `src/sdk.ts` `BONDING_CURVE_NEW_SIZE` (151) + `extendAccountInstruction` — **not** called from the
+//   trade hot path here (no RPC in `PumpFunInstructionBuilder`); use these helpers from a cold path if needed.
+
+/// Minimum bonding curve account data length after protocol upgrades (`sdk.ts` `BONDING_CURVE_NEW_SIZE`).
+pub const PUMP_BONDING_CURVE_MIN_DATA_LEN: usize = 151;
+
+/// Anchor discriminator for `extend_account` (`pump.json`); same as `PumpSdk.extendAccountInstruction`.
+pub const EXTEND_ACCOUNT_DISCRIMINATOR: [u8; 8] = [234, 102, 194, 203, 150, 72, 62, 229];
+
+/// Build `extend_account` for bonding curve (cold path / separate tx only — do not add RPC to hot-path builds).
+#[inline]
+pub fn extend_bonding_curve_account_instruction(bonding_curve: &Pubkey, user: &Pubkey) -> Instruction {
+    Instruction {
+        program_id: accounts::PUMPFUN,
+        accounts: vec![
+            AccountMeta::new(*bonding_curve, false),
+            AccountMeta::new(*user, true),
+            crate::constants::SYSTEM_PROGRAM_META,
+            accounts::EVENT_AUTHORITY_META,
+            accounts::PUMPFUN_META,
+        ],
+        data: EXTEND_ACCOUNT_DISCRIMINATOR.to_vec(),
+    }
+}
 
 /// Constants used as seeds for deriving PDAs (Program Derived Addresses)
 pub mod seeds {
@@ -190,13 +221,38 @@ pub fn is_amm_fee_recipient(pubkey: &Pubkey) -> bool {
         || pubkey == &global_constants::PUMPFUN_AMM_FEE_7
 }
 
-/// Returns a random Mayhem fee recipient AccountMeta (pump-public-docs: Bonding Curve 2nd account = Mayhem fee recipient; use any one randomly).
+/// Mayhem: random among `Global.reservedFeeRecipient` + `Global.reservedFeeRecipients` (`fees.ts` `getFeeRecipient` when `mayhemMode === true`).
+/// Uses hardcoded `MAYHEM_FEE_RECIPIENTS`; prefer gRPC/event `PumpFunParams.fee_recipient` when set.
 #[inline]
 pub fn get_mayhem_fee_recipient_meta_random() -> AccountMeta {
     let recipient = *global_constants::MAYHEM_FEE_RECIPIENTS
         .choose(&mut rand::rng())
         .unwrap_or(&global_constants::MAYHEM_FEE_RECIPIENTS[0]);
     AccountMeta { pubkey: recipient, is_signer: false, is_writable: true }
+}
+
+/// Non-mayhem: random among `Global::fee_recipient` + `Global::fee_recipients[0..7]`.
+/// Same pubkey set as `bondingCurve.ts` `CURRENT_FEE_RECIPIENTS` / `getStaticRandomFeeRecipient` and `fees.ts` `getFeeRecipient` when `mayhemMode === false`.
+#[inline]
+pub fn get_standard_fee_recipient_meta_random() -> AccountMeta {
+    const POOL: &[Pubkey] = &[
+        global_constants::FEE_RECIPIENT,
+        global_constants::PUMPFUN_AMM_FEE_1,
+        global_constants::PUMPFUN_AMM_FEE_2,
+        global_constants::PUMPFUN_AMM_FEE_3,
+        global_constants::PUMPFUN_AMM_FEE_4,
+        global_constants::PUMPFUN_AMM_FEE_5,
+        global_constants::PUMPFUN_AMM_FEE_6,
+        global_constants::PUMPFUN_AMM_FEE_7,
+    ];
+    let recipient = *POOL
+        .choose(&mut rand::rng())
+        .unwrap_or(&global_constants::FEE_RECIPIENT);
+    AccountMeta {
+        pubkey: recipient,
+        is_signer: false,
+        is_writable: true,
+    }
 }
 
 pub struct Symbol;

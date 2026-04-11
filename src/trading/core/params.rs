@@ -119,20 +119,22 @@ impl std::fmt::Debug for SwapParams {
 /// PumpFun protocol specific parameters
 /// Configuration parameters specific to PumpFun trading protocol.
 ///
-/// **Creator Rewards Sharing**: Some coins use a dynamic `creator_vault` (fee-sharing config).
-/// Always use the latest on-chain creator/vault when building params for **sell**; do not reuse
-/// cached params from buy. Either fetch fresh data via RPC, or pass `creator_vault` from gRPC
-/// using [`from_trade`](PumpFunParams::from_trade) / [`from_dev_trade`](PumpFunParams::from_dev_trade),
-/// or override with [`with_creator_vault`](PumpFunParams::with_creator_vault).
+/// **Creator vault**: Pump buy/sell instructions always pass `creator_vault` =
+/// `PDA(["creator-vault", bonding_curve.creator])` derived from [`BondingCurveAccount::creator`].
+/// Keep `bonding_curve.creator` in sync with chain (gRPC / RPC); stale `creator_vault` in this struct
+/// does not affect ix building.
 #[derive(Clone)]
 pub struct PumpFunParams {
     pub bonding_curve: Arc<BondingCurveAccount>,
     pub associated_bonding_curve: Pubkey,
-    /// Creator vault PDA. For Creator Rewards Sharing coins this can change; pass latest from gRPC when selling.
+    /// From events/parsed ix when set; else derived from `bonding_curve.creator`. Buy/sell prefer non-default.
     pub creator_vault: Pubkey,
     pub token_program: Pubkey,
     /// Whether to close token account when selling, only effective during sell operations
     pub close_token_account_when_sell: Option<bool>,
+    /// Fee recipient for buy/sell account #2. When set from gRPC (matches `@pump-fun/pump-sdk` `fees.ts` / observed trades), mirrors on-chain choice.
+    /// `Pubkey::default()` uses the same random pools as `getFeeRecipient` / `getStaticRandomFeeRecipient` in the npm SDK.
+    pub fee_recipient: Pubkey,
 }
 
 impl PumpFunParams {
@@ -147,6 +149,7 @@ impl PumpFunParams {
             creator_vault: creator_vault,
             token_program: token_program,
             close_token_account_when_sell: Some(close_token_account_when_sell),
+            fee_recipient: Pubkey::default(),
         }
     }
 
@@ -179,12 +182,19 @@ impl PumpFunParams {
             is_mayhem_mode,
             is_cashback_coin,
         );
+        let creator_vault_resolved = if creator_vault != Pubkey::default() {
+            creator_vault
+        } else {
+            crate::instruction::utils::pumpfun::get_creator_vault_pda(&bonding_curve_account.creator)
+                .unwrap_or_default()
+        };
         Self {
             bonding_curve: Arc::new(bonding_curve_account),
             associated_bonding_curve: associated_bonding_curve,
-            creator_vault: creator_vault,
+            creator_vault: creator_vault_resolved,
             close_token_account_when_sell: close_token_account_when_sell,
             token_program: token_program,
+            fee_recipient,
         }
     }
 
@@ -220,12 +230,19 @@ impl PumpFunParams {
             is_mayhem_mode,
             is_cashback_coin,
         );
+        let creator_vault_resolved = if creator_vault != Pubkey::default() {
+            creator_vault
+        } else {
+            crate::instruction::utils::pumpfun::get_creator_vault_pda(&bonding_curve.creator)
+                .unwrap_or_default()
+        };
         Self {
             bonding_curve: Arc::new(bonding_curve),
             associated_bonding_curve: associated_bonding_curve,
-            creator_vault: creator_vault,
+            creator_vault: creator_vault_resolved,
             close_token_account_when_sell: close_token_account_when_sell,
             token_program: token_program,
+            fee_recipient,
         }
     }
 
@@ -262,11 +279,11 @@ impl PumpFunParams {
             creator_vault: creator_vault.unwrap(),
             close_token_account_when_sell: None,
             token_program: mint_account.owner,
+            fee_recipient: Pubkey::default(),
         })
     }
 
-    /// Override `creator_vault` with a value from gRPC/event (e.g. for Creator Rewards Sharing).
-    /// Use when selling so the instruction uses the latest on-chain vault and avoids "seeds constraint violated" (2006).
+    /// Updates the cached `creator_vault` field only. Buy/sell ix use [`BondingCurveAccount::creator`].
     #[inline]
     pub fn with_creator_vault(mut self, creator_vault: Pubkey) -> Self {
         self.creator_vault = creator_vault;
