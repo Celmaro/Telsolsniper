@@ -171,215 +171,267 @@ pub const SPEEDLANDING_TIP_ACCOUNTS: &[Pubkey] = &[
     pubkey!("speede8xCcUq2Tiv1efXeTuE3k9TDNq8TnGKaKSc6J4"),
 ];
 
-// NewYork,
-// Frankfurt,
-// Amsterdam,
-// SLC,
-// Tokyo,
-// London,
-// LosAngeles,
-// Default,
+// `SwqosRegion` 与下列各 `SWQOS_ENDPOINTS_*` 下标严格对应（共 10 项）：
+// 0 NewYork, 1 Frankfurt, 2 Amsterdam, 3 Dublin, 4 SLC, 5 Tokyo, 6 Singapore, 7 London, 8 LosAngeles, 9 Default。
+//
+// **地理就近（用户语义）**：当某枚举区域没有该服务商**独立公布**的 PoP 时，在**该服务商已出现的端点集合内**，按真实地理位置选**大圆距离最近**的一项作为填充；行尾注释说明依据。
+// **例外**：`SwqosRegion::Default`（下标 9）不表示地球上的点，表中为全局 URL 或文档默认枢纽，**不适用**地理就近，仅表示「未指定区域时的回退」。
+// 若某区域仅有一种「大区」级入口（例如全美只有一个美东 PoP），则地理上非最优但只能复用，注释会标明「受服务商可用区限制」。
 
-pub const SWQOS_ENDPOINTS_JITO: [&str; 8] = [
+/// Jito mainnet block engines (`https://<region>.mainnet.block-engine.jito.wtf`).
+/// There is no Los Angeles engine → use Salt Lake City for `LosAngeles`; `SwqosRegion::Default` uses the global mainnet URL.
+pub const SWQOS_ENDPOINTS_JITO: [&str; 10] = [
     "https://ny.mainnet.block-engine.jito.wtf",
     "https://frankfurt.mainnet.block-engine.jito.wtf",
     "https://amsterdam.mainnet.block-engine.jito.wtf",
+    "https://dublin.mainnet.block-engine.jito.wtf",
     "https://slc.mainnet.block-engine.jito.wtf",
     "https://tokyo.mainnet.block-engine.jito.wtf",
+    "https://singapore.mainnet.block-engine.jito.wtf",
     "https://london.mainnet.block-engine.jito.wtf",
-    "https://ny.mainnet.block-engine.jito.wtf",
+    "https://slc.mainnet.block-engine.jito.wtf", // LosAngeles: no LA PoP; nearest US-West is SLC
     "https://mainnet.block-engine.jito.wtf",
 ];
 
-pub const SWQOS_ENDPOINTS_NEXTBLOCK: [&str; 8] = [
+/// NextBlock regional HTTP hosts (see provider docs). `SwqosRegion` order; no dedicated LA PoP → SLC as US-West fallback.
+pub const SWQOS_ENDPOINTS_NEXTBLOCK: [&str; 10] = [
     "http://ny.nextblock.io",
-    "http://frankfurt.nextblock.io",
-    "http://amsterdam.nextblock.io",
+    "http://fra.nextblock.io",
+    "http://ams.nextblock.io",
+    "http://dublin.nextblock.io",
     "http://slc.nextblock.io",
     "http://tokyo.nextblock.io",
+    "http://sgp.nextblock.io",
     "http://london.nextblock.io",
-    "http://singapore.nextblock.io",
-    "http://frankfurt.nextblock.io",
+    "http://slc.nextblock.io",
+    "http://fra.nextblock.io", // Default: 非地理区域；服务商无「全局」主机名时用 EU 枢纽作未选区回退
 ];
 
-pub const SWQOS_ENDPOINTS_ZERO_SLOT: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_ZERO_SLOT: [&str; 10] = [
     "http://ny.0slot.trade",
     "http://de2.0slot.trade", // Use de2 for TSW, and de1 for OVH
     "http://ams.0slot.trade",
-    "http://ny.0slot.trade",
+    "http://ams.0slot.trade", // Dublin: 无 IE 专用；在已公布 EU 点中选距爱尔兰最近的 ams（相对 de2 等）
+    "http://la.0slot.trade", // SLC: no UT PoP; nearest US-West published host
     "http://jp.0slot.trade",
-    "http://ams.0slot.trade",
+    "http://jp.0slot.trade", // SG: 无本地 PoP；已公布 APAC 仅 jp，为表中离新加坡最近的大圆距离
+    "http://ams.0slot.trade", // London: 无 UK 专用；已公布 EU 点中 ams 距伦敦最近之一
     "http://la.0slot.trade",
-    "http://de2.0slot.trade", // Use de2 for TSW, and de1 for OVH
+    "http://de2.0slot.trade", // Default: 非地理区域；EU 枢纽 de2 作未选区回退
 ];
 
-pub const SWQOS_ENDPOINTS_TEMPORAL: [&str; 8] = [
-    "http://ewr1.nozomi.temporal.xyz",
+/// Nozomi Direct regions: ewr1, fra2, ams1, lon1, lax1, tyo1, sgp1, …
+pub const SWQOS_ENDPOINTS_TEMPORAL: [&str; 10] = [
+    "http://ewr1.nozomi.temporal.xyz", // NewYork → Newark
     "http://fra2.nozomi.temporal.xyz",
     "http://ams1.nozomi.temporal.xyz",
-    "http://ewr1.nozomi.temporal.xyz",
+    "http://lon1.nozomi.temporal.xyz", // Dublin: no IE host; UK nearest Direct PoP
+    "http://lax1.nozomi.temporal.xyz", // SLC: US-West
     "http://tyo1.nozomi.temporal.xyz",
     "http://sgp1.nozomi.temporal.xyz",
-    "http://pit1.nozomi.temporal.xyz",
-    "http://fra2.nozomi.temporal.xyz",
+    "http://lon1.nozomi.temporal.xyz",
+    "http://lax1.nozomi.temporal.xyz",
+    "http://fra2.nozomi.temporal.xyz", // Default: 非地理区域；EU Direct 枢纽
 ];
 
-pub const SWQOS_ENDPOINTS_BLOX: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_BLOX: [&str; 10] = [
     "https://ny.solana.dex.blxrbdn.com",
     "https://germany.solana.dex.blxrbdn.com",
     "https://amsterdam.solana.dex.blxrbdn.com",
-    "https://ny.solana.dex.blxrbdn.com",
+    "https://uk.solana.dex.blxrbdn.com", // Dublin: IE/UK edge
+    "https://la.solana.dex.blxrbdn.com", // SLC: no Mountain PoP; US-West LA
     "https://tokyo.solana.dex.blxrbdn.com",
+    "https://tokyo.solana.dex.blxrbdn.com", // SG: 文档无 SGP 区域；已公布 APAC 仅 Tokyo，为距 SG 最近选项
     "https://uk.solana.dex.blxrbdn.com",
     "https://la.solana.dex.blxrbdn.com",
-    "https://global.solana.dex.blxrbdn.com",
+    "https://global.solana.dex.blxrbdn.com", // Default: 非地理区域；全球任播
 ];
 
-pub const SWQOS_ENDPOINTS_NODE1: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_NODE1: [&str; 10] = [
     "http://ny.node1.me",
     "http://fra.node1.me",
     "http://ams.node1.me",
-    "http://ny.node1.me",
+    "http://lon.node1.me", // Dublin: 已公布中英爱区域用 lon（地理上近爱尔兰）
+    "http://ny.node1.me", // SLC: 已公布美国仅 ny；美西无 PoP，受可用区限制复用美东
     "http://tk.node1.me",
+    "http://tk.node1.me", // SG: 已公布 APAC 仅 tk；地理上为表中离 SG 最近
     "http://lon.node1.me",
-    "http://ny.node1.me",
-    "http://fra.node1.me",
+    "http://ny.node1.me", // LosAngeles: 同上，美国仅 ny 入口
+    "http://fra.node1.me", // Default: 非地理区域；与 QUIC 对齐为 EU 枢纽
 ];
 
-/// Node1 QUIC: port 16666. Region order: NewYork, Frankfurt, Amsterdam, SLC→ny, Tokyo, London, LosAngeles→ny, Default→ny.
+/// Node1 QUIC: port 16666. Region order matches [`SwqosRegion`].
 /// server_name = host part (e.g. ny.node1.me). Auth: first bi stream = 16-byte UUID; each tx = new bi stream, bincode body.
-pub const SWQOS_ENDPOINTS_NODE1_QUIC: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_NODE1_QUIC: [&str; 10] = [
     "ny.node1.me:16666",
     "fra.node1.me:16666",
     "ams.node1.me:16666",
-    "ny.node1.me:16666", // SLC → ny
+    "lon.node1.me:16666",
+    "ny.node1.me:16666",
+    "tk.node1.me:16666",
     "tk.node1.me:16666",
     "lon.node1.me:16666",
-    "ny.node1.me:16666", // LA → ny
-    "ny.node1.me:16666", // Default → ny
+    "ny.node1.me:16666",
+    "fra.node1.me:16666", // Default: 非地理区域；与 HTTP 对齐为 EU 枢纽
 ];
 
-pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 8] = [
+/// Published: ny, slc, ams, fra, singapore, london, tokyo (no IE/UK split → london for Dublin).
+pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 10] = [
     "http://ny.flashblock.trade",
     "http://fra.flashblock.trade",
     "http://ams.flashblock.trade",
+    "http://london.flashblock.trade", // Dublin: no IE host; UK nearest
     "http://slc.flashblock.trade",
+    "http://tokyo.flashblock.trade",
     "http://singapore.flashblock.trade",
     "http://london.flashblock.trade",
-    "http://ny.flashblock.trade",
-    "http://ny.flashblock.trade",
+    "http://slc.flashblock.trade",
+    "http://fra.flashblock.trade", // Default: 非地理区域；EU 枢纽
 ];
 
 /// BlockRazor Send Transaction v2: plain-text Base64 body, auth in URI, Content-Type: text/plain. Keep-alive: POST /v2/health.
 /// 若 HTTP 返回 500，可尝试 HTTPS：https://<region>.solana.blockrazor.io/v2/sendTransaction（Frankfurt/NewYork/Tokyo），通过 custom_url 覆盖。
-pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 10] = [
     "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
     "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
     "http://amsterdam.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://london.solana.blockrazor.xyz:443/v2/sendTransaction", // Dublin: UK nearest published
+    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction", // SLC: 文档无美西；美国仅 NY，受可用区限制
     "http://tokyo.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://tokyo.solana.blockrazor.xyz:443/v2/sendTransaction", // SG: 已公布 APAC 仅 Tokyo，为距 SG 最近
     "http://london.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction", // LosAngeles: 无美西入口；美国仅 NY
+    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction", // Default: 非地理区域；EU 枢纽
 ];
 
-/// BlockRazor gRPC endpoints. Region order: NewYork, Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles, Default.
+/// BlockRazor gRPC endpoints. Region order matches [`SwqosRegion`].
 /// Port 80 for gRPC protocol. Auth: apikey metadata in gRPC headers.
-pub const SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC: [&str; 10] = [
     "http://newyork.solana-grpc.blockrazor.xyz:80",
     "http://frankfurt.solana-grpc.blockrazor.xyz:80",
     "http://amsterdam.solana-grpc.blockrazor.xyz:80",
-    "http://newyork.solana-grpc.blockrazor.xyz:80",
+    "http://london.solana-grpc.blockrazor.xyz:80",
+    "http://newyork.solana-grpc.blockrazor.xyz:80", // SLC: 与 HTTP 一致；美国仅 NY
+    "http://tokyo.solana-grpc.blockrazor.xyz:80",
     "http://tokyo.solana-grpc.blockrazor.xyz:80",
     "http://london.solana-grpc.blockrazor.xyz:80",
-    "http://newyork.solana-grpc.blockrazor.xyz:80",
-    "http://frankfurt.solana-grpc.blockrazor.xyz:80",
+    "http://newyork.solana-grpc.blockrazor.xyz:80", // LosAngeles: 与 HTTP 一致
+    "http://frankfurt.solana-grpc.blockrazor.xyz:80", // Default: 非地理区域
 ];
 
-/// Astralane binary API path (no Base64; use with ?api-key=...&method=sendTransaction|getHealth).
+/// Plain HTTP API path (`/iris?api-key=…&method=…`).
+pub const ASTRALANE_PATH_IRIS: &str = "iris";
+/// Binary HTTP API path (`/irisb?api-key=…&method=sendTransaction`, raw bincode body).
 pub const ASTRALANE_PATH_IRISB: &str = "irisb";
 
-pub const SWQOS_ENDPOINTS_ASTRALANE: [&str; 8] = [
+/// Astralane **Plain** HTTP gateways (`/iris`). Pair with [`ASTRALANE_PATH_IRIS`].
+pub const SWQOS_ENDPOINTS_ASTRALANE_PLAIN: [&str; 10] = [
+    "http://ny.gateway.astralane.io/iris",
+    "http://fr.gateway.astralane.io/iris",
+    "http://ams.gateway.astralane.io/iris",
+    "http://ams.gateway.astralane.io/iris", // Dublin: 无 IE 专用；在已公布 EU 点中选距爱尔兰最近的 ams
+    "http://la.gateway.astralane.io/iris",
+    "http://jp.gateway.astralane.io/iris",
+    "http://sg.gateway.astralane.io/iris",
+    "http://ams.gateway.astralane.io/iris", // London: 无 UK 专用；在已公布 EU 点中选距英国最近的 ams
+    "http://la.gateway.astralane.io/iris",
+    "https://edge.astralane.io/iris", // Default: 非地理区域；全局任播边缘
+];
+
+/// Astralane **Binary** HTTP gateways (`/irisb`). Pair with [`ASTRALANE_PATH_IRISB`].
+pub const SWQOS_ENDPOINTS_ASTRALANE_BINARY: [&str; 10] = [
     "http://ny.gateway.astralane.io/irisb",
     "http://fr.gateway.astralane.io/irisb",
     "http://ams.gateway.astralane.io/irisb",
-    "http://ny.gateway.astralane.io/irisb",
+    "http://ams.gateway.astralane.io/irisb", // Dublin: 同 Plain
+    "http://la.gateway.astralane.io/irisb",
     "http://jp.gateway.astralane.io/irisb",
-    "http://ny.gateway.astralane.io/irisb",
-    "http://lax.gateway.astralane.io/irisb",
-    "http://lim.gateway.astralane.io/irisb",
+    "http://sg.gateway.astralane.io/irisb",
+    "http://ams.gateway.astralane.io/irisb", // London: 同 Plain
+    "http://la.gateway.astralane.io/irisb",
+    "https://edge.astralane.io/irisb", // Default: 同 Plain
 ];
 
-/// Astralane QUIC endpoints (port 7000). Region order: NewYork, Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles, Default.
-/// See: https://github.com/Astralane/astralane-quic-client. We use fr, ams, la, ny, lim, sg only (avoid ams2/fr2 for lower latency).
-pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC: [&str; 8] = [
-    "ny.gateway.astralane.io:7000",  // NewYork
-    "fr.gateway.astralane.io:7000",  // Frankfurt
-    "ams.gateway.astralane.io:7000", // Amsterdam
-    "lim.gateway.astralane.io:7000", // SLC (no slc, use lim)
-    "sg.gateway.astralane.io:7000",  // Tokyo (Asia)
-    "ams.gateway.astralane.io:7000", // London (Europe, avoid ams2)
-    "la.gateway.astralane.io:7000",  // LosAngeles
-    "lim.gateway.astralane.io:7000", // Default
+/// Astralane QUIC endpoints (port 7000). Region order matches [`SwqosRegion`].
+/// See: https://github.com/Astralane/astralane-quic-client.
+pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC: [&str; 10] = [
+    "ny.gateway.astralane.io:7000",
+    "fr.gateway.astralane.io:7000",
+    "ams.gateway.astralane.io:7000",
+    "ams.gateway.astralane.io:7000", // Dublin: 同 HTTP
+    "la.gateway.astralane.io:7000", // SLC: 美西 la 为最近已公布美区入口
+    "jp.gateway.astralane.io:7000",
+    "sg.gateway.astralane.io:7000",
+    "ams.gateway.astralane.io:7000", // London: 同 HTTP
+    "la.gateway.astralane.io:7000",
+    "lim.gateway.astralane.io:7000", // Default: 非地理区域；全局边缘
 ];
 
 /// Astralane QUIC MEV-protected endpoints (port 9000). Same region order as SWQOS_ENDPOINTS_ASTRALANE_QUIC.
-/// Use these when mev_protection=true to route through Astralane's MEV-protected path.
-pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV: [&str; 8] = [
-    "ny.gateway.astralane.io:9000",  // NewYork
-    "fr.gateway.astralane.io:9000",  // Frankfurt
-    "ams.gateway.astralane.io:9000", // Amsterdam
-    "lim.gateway.astralane.io:9000", // SLC (no slc, use lim)
-    "sg.gateway.astralane.io:9000",  // Tokyo (Asia)
-    "ams.gateway.astralane.io:9000", // London (Europe)
-    "la.gateway.astralane.io:9000",  // LosAngeles
-    "lim.gateway.astralane.io:9000", // Default
+pub const SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV: [&str; 10] = [
+    "ny.gateway.astralane.io:9000",
+    "fr.gateway.astralane.io:9000",
+    "ams.gateway.astralane.io:9000",
+    "ams.gateway.astralane.io:9000",
+    "la.gateway.astralane.io:9000",
+    "jp.gateway.astralane.io:9000",
+    "sg.gateway.astralane.io:9000",
+    "ams.gateway.astralane.io:9000",
+    "la.gateway.astralane.io:9000",
+    "lim.gateway.astralane.io:9000",
 ];
 
-pub const SWQOS_ENDPOINTS_STELLIUM: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_STELLIUM: [&str; 10] = [
     "http://ewr1.flashrpc.com",
     "http://fra1.flashrpc.com",
     "http://ams1.flashrpc.com",
-    "http://ewr1.flashrpc.com",
+    "http://lhr1.flashrpc.com", // Dublin: 已公布 UK 用 lhr；地理上近爱尔兰
+    "http://ewr1.flashrpc.com", // SLC: 已公布美国仅 ewr；无美西 PoP，受可用区限制
     "http://tyo1.flashrpc.com",
+    "http://tyo1.flashrpc.com", // SG: 表中无 SGP；APAC 仅 tyo，为距 SG 最近
     "http://lhr1.flashrpc.com",
-    "http://ewr1.flashrpc.com",
-    "http://fra1.flashrpc.com",
+    "http://ewr1.flashrpc.com", // LosAngeles: 同上，美国仅 ewr
+    "http://fra1.flashrpc.com", // Default: 非地理区域；EU 枢纽
 ];
 
-pub const SWQOS_ENDPOINTS_SOYAS: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_SOYAS: [&str; 10] = [
     "nyc.landing.soyas.xyz:9000",
     "fra.landing.soyas.xyz:9000",
     "ams.landing.soyas.xyz:9000",
-    "nyc.landing.soyas.xyz:9000",
+    "lon.landing.soyas.xyz:9000", // Dublin: 已公布用 lon；地理近爱尔兰
+    "nyc.landing.soyas.xyz:9000", // SLC: 已公布美国仅 nyc；无美西
     "tyo.landing.soyas.xyz:9000",
+    "tyo.landing.soyas.xyz:9000", // SG: 表中 APAC 仅 tyo
     "lon.landing.soyas.xyz:9000",
-    "nyc.landing.soyas.xyz:9000",
-    "fra.landing.soyas.xyz:9000",
+    "nyc.landing.soyas.xyz:9000", // LosAngeles: 同上
+    "fra.landing.soyas.xyz:9000", // Default: 非地理区域；EU 枢纽
 ];
 
-pub const SWQOS_ENDPOINTS_SPEEDLANDING: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_SPEEDLANDING: [&str; 10] = [
     "nyc.speedlanding.trade:17778",
     "fra.speedlanding.trade:17778",
     "ams.speedlanding.trade:17778",
-    "nyc.speedlanding.trade:17778",
+    "ams.speedlanding.trade:17778", // Dublin: 已公布 EU 点中 ams 地理近爱尔兰
+    "nyc.speedlanding.trade:17778", // SLC: 表中美国仅 nyc；无美西 PoP，受可用区限制
     "tyo.speedlanding.trade:17778",
-    "fra.speedlanding.trade:17778",
-    "nyc.speedlanding.trade:17778",
-    "fra.speedlanding.trade:17778",
+    "sgp.speedlanding.trade:17778",
+    "ams.speedlanding.trade:17778", // London: 已公布 EU 中 ams 距英国最近之一
+    "nyc.speedlanding.trade:17778", // LosAngeles: 同上，美国仅 nyc
+    "fra.speedlanding.trade:17778", // Default: 非地理区域；EU 枢纽
 ];
 
 /// Helius Sender: POST /fast, dual routing to validators and Jito. API key optional (custom TPS only).
-/// Region order: NewYork(EWR), Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles(SG), Default(Global).
-pub const SWQOS_ENDPOINTS_HELIUS: [&str; 8] = [
+pub const SWQOS_ENDPOINTS_HELIUS: [&str; 10] = [
     "http://ewr-sender.helius-rpc.com/fast",
     "http://fra-sender.helius-rpc.com/fast",
     "http://ams-sender.helius-rpc.com/fast",
+    "http://lon-sender.helius-rpc.com/fast", // Dublin: IE → UK/EU routing
     "http://slc-sender.helius-rpc.com/fast",
     "http://tyo-sender.helius-rpc.com/fast",
-    "http://lon-sender.helius-rpc.com/fast",
     "http://sg-sender.helius-rpc.com/fast",
-    "https://sender.helius-rpc.com/fast",
+    "http://lon-sender.helius-rpc.com/fast",
+    "http://slc-sender.helius-rpc.com/fast",
+    "https://sender.helius-rpc.com/fast", // Default: 非地理区域；全局 Sender
 ];
 
 pub const SWQOS_MIN_TIP_DEFAULT: f64 = 0.00001; // 其它SWQOS默认最低小费
@@ -400,3 +452,73 @@ pub const SWQOS_MIN_TIP_SPEEDLANDING: f64 = 0.001; // Speedlanding requires mini
 pub const SWQOS_MIN_TIP_HELIUS: f64 = 0.0002;
 /// Helius Sender with swqos_only: minimum 0.000005 SOL (much lower tip allowed).
 pub const SWQOS_MIN_TIP_HELIUS_SWQOS_ONLY: f64 = 0.000005;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SWQOS_REGION_ENDPOINT_TABLES: &[&[&str]] = &[
+        &SWQOS_ENDPOINTS_JITO,
+        &SWQOS_ENDPOINTS_NEXTBLOCK,
+        &SWQOS_ENDPOINTS_ZERO_SLOT,
+        &SWQOS_ENDPOINTS_TEMPORAL,
+        &SWQOS_ENDPOINTS_BLOX,
+        &SWQOS_ENDPOINTS_NODE1,
+        &SWQOS_ENDPOINTS_NODE1_QUIC,
+        &SWQOS_ENDPOINTS_FLASHBLOCK,
+        &SWQOS_ENDPOINTS_BLOCKRAZOR,
+        &SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC,
+        &SWQOS_ENDPOINTS_ASTRALANE_PLAIN,
+        &SWQOS_ENDPOINTS_ASTRALANE_BINARY,
+        &SWQOS_ENDPOINTS_ASTRALANE_QUIC,
+        &SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV,
+        &SWQOS_ENDPOINTS_STELLIUM,
+        &SWQOS_ENDPOINTS_SOYAS,
+        &SWQOS_ENDPOINTS_SPEEDLANDING,
+        &SWQOS_ENDPOINTS_HELIUS,
+    ];
+
+    #[test]
+    fn all_swqos_endpoint_tables_align_with_swqos_region() {
+        const EXPECT: usize = 10;
+        for (idx, table) in SWQOS_REGION_ENDPOINT_TABLES.iter().enumerate() {
+            assert_eq!(
+                table.len(),
+                EXPECT,
+                "SWQOS endpoint table index {} length must match SwqosRegion (10 variants)",
+                idx
+            );
+        }
+    }
+
+    #[test]
+    fn astralane_quic_hosts_match_mev_row_by_row() {
+        for i in 0..10 {
+            let base = SWQOS_ENDPOINTS_ASTRALANE_QUIC[i].trim_end_matches(":7000");
+            let mev = SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[i].trim_end_matches(":9000");
+            assert_eq!(base, mev, "Astralane QUIC vs MEV host mismatch at index {}", i);
+        }
+    }
+
+    #[test]
+    fn node1_http_host_matches_quic_without_port() {
+        for i in 0..10 {
+            let http_host = SWQOS_ENDPOINTS_NODE1[i]
+                .strip_prefix("http://")
+                .expect("NODE1 HTTP URL");
+            let quic_host = SWQOS_ENDPOINTS_NODE1_QUIC[i]
+                .strip_suffix(":16666")
+                .expect("NODE1 QUIC endpoint");
+            assert_eq!(http_host, quic_host, "Node1 HTTP vs QUIC host mismatch at index {}", i);
+        }
+    }
+
+    #[test]
+    fn astralane_plain_and_binary_same_origin_per_region() {
+        for i in 0..10 {
+            let plain = SWQOS_ENDPOINTS_ASTRALANE_PLAIN[i].trim_end_matches("/iris");
+            let binary = SWQOS_ENDPOINTS_ASTRALANE_BINARY[i].trim_end_matches("/irisb");
+            assert_eq!(plain, binary, "Astralane Plain vs Binary base URL mismatch at index {}", i);
+        }
+    }
+}

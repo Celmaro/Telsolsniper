@@ -48,7 +48,7 @@
   - [⚡ Trading Parameters](#-trading-parameters)
   - [📊 Usage Examples Summary Table](#-usage-examples-summary-table)
   - [⚙️ SWQoS Service Configuration](#️-swqos-service-configuration)
-  - [Astralane QUIC (Low-Latency)](#astralane-quic-low-latency)
+  - [Astralane (Binary / Plain / QUIC)](#astralane-binary--plain--quic)
   - [🔧 Middleware System](#-middleware-system)
   - [🔍 Address Lookup Tables](#-address-lookup-tables)
   - [🔍 Nonce Cache](#-nonce-cache)
@@ -131,13 +131,13 @@ let swqos_configs: Vec<SwqosConfig> = vec![
     SwqosConfig::Default(rpc_url.clone()),
     SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt, None),
     SwqosConfig::Bloxroute("your api_token".to_string(), SwqosRegion::Frankfurt, None),
-    // Astralane: HTTP (4th param None) or QUIC (Some(SwqosTransport::Quic)); same API key
-    SwqosConfig::Astralane("your_astralane_api_key".to_string(), SwqosRegion::Frankfurt, None, None), // HTTP
+    // Astralane: 4th param = AstralaneTransport — Binary (default), Plain (/iris), or Quic
+    SwqosConfig::Astralane("your_astralane_api_key".to_string(), SwqosRegion::Frankfurt, None, None), // Binary HTTP /irisb
     SwqosConfig::Astralane(
         "your_astralane_api_key".to_string(),
         SwqosRegion::Frankfurt,
         None,
-        Some(SwqosTransport::Quic),
+        Some(AstralaneTransport::Quic),
     ), // QUIC
 ];
 // Create TradeConfig instance
@@ -147,7 +147,7 @@ let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
     // .log_enabled(true)                  // default: true  - SDK timing / SWQOS logs
     // .check_min_tip(false)               // default: false - filter SWQOS below min tip
     // .swqos_cores_from_end(false)        // default: false - bind SWQOS to last N CPU cores
-    // .mev_protection(false)              // default: false - MEV protection (Astralane port 9000 / BlockRazor sandwichMitigation)
+    // .mev_protection(false)              // default: false - MEV (Astralane QUIC :9000 or HTTP mev-protect / BlockRazor)
     .build();
 
 // Create TradingClient
@@ -280,28 +280,28 @@ let bloxroute_config = SwqosConfig::Bloxroute(
 
 When using multiple MEV services, you need to use `Durable Nonce`. You need to use the `fetch_nonce_info` function to get the latest `nonce` value, and use it as the `durable_nonce` when trading.
 
-#### Astralane QUIC (Low-Latency)
+#### Astralane (Binary / Plain HTTP / QUIC)
 
-Astralane supports both HTTP and **QUIC** transport. QUIC reduces connection overhead and can lower submission latency. To use the QUIC channel, pass `Some(SwqosTransport::Quic)` as the fourth parameter of `SwqosConfig::Astralane`. Astralane’s QUIC service uses a **single endpoint** (no per-region endpoints); the SDK ignores the `region` (and optional custom URL) when QUIC is selected. You can pass the same region as your other SWQoS configs for consistency.
+Astralane supports **Binary** HTTP (`/irisb`), **Plain** HTTP (`/iris`), and **QUIC** (`host:7000`, or `:9000` when global `mev_protection` is true). Pass `Some(AstralaneTransport::Plain)`, `Some(AstralaneTransport::Quic)`, or use `None` / omit for **Binary** (default). Global `mev_protection` adds `mev-protect=true` on HTTP or selects QUIC port 9000.
 
 ```rust
-use sol_trade_sdk::{SwqosConfig, SwqosRegion, SwqosTransport};
+use sol_trade_sdk::{SwqosConfig, SwqosRegion, AstralaneTransport};
 
-// Astralane over QUIC (low-latency); region is ignored (single QUIC endpoint)
 let swqos_configs: Vec<SwqosConfig> = vec![
     SwqosConfig::Default(rpc_url.clone()),
     SwqosConfig::Astralane(
         "your_astralane_api_key".to_string(),
-        SwqosRegion::Frankfurt,  // same as other services; ignored for QUIC
+        SwqosRegion::Frankfurt,
         None,
-        Some(SwqosTransport::Quic),
+        Some(AstralaneTransport::Quic),
     ),
 ];
 // Then create TradeConfig / TradingClient as usual with swqos_configs
 ```
 
-- **HTTP** (default): use `None` or `Some(SwqosTransport::Http)`; region and optional custom URL apply.
-- **QUIC**: use `Some(SwqosTransport::Quic)`; the SDK uses a single QUIC endpoint and ignores region. Same API key as HTTP.
+- **Binary** (default): `None` or `Some(AstralaneTransport::Binary)` — `/irisb`, bincode body.
+- **Plain**: `Some(AstralaneTransport::Plain)` — `/iris`.
+- **QUIC**: `Some(AstralaneTransport::Quic)` — regional `host:7000` / `:9000` (MEV); same API key.
 
 ---
 
@@ -364,7 +364,7 @@ You can apply for a key through the official website: [Community Website](https:
 - **FlashBlock**: High-speed transaction execution with API key authentication
 - **BlockRazor**: High-speed transaction execution with API key authentication
 - **Node1**: High-speed transaction execution with API key authentication 
-- **Astralane**: Blockchain network acceleration (supports HTTP and QUIC; see [Astralane QUIC](#astralane-quic-low-latency) above)
+- **Astralane**: Blockchain network acceleration (Binary/Plain HTTP and QUIC; see [Astralane](#astralane-binary--plain--quic) above)
 
 ## 📁 Project Structure
 

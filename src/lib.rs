@@ -19,8 +19,8 @@ use crate::swqos::common::TradeError;
 use crate::swqos::SwqosClient;
 use crate::swqos::SwqosConfig;
 use crate::swqos::TradeType;
-// Re-export for SWQOS HTTP/QUIC choice in SwqosConfig (e.g. Astralane)
-pub use crate::swqos::SwqosTransport;
+// Re-export for SwqosConfig (Node1/BlockRazor transport; Astralane submission mode)
+pub use crate::swqos::{AstralaneTransport, SwqosTransport};
 use crate::trading::core::params::BonkParams;
 use crate::trading::core::params::DexParamEnum;
 use crate::trading::core::params::MeteoraDammV2Params;

@@ -27,6 +27,8 @@ pub enum AstralaneBackend {
     Http {
         endpoint: String,
         auth_token: String,
+        /// Mirrors global `mev_protection`: adds `mev-protect=true` on HTTP sends (QUIC uses :9000 instead).
+        mev_http: bool,
         http_client: Client,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
@@ -77,8 +79,8 @@ impl SwqosClientTrait for AstralaneClient {
 }
 
 impl AstralaneClient {
-    /// 使用 HTTP（irisb）提交。
-    pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
+    /// HTTP 提交：`/iris`（Plain）或 `/irisb`（Binary），由 `endpoint` URL 路径区分；`mev_http` 为 true 时附加 `mev-protect=true`。
+    pub fn new(rpc_url: String, endpoint: String, auth_token: String, mev_http: bool) -> Self {
         let rpc_client = SolanaRpcClient::new(rpc_url);
         let http_client = default_http_client_builder().build().unwrap();
         let ping_handle = Arc::new(tokio::sync::Mutex::new(None));
@@ -89,6 +91,7 @@ impl AstralaneClient {
             backend: AstralaneBackend::Http {
                 endpoint,
                 auth_token,
+                mev_http,
                 http_client,
                 ping_handle,
                 stop_ping,
@@ -119,6 +122,7 @@ impl AstralaneClient {
                 http_client,
                 ping_handle,
                 stop_ping,
+                ..
             } => {
                 let endpoint = endpoint.clone();
                 let auth_token = auth_token.clone();
@@ -182,10 +186,14 @@ impl AstralaneClient {
             .map_err(|e| anyhow::anyhow!("Astralane binary serialize failed: {}", e))?;
 
         match &self.backend {
-            AstralaneBackend::Http { endpoint, auth_token, http_client, .. } => {
-                let response = http_client
+            AstralaneBackend::Http { endpoint, auth_token, mev_http, http_client, .. } => {
+                let mut req = http_client
                     .post(endpoint)
-                    .query(&[("api-key", auth_token.as_str()), ("method", "sendTransaction")])
+                    .query(&[("api-key", auth_token.as_str()), ("method", "sendTransaction")]);
+                if *mev_http {
+                    req = req.query(&[("mev-protect", "true")]);
+                }
+                let response = req
                     .header("Content-Type", "application/octet-stream")
                     .body(body_bytes)
                     .send()
