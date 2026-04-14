@@ -2,7 +2,6 @@ use crate::common::bonding_curve::BondingCurveAccount;
 use crate::common::nonce_cache::DurableNonceInfo;
 use crate::common::spl_associated_token_account::get_associated_token_address_with_program_id;
 use crate::common::{GasFeeStrategy, SolanaRpcClient};
-use crate::constants::TOKEN_PROGRAM;
 use core_affinity::CoreId;
 use crate::instruction::utils::pumpfun::is_mayhem_fee_recipient;
 
@@ -854,14 +853,27 @@ impl MeteoraDammV2Params {
     ) -> Result<Self, anyhow::Error> {
         let pool_data =
             crate::instruction::utils::meteora_damm_v2::fetch_pool(rpc, pool_address).await?;
+        let mint_accounts = rpc
+            .get_multiple_accounts(&[pool_data.token_a_mint, pool_data.token_b_mint])
+            .await?;
+        let token_a_program = mint_accounts
+            .get(0)
+            .and_then(|a| a.as_ref())
+            .map(|a| a.owner)
+            .ok_or_else(|| anyhow::anyhow!("Token A mint account not found"))?;
+        let token_b_program = mint_accounts
+            .get(1)
+            .and_then(|a| a.as_ref())
+            .map(|a| a.owner)
+            .ok_or_else(|| anyhow::anyhow!("Token B mint account not found"))?;
         Ok(Self {
             pool: *pool_address,
             token_a_vault: pool_data.token_a_vault,
             token_b_vault: pool_data.token_b_vault,
             token_a_mint: pool_data.token_a_mint,
             token_b_mint: pool_data.token_b_mint,
-            token_a_program: TOKEN_PROGRAM,
-            token_b_program: TOKEN_PROGRAM,
+            token_a_program,
+            token_b_program,
         })
     }
 }

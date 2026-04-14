@@ -87,7 +87,11 @@ impl InstructionBuilder for MeteoraDammV2InstructionBuilder {
                     &params.payer.pubkey(),
                     &params.payer.pubkey(),
                     &params.output_mint,
-                    &crate::constants::TOKEN_PROGRAM,
+                    if is_a_in {
+                        &protocol_params.token_b_program
+                    } else {
+                        &protocol_params.token_a_program
+                    },
                     params.open_seed_optimize,
                 ),
             );
