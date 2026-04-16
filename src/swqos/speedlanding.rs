@@ -6,7 +6,9 @@ use quinn::{
     TransportConfig,
 };
 use rand::seq::IndexedRandom as _;
+use solana_sdk::signer::Signer;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
+use solana_tls_utils::{new_dummy_x509_certificate, SkipServerVerification};
 use std::time::Instant;
 use std::{
     net::{SocketAddr, ToSocketAddrs as _},
@@ -25,69 +27,9 @@ use crate::{
     swqos::{SwqosType, TradeType},
 };
 
-// Skip server verification implementation
-#[derive(Debug)]
-struct SkipServerVerification;
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self)
-    }
-}
-
-impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::pki_types::CertificateDer<'_>,
-        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: rustls::pki_types::UnixTime,
-    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::danger::ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::pki_types::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
-    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        vec![rustls::SignatureScheme::ECDSA_NISTP256_SHA256]
-    }
-}
-
-// Generate dummy self-signed certificate using rcgen
-fn generate_self_signed_cert(_keypair: &Keypair) -> Result<(rustls::pki_types::CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>)> {
-    // Generate a new key pair for the certificate
-    let key_pair = rcgen::KeyPair::generate()?;
-    
-    let params = rcgen::CertificateParams::default();
-    let cert = params.self_signed(&key_pair)?;
-    
-    let cert_der = rustls::pki_types::CertificateDer::from(cert.der().to_vec());
-    let key_der = rustls::pki_types::PrivateKeyDer::try_from(key_pair.serialize_der())
-        .map_err(|e| anyhow::anyhow!("Failed to create private key: {:?}", e))?;
-    
-    Ok((cert_der, key_der))
-}
-
 const ALPN_TPU_PROTOCOL_ID: &[u8] = b"solana-tpu";
-/// Fallback SNI when endpoint is IP or cannot extract host (keeps legacy behavior).
-const SPEED_SERVER_FALLBACK: &str = "speed-landing";
+/// QUIC TLS SNI：与 Speedlanding 官方客户端一致，固定为 `speed-landing`（勿用 PoP 主机名，否则易握手失败）。
+const SPEED_SERVER: &str = "speed-landing";
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(25);
 const MAX_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -98,34 +40,21 @@ pub struct SpeedlandingClient {
     endpoint: Endpoint,
     client_config: ClientConfig,
     addr: SocketAddr,
-    /// TLS SNI: host from endpoint URL so server presents the right cert (e.g. nyc.speedlanding.trade).
-    server_name: String,
     connection: ArcSwap<Connection>,
     reconnect: Mutex<()>,
 }
 
 impl SpeedlandingClient {
-    /// Extract TLS SNI (host) from endpoint URL. Uses fallback "speed-landing" for IP or when host cannot be determined.
-    fn server_name_from_endpoint(endpoint: &str) -> String {
-        let without_scheme = endpoint
-            .strip_prefix("https://")
-            .or_else(|| endpoint.strip_prefix("http://"))
-            .unwrap_or(endpoint);
-        let host = without_scheme.split(':').next().unwrap_or("").trim();
-        if host.is_empty() {
-            return SPEED_SERVER_FALLBACK.to_string();
-        }
-        if !host.chars().any(|c| c.is_ascii_alphabetic()) {
-            return SPEED_SERVER_FALLBACK.to_string();
-        }
-        host.to_string()
-    }
-
     pub async fn new(rpc_url: String, endpoint_string: String, api_key: String) -> Result<Self> {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let server_name = Self::server_name_from_endpoint(&endpoint_string);
-        let keypair = Keypair::from_base58_string(&api_key);
-        let (cert, key) = generate_self_signed_cert(&keypair)?;
+        // Speedlanding QUIC：与官方一致使用 `solana_tls_utils::new_dummy_x509_certificate`（Ed25519 dummy cert）+ SNI `speed-landing`。
+        let keypair = Keypair::try_from_base58_string(api_key.trim()).map_err(|e| {
+            anyhow::anyhow!(
+                "Speedlanding api_token 无法解析为 Solana keypair base58（用于 mTLS）；请确认粘贴的是机器人提供的密钥而非其它字符串: {}",
+                e
+            )
+        })?;
+        let (cert, key) = new_dummy_x509_certificate(&keypair);
         let mut crypto = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(SkipServerVerification::new())
@@ -148,18 +77,23 @@ impl SpeedlandingClient {
             .to_socket_addrs()?
             .next()
             .ok_or_else(|| anyhow::anyhow!("Address not resolved"))?;
-        let connecting = endpoint.connect(addr, &server_name)?;
+        let connecting = endpoint.connect(addr, SPEED_SERVER)?;
         let connection = timeout(CONNECT_TIMEOUT, connecting)
             .await
             .context("Speedlanding QUIC connect timeout")?
-            .context("Speedlanding QUIC handshake failed")?;
+            .with_context(|| {
+                format!(
+                    "Speedlanding QUIC handshake failed（请确认：1) 机器人登记的身份与钱包公钥 {} 一致 2) 本机 UDP 可访问 {} 3) region 与 PoP 匹配）",
+                    keypair.pubkey(),
+                    endpoint_string
+                )
+            })?;
 
         Ok(Self {
             rpc_client: Arc::new(rpc_client),
             endpoint,
             client_config,
             addr,
-            server_name,
             connection: ArcSwap::from_pointee(connection),
             reconnect: Mutex::new(()),
         })
@@ -181,12 +115,17 @@ impl SpeedlandingClient {
             let connecting = self.endpoint.connect_with(
                 self.client_config.clone(),
                 self.addr,
-                self.server_name.as_str(),
+                SPEED_SERVER,
             )?;
             let connection = timeout(CONNECT_TIMEOUT, connecting)
                 .await
                 .context("Speedlanding QUIC reconnect timeout")?
-                .context("Speedlanding QUIC re-handshake failed")?;
+                .with_context(|| {
+                    format!(
+                        "Speedlanding QUIC re-handshake failed（对端 {} SNI {}）",
+                        self.addr, SPEED_SERVER
+                    )
+                })?;
             self.connection.store(Arc::new(connection));
             return Ok(self.connection.load_full());
         }
@@ -219,51 +158,61 @@ impl SwqosClientTrait for SpeedlandingClient {
             Ok(Err(_)) | Err(_) => true,
         };
         if need_retry {
-            if crate::common::sdk_log::sdk_log_enabled() {
-                eprintln!(" [Speedlanding] {} submission failed after {:?}, reconnecting", trade_type, start_time.elapsed());
-            }
+            eprintln!(
+                " [Speedlanding] {} QUIC 首次发送失败 {:?}，正在重试",
+                trade_type,
+                start_time.elapsed()
+            );
             let connection = self.ensure_connected().await?;
             send_result =
                 timeout(SEND_TIMEOUT, Self::try_send_bytes(&connection, &*buf_guard)).await;
         }
         match send_result.context("Speedlanding QUIC send timeout") {
             Ok(Ok(())) => {
-                if crate::common::sdk_log::sdk_log_enabled() {
-                    crate::common::sdk_log::log_swqos_submitted("Speedlanding", trade_type, start_time.elapsed());
-                }
+                // 提交结果与「详细耗时/SDK 开关」无关，便于确认当前通道确实在执行
+                crate::common::sdk_log::log_swqos_submitted("Speedlanding", trade_type, start_time.elapsed());
             }
             Ok(Err(e)) => {
-                if crate::common::sdk_log::sdk_log_enabled() {
-                    crate::common::sdk_log::log_swqos_submission_failed("Speedlanding", trade_type, start_time.elapsed(), &e);
-                }
+                crate::common::sdk_log::log_swqos_submission_failed(
+                    "Speedlanding",
+                    trade_type,
+                    start_time.elapsed(),
+                    &e,
+                );
                 return Err(e.into());
             }
             Err(e) => {
-                if crate::common::sdk_log::sdk_log_enabled() {
-                    crate::common::sdk_log::log_swqos_submission_failed("Speedlanding", trade_type, start_time.elapsed(), "timeout");
-                }
+                crate::common::sdk_log::log_swqos_submission_failed(
+                    "Speedlanding",
+                    trade_type,
+                    start_time.elapsed(),
+                    "timeout",
+                );
                 return Err(e.into());
             }
         }
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
-                if crate::common::sdk_log::sdk_log_enabled() {
-                    println!(" signature: {:?}", signature);
-                    println!(
-                        " [{:width$}] {} confirmation failed: {:?}",
-                        "Speedlanding",
-                        trade_type,
-                        start_time.elapsed(),
-                        width = crate::common::sdk_log::SWQOS_LABEL_WIDTH
-                    );
-                }
+                println!(" signature: {:?}", signature);
+                crate::common::sdk_log::log_swqos_submission_failed(
+                    "Speedlanding",
+                    trade_type,
+                    start_time.elapsed(),
+                    &e,
+                );
                 return Err(e);
             }
         }
-        if wait_confirmation && crate::common::sdk_log::sdk_log_enabled() {
+        if wait_confirmation {
             println!(" signature: {:?}", signature);
-            println!(" [{:width$}] {} confirmed: {:?}", "Speedlanding", trade_type, start_time.elapsed(), width = crate::common::sdk_log::SWQOS_LABEL_WIDTH);
+            println!(
+                " [{:width$}] {} confirmed: {:?}",
+                "Speedlanding",
+                trade_type,
+                start_time.elapsed(),
+                width = crate::common::sdk_log::SWQOS_LABEL_WIDTH
+            );
         }
         Ok(())
     }

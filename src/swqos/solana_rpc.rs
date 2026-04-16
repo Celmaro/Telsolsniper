@@ -7,7 +7,7 @@ use solana_transaction_status::UiTransactionEncoding;
 
 use crate::swqos::SwqosClientTrait;
 use crate::{
-    common::SolanaRpcClient,
+    common::{sdk_log, SolanaRpcClient},
     swqos::{common::poll_transaction_confirmation, SwqosType, TradeType},
 };
 use anyhow::Result;
@@ -25,6 +25,7 @@ impl SwqosClientTrait for SolRpcClient {
         transaction: &VersionedTransaction,
         wait_confirmation: bool,
     ) -> Result<()> {
+        let submit_start = Instant::now();
         let signature = self
             .rpc_client
             .send_transaction_with_config(
@@ -38,6 +39,8 @@ impl SwqosClientTrait for SolRpcClient {
                 },
             )
             .await?;
+
+        sdk_log::log_swqos_submitted("Default", trade_type, submit_start.elapsed());
 
         let start_time = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {

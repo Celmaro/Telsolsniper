@@ -6,7 +6,10 @@ use quinn::{
     TransportConfig,
 };
 use rand::seq::IndexedRandom as _;
+use rcgen::{CertificateParams, KeyPair as RcgenKeyPair};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use solana_client::rpc_client::SerializableTransaction;
+use solana_sdk::signer::Signer;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
 use std::time::Instant;
 use std::{
@@ -69,18 +72,17 @@ impl rustls::client::danger::ServerCertVerifier for SkipServerVerification {
     }
 }
 
-// Generate dummy self-signed certificate using rcgen
-fn generate_self_signed_cert(_keypair: &Keypair) -> Result<(rustls::pki_types::CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>)> {
-    // Generate a new key pair for the certificate
-    let key_pair = rcgen::KeyPair::generate()?;
-    
-    let params = rcgen::CertificateParams::default();
-    let cert = params.self_signed(&key_pair)?;
-    
-    let cert_der = rustls::pki_types::CertificateDer::from(cert.der().to_vec());
-    let key_der = rustls::pki_types::PrivateKeyDer::try_from(key_pair.serialize_der())
-        .map_err(|e| anyhow::anyhow!("Failed to create private key: {:?}", e))?;
-    
+/// TLS 客户端证书：ECDSA P-256 + CN=钱包公钥（与 Speedlanding / Astralane QUIC 策略一致）。
+fn generate_client_tls_credentials(keypair: &Keypair) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
+    let tls_key = RcgenKeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
+    let mut cert_params = CertificateParams::new(vec![])?;
+    cert_params.distinguished_name.push(
+        rcgen::DnType::CommonName,
+        rcgen::DnValue::Utf8String(keypair.pubkey().to_string()),
+    );
+    let cert = cert_params.self_signed(&tls_key)?;
+    let cert_der = CertificateDer::from(cert.der().to_vec());
+    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(tls_key.serialize_der()));
     Ok((cert_der, key_der))
 }
 
@@ -101,8 +103,13 @@ pub struct SoyasClient {
 impl SoyasClient {
     pub async fn new(rpc_url: String, endpoint_string: String, api_key: String) -> Result<Self> {
         let rpc_client = SolanaRpcClient::new(rpc_url);
-        let keypair = Keypair::from_base58_string(&api_key);
-        let (cert, key) = generate_self_signed_cert(&keypair)?;
+        let keypair = Keypair::try_from_base58_string(api_key.trim()).map_err(|e| {
+            anyhow::anyhow!(
+                "Soyas api_token 无法解析为 Solana keypair base58（QUIC mTLS 用）: {}",
+                e
+            )
+        })?;
+        let (cert, key) = generate_client_tls_credentials(&keypair)?;
         let mut crypto = rustls::ClientConfig::builder()
             .dangerous()
             .with_custom_certificate_verifier(SkipServerVerification::new())

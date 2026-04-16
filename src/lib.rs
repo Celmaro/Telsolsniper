@@ -136,8 +136,8 @@ impl TradingInfrastructure {
         }
         common::seed::start_rent_updater(rpc.clone());
 
-        // Create SWQOS clients with blacklist checking（单节点超时 5s，避免某一家卡死整段初始化）
-        const SWQOS_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+        // Create SWQOS clients with blacklist checking（QUIC 握手可能较慢，单节点超时 15s）
+        const SWQOS_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
         let mut swqos_clients: Vec<Arc<SwqosClient>> = vec![];
         for swqos in &config.swqos_configs {
             if swqos.is_blacklisted() {
@@ -159,6 +159,11 @@ impl TradingInfrastructure {
             {
                 Ok(Ok(swqos_client)) => swqos_clients.push(swqos_client),
                 Ok(Err(err)) => {
+                    eprintln!(
+                        "⚠️  SWQOS {:?} 初始化失败: {}（已从列表中排除）",
+                        swqos.swqos_type(),
+                        err
+                    );
                     if sdk_log::sdk_log_enabled() {
                         warn!(
                             target: "sol_trade_sdk",
@@ -168,6 +173,11 @@ impl TradingInfrastructure {
                     }
                 }
                 Err(_) => {
+                    eprintln!(
+                        "⚠️  SWQOS {:?} 初始化超时（{}s），已跳过",
+                        swqos.swqos_type(),
+                        SWQOS_CLIENT_TIMEOUT.as_secs()
+                    );
                     if sdk_log::sdk_log_enabled() {
                         warn!(
                             target: "sol_trade_sdk",
@@ -178,6 +188,52 @@ impl TradingInfrastructure {
                     }
                 }
             }
+        }
+
+        // 若全部失败、被黑名单跳过或仅配置了不可用通道，至少保留一条 Rpc Default，否则 execute_parallel 会因 swqos_clients 为空直接报错。
+        if swqos_clients.is_empty() {
+            eprintln!(
+                "⚠️  无任何 SWQOS 客户端初始化成功，将回退为普通 RPC 发送: {}",
+                config.rpc_url
+            );
+            if sdk_log::sdk_log_enabled() {
+                warn!(
+                    target: "sol_trade_sdk",
+                    "no SWQOS clients initialized; falling back to Rpc Default ({})",
+                    config.rpc_url
+                );
+            }
+            match SwqosConfig::get_swqos_client(
+                config.rpc_url.clone(),
+                config.commitment.clone(),
+                SwqosConfig::Default(config.rpc_url.clone()),
+                config.mev_protection,
+            )
+            .await
+            {
+                Ok(c) => swqos_clients.push(c),
+                Err(e) => {
+                    if sdk_log::sdk_log_enabled() {
+                        warn!(
+                            target: "sol_trade_sdk",
+                            "fallback Rpc Default client failed: {}",
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        if !swqos_clients.is_empty() {
+            let labels: Vec<&str> = swqos_clients
+                .iter()
+                .map(|c| c.get_swqos_type().as_str())
+                .collect();
+            eprintln!(
+                "ℹ️  SWQOS 通道已就绪: {} 条 → [{}]",
+                swqos_clients.len(),
+                labels.join(", ")
+            );
         }
 
         let swqos_count = swqos_clients.len();
