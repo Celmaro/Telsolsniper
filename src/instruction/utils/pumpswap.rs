@@ -91,6 +91,18 @@ pub mod accounts {
     /// Default Mayhem fee recipient (first of MAYHEM_FEE_RECIPIENTS)
     pub const MAYHEM_FEE_RECIPIENT: Pubkey = MAYHEM_FEE_RECIPIENTS[0];
 
+    /// Protocol extra fee recipients (Apr 2026 breaking upgrade). After `pool-v2`: recipient (readonly), then quote ATA (writable).
+    pub const PROTOCOL_EXTRA_FEE_RECIPIENTS: [Pubkey; 8] = [
+        pubkey!("5YxQFdt3Tr9zJLvkFccqXVUwhdTWJQc1fFg2YPbxvxeD"),
+        pubkey!("9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7"),
+        pubkey!("GXPFM2caqTtQYC2cJ5yJRi9VDkpsYZXzYdwYpGnLmtDL"),
+        pubkey!("3BpXnfJaUTiwXnJNe7Ej1rcbzqTTQUvLShZaWazebsVR"),
+        pubkey!("5cjcW9wExnJJiqgLjq7DEG75Pm6JBgE1hNv4B2vHXUW6"),
+        pubkey!("EHAAiTxcdDwQ3U4bU6YcMsQGaekdzLS3B5SmYo46kJtL"),
+        pubkey!("5eHhjP8JaYkz83CWwvGU2uMUXefd3AazWGx4gpcuEEYD"),
+        pubkey!("A7hAgCzFw14fejgCp387JUJRMNyz4j89JKnhtKU8piqW"),
+    ];
+
     // META
 
     pub const GLOBAL_ACCOUNT_META: solana_sdk::instruction::AccountMeta =
@@ -169,6 +181,14 @@ pub fn get_mayhem_fee_recipient_random() -> (Pubkey, AccountMeta) {
         .unwrap_or(&accounts::MAYHEM_FEE_RECIPIENTS[0]);
     let meta = AccountMeta { pubkey: recipient, is_signer: false, is_writable: false };
     (recipient, meta)
+}
+
+/// Random entry from [`accounts::PROTOCOL_EXTRA_FEE_RECIPIENTS`] (readonly; paired with [`fee_recipient_ata`] as last account).
+#[inline]
+pub fn get_protocol_extra_fee_recipient_random() -> Pubkey {
+    *accounts::PROTOCOL_EXTRA_FEE_RECIPIENTS
+        .choose(&mut rand::rng())
+        .unwrap_or(&accounts::PROTOCOL_EXTRA_FEE_RECIPIENTS[0])
 }
 
 /// Pool v2 PDA (seeds: ["pool-v2", base_mint]). Required at end of buy/sell/buy_exact_quote_in accounts.

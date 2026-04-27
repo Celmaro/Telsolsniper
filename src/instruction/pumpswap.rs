@@ -2,9 +2,9 @@ use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
     instruction::utils::pumpswap::{
         accounts, fee_recipient_ata, get_mayhem_fee_recipient_random, get_pool_v2_pda,
-        get_user_volume_accumulator_pda, get_user_volume_accumulator_quote_ata,
-        get_user_volume_accumulator_wsol_ata, BUY_DISCRIMINATOR, BUY_EXACT_QUOTE_IN_DISCRIMINATOR,
-        SELL_DISCRIMINATOR,
+        get_protocol_extra_fee_recipient_random, get_user_volume_accumulator_pda,
+        get_user_volume_accumulator_quote_ata, get_user_volume_accumulator_wsol_ata,
+        BUY_DISCRIMINATOR, BUY_EXACT_QUOTE_IN_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
     trading::{
         common::wsol_manager,
@@ -166,7 +166,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         }
 
         // Create buy instruction
-        let mut accounts = Vec::with_capacity(23);
+        let mut accounts = Vec::with_capacity(28);
         accounts.extend([
             AccountMeta::new(pool, false),                          // pool_id
             AccountMeta::new(params.payer.pubkey(), true),          // user (signer)
@@ -206,6 +206,13 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_v2 = get_pool_v2_pda(&base_mint)
             .ok_or_else(|| anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint))?;
         accounts.push(AccountMeta::new_readonly(pool_v2, false));
+        // Apr 2026: protocol fee recipient + quote ATA (after pool-v2)
+        let protocol_extra = get_protocol_extra_fee_recipient_random();
+        accounts.push(AccountMeta::new_readonly(protocol_extra, false));
+        accounts.push(AccountMeta::new(
+            crate::instruction::utils::pumpswap::fee_recipient_ata(protocol_extra, quote_mint),
+            false,
+        ));
 
         // Create instruction data（buy/buy_exact_quote_in 第三参数 track_volume: OptionBool，仅代币支持返现时传 Some(true)；sell 仅两参数）
         let track_volume = if protocol_params.is_cashback_coin { [1u8, 1u8] } else { [1u8, 0u8] }; // Some(true) / Some(false)
@@ -359,7 +366,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         }
 
         // Create sell instruction
-        let mut accounts = Vec::with_capacity(23);
+        let mut accounts = Vec::with_capacity(28);
         accounts.extend([
             AccountMeta::new(pool, false),                          // pool_id
             AccountMeta::new(params.payer.pubkey(), true),          // user (signer)
@@ -407,6 +414,12 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         let pool_v2 = get_pool_v2_pda(&base_mint)
             .ok_or_else(|| anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint))?;
         accounts.push(AccountMeta::new_readonly(pool_v2, false));
+        let protocol_extra = get_protocol_extra_fee_recipient_random();
+        accounts.push(AccountMeta::new_readonly(protocol_extra, false));
+        accounts.push(AccountMeta::new(
+            crate::instruction::utils::pumpswap::fee_recipient_ata(protocol_extra, quote_mint),
+            false,
+        ));
 
         // Create instruction data
         let mut data = [0u8; 24];
