@@ -23,7 +23,11 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::{str::FromStr, sync::Arc, time::Instant};
+use std::{
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::Notify;
 
 use fnv::FnvHasher;
@@ -402,13 +406,30 @@ impl ResultCollector {
         timeout_secs: u64,
     ) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<(SwqosType, i64)>)> {
         let start = Instant::now();
-        let timeout = std::time::Duration::from_secs(timeout_secs);
-        let poll_interval = std::time::Duration::from_millis(2);
+        let primary = Duration::from_secs(timeout_secs);
+        let poll_interval = Duration::from_millis(2);
         while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
-            if start.elapsed() > timeout {
+            if start.elapsed() > primary {
                 break;
             }
             tokio::time::sleep(poll_interval).await;
+        }
+        // 「不等待链上确认」仍会等各 SWQOS 的 HTTP 回包；主循环在收齐或触达 `timeout_secs` 后结束。
+        // 若主窗口到时仍有未回包通道，晚到的 TaskResult 若立刻 drain 会丢签名——仅在该路径上拉长 grace。
+        let all_submitted =
+            self.completed_count.load(Ordering::Acquire) >= self.total_tasks;
+        if all_submitted {
+            // 全数已登记：仅留极短 settle，避免极端情况下最后一笔与计数可见性竞态。
+            tokio::time::sleep(Duration::from_millis(35)).await;
+        } else {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
+                if start.elapsed() > primary + Duration::from_secs(6) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            tokio::time::sleep(Duration::from_millis(120)).await;
         }
         self.get_first()
     }
@@ -492,7 +513,11 @@ pub async fn execute_parallel(
     }
 
     // Task preparation completed: one shared context (clone once per batch), then minimal per-task data.
-    let collector = Arc::new(ResultCollector::new(task_configs.len()));
+    let channel_count = task_configs.len().max(1);
+    let collector = Arc::new(ResultCollector::new(channel_count));
+    // 上限最多 5s：单路卡死时才会等满；若所有通道在窗口内回完，主循环会提前结束（不睡满秒数）。
+    let submit_timeout_secs: u64 =
+        (3u64 + (channel_count.min(16) as u64).div_ceil(2).min(6)).clamp(3, 5);
     let shared = Arc::new(SwqosSharedContext {
         payer,
         instructions,
@@ -562,13 +587,20 @@ pub async fn execute_parallel(
     // All jobs enqueued (no spawn on hot path)
 
     if !wait_transaction_confirmed {
-        const SUBMIT_TIMEOUT_SECS: u64 = 2;//无需确认的交易，一般2秒合适了 一般2秒内发送全都返回 没返回的也不等了，没返回的就是太慢的swqos 
-        let ret = collector.wait_for_all_submitted(SUBMIT_TIMEOUT_SECS).await.unwrap_or((
-            false,
-            vec![],
-            Some(anyhow!("No SWQOS result within {}s", SUBMIT_TIMEOUT_SECS)),
-            vec![],
-        ));
+        // submit_timeout_secs 为「等齐各 SWQOS HTTP 应答」的上限；收齐后会立刻进入短 settle，不会睡满整段秒数。
+        // `wait_for_all_submitted` 仅在未收齐时追加长 grace，避免过早 drain 丢晚到签名。
+        let ret = collector
+            .wait_for_all_submitted(submit_timeout_secs)
+            .await
+            .unwrap_or((
+                false,
+                vec![],
+                Some(anyhow!(
+                    "No SWQOS result within grace window (primary {}s)",
+                    submit_timeout_secs
+                )),
+                vec![],
+            ));
         let (success, signatures, last_error, submit_timings) = ret;
         return Ok((success, signatures, last_error, submit_timings));
     }
