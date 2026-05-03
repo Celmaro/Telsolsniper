@@ -6,6 +6,21 @@ use crate::instruction::utils::pumpswap::accounts::{
 };
 use solana_sdk::pubkey::Pubkey;
 
+/// Creator-side fee bps: fixed coin-creator fee when a creator vault applies, plus optional
+/// cashback fee bps for cashback-enabled coins (see Pump AMM / parser event field).
+#[inline]
+pub(crate) fn creator_side_fee_basis_points(
+    coin_creator: &Pubkey,
+    cashback_fee_basis_points: u64,
+) -> u64 {
+    let creator_bps = if *coin_creator == Pubkey::default() {
+        0
+    } else {
+        COIN_CREATOR_FEE_BASIS_POINTS
+    };
+    creator_bps.saturating_add(cashback_fee_basis_points)
+}
+
 /// Result for buying base tokens with base amount input
 #[derive(Clone, Debug)]
 pub struct BuyBaseInputResult {
@@ -58,6 +73,7 @@ pub struct SellQuoteInputResult {
 /// * `base_reserve` - Base token reserves in the pool
 /// * `quote_reserve` - Quote token reserves in the pool
 /// * `coin_creator` - Token creator address
+/// * `cashback_fee_basis_points` - Extra fee bps for cashback coins (from on-chain / events); use `0` if unknown
 ///
 /// # Returns
 /// * `BuyBaseInputResult` containing quote amounts and slippage calculations
@@ -67,6 +83,7 @@ pub fn buy_base_input_internal(
     base_reserve: u64,
     quote_reserve: u64,
     coin_creator: &Pubkey,
+    cashback_fee_basis_points: u64,
 ) -> Result<BuyBaseInputResult, String> {
     if base_reserve == 0 || quote_reserve == 0 {
         return Err("Invalid input: 'baseReserve' or 'quoteReserve' cannot be zero.".to_string());
@@ -89,11 +106,9 @@ pub fn buy_base_input_internal(
     let lp_fee = compute_fee(quote_amount_in as u128, LP_FEE_BASIS_POINTS as u128) as u64;
     let protocol_fee =
         compute_fee(quote_amount_in as u128, PROTOCOL_FEE_BASIS_POINTS as u128) as u64;
-    let coin_creator_fee = if *coin_creator == Pubkey::default() {
-        0
-    } else {
-        compute_fee(quote_amount_in as u128, COIN_CREATOR_FEE_BASIS_POINTS as u128) as u64
-    };
+    let creator_bps =
+        creator_side_fee_basis_points(coin_creator, cashback_fee_basis_points) as u128;
+    let coin_creator_fee = compute_fee(quote_amount_in as u128, creator_bps) as u64;
     let total_quote = quote_amount_in + lp_fee + protocol_fee + coin_creator_fee;
 
     // Calculate max quote with slippage
@@ -114,6 +129,7 @@ pub fn buy_base_input_internal(
 /// * `base_reserve` - Base token reserves in the pool
 /// * `quote_reserve` - Quote token reserves in the pool
 /// * `coin_creator` - Token creator address
+/// * `cashback_fee_basis_points` - Extra fee bps for cashback coins; use `0` if unknown
 ///
 /// # Returns
 /// * `BuyQuoteInputResult` containing base amount and slippage calculations
@@ -123,6 +139,7 @@ pub fn buy_quote_input_internal(
     base_reserve: u64,
     quote_reserve: u64,
     coin_creator: &Pubkey,
+    cashback_fee_basis_points: u64,
 ) -> Result<BuyQuoteInputResult, String> {
     if base_reserve == 0 || quote_reserve == 0 {
         return Err("Invalid input: 'baseReserve' or 'quoteReserve' cannot be zero.".to_string());
@@ -131,7 +148,7 @@ pub fn buy_quote_input_internal(
     // Calculate total fee basis points
     let total_fee_bps = LP_FEE_BASIS_POINTS
         + PROTOCOL_FEE_BASIS_POINTS
-        + if *coin_creator == Pubkey::default() { 0 } else { COIN_CREATOR_FEE_BASIS_POINTS };
+        + creator_side_fee_basis_points(coin_creator, cashback_fee_basis_points);
     let denominator = 10_000 + total_fee_bps;
 
     // Calculate effective quote amount after fees
@@ -165,6 +182,7 @@ pub fn buy_quote_input_internal(
 /// * `base_reserve` - Base token reserves in the pool
 /// * `quote_reserve` - Quote token reserves in the pool
 /// * `coin_creator` - Token creator address
+/// * `cashback_fee_basis_points` - Extra fee bps for cashback coins; use `0` if unknown
 ///
 /// # Returns
 /// * `SellBaseInputResult` containing quote amounts and slippage calculations
@@ -174,6 +192,7 @@ pub fn sell_base_input_internal(
     base_reserve: u64,
     quote_reserve: u64,
     coin_creator: &Pubkey,
+    cashback_fee_basis_points: u64,
 ) -> Result<SellBaseInputResult, String> {
     if base_reserve == 0 || quote_reserve == 0 {
         return Err("Invalid input: 'baseReserve' or 'quoteReserve' cannot be zero.".to_string());
@@ -187,11 +206,9 @@ pub fn sell_base_input_internal(
     let lp_fee = compute_fee(quote_amount_out as u128, LP_FEE_BASIS_POINTS as u128) as u64;
     let protocol_fee =
         compute_fee(quote_amount_out as u128, PROTOCOL_FEE_BASIS_POINTS as u128) as u64;
-    let coin_creator_fee = if *coin_creator == Pubkey::default() {
-        0
-    } else {
-        compute_fee(quote_amount_out as u128, COIN_CREATOR_FEE_BASIS_POINTS as u128) as u64
-    };
+    let creator_bps =
+        creator_side_fee_basis_points(coin_creator, cashback_fee_basis_points) as u128;
+    let coin_creator_fee = compute_fee(quote_amount_out as u128, creator_bps) as u64;
 
     // Calculate final quote after fees
     let total_fees = lp_fee + protocol_fee + coin_creator_fee;
@@ -234,6 +251,7 @@ fn calculate_quote_amount_out(
 /// * `base_reserve` - Base token reserves in the pool
 /// * `quote_reserve` - Quote token reserves in the pool
 /// * `coin_creator` - Token creator address
+/// * `cashback_fee_basis_points` - Extra fee bps for cashback coins; use `0` if unknown
 ///
 /// # Returns
 /// * `SellQuoteInputResult` containing base amount and slippage calculations
@@ -243,6 +261,7 @@ pub fn sell_quote_input_internal(
     base_reserve: u64,
     quote_reserve: u64,
     coin_creator: &Pubkey,
+    cashback_fee_basis_points: u64,
 ) -> Result<SellQuoteInputResult, String> {
     if base_reserve == 0 || quote_reserve == 0 {
         return Err("Invalid input: 'baseReserve' or 'quoteReserve' cannot be zero.".to_string());
@@ -256,7 +275,7 @@ pub fn sell_quote_input_internal(
         quote,
         LP_FEE_BASIS_POINTS,
         PROTOCOL_FEE_BASIS_POINTS,
-        if *coin_creator == Pubkey::default() { 0 } else { COIN_CREATOR_FEE_BASIS_POINTS },
+        creator_side_fee_basis_points(coin_creator, cashback_fee_basis_points),
     );
 
     // Calculate base amount needed using inverse constant product formula

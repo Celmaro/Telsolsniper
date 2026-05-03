@@ -91,7 +91,9 @@ pub mod accounts {
     /// Default Mayhem fee recipient (first of MAYHEM_FEE_RECIPIENTS)
     pub const MAYHEM_FEE_RECIPIENT: Pubkey = MAYHEM_FEE_RECIPIENTS[0];
 
-    /// Protocol extra fee recipients (Apr 2026 breaking upgrade). After `pool-v2`: recipient (readonly), then quote ATA (writable).
+    /// Buyback trailing fee recipients (`GlobalConfig.buyback_fee_recipients` on Pump AMM).
+    /// Must match one of these for the pubkey passed after optional `pool-v2` (`@pump-fun/pump-swap-sdk` `getBuybackFeeRecipient`).
+    /// Static mirror of pump-public-docs; if protocol rotates configs, decode global_config from RPC.
     pub const PROTOCOL_EXTRA_FEE_RECIPIENTS: [Pubkey; 8] = [
         pubkey!("5YxQFdt3Tr9zJLvkFccqXVUwhdTWJQc1fFg2YPbxvxeD"),
         pubkey!("9M4giFFMxmFGXtc3feFzRai56WbBqehoSeRE5GK7gf7"),

@@ -338,8 +338,17 @@ pub struct PumpSwapParams {
     pub quote_token_program: Pubkey,
     /// Whether the pool is in mayhem mode
     pub is_mayhem_mode: bool,
+    /// Pool [`Pool::coin_creator`](crate::instruction::utils::pumpswap_types::Pool). Used for PumpSwap
+    /// `remaining_accounts`: **`pool-v2` is appended only when this is not `Pubkey::default()`
+    /// (matches `@pump-fun/pump-swap-sdk`); wrong flag causes buys to revert with buyback recipient errors (e.g. 6053).
+    pub coin_creator: Pubkey,
     /// Whether the pool's coin has cashback enabled
     pub is_cashback_coin: bool,
+    /// Cashback fee in basis points (from trade events / sol-parser-sdk). For quote-in buy and base-in sell
+    /// math, this is summed with [`COIN_CREATOR_FEE_BASIS_POINTS`](crate::instruction::utils::pumpswap::accounts::COIN_CREATOR_FEE_BASIS_POINTS)
+    /// when a creator vault applies — matching on-chain treating creator + cashback as one fee bucket.
+    /// Use `0` when unknown (e.g. RPC-only pool decode has no per-mint cashback bps).
+    pub cashback_fee_basis_points: u64,
 }
 
 impl PumpSwapParams {
@@ -356,7 +365,9 @@ impl PumpSwapParams {
         base_token_program: Pubkey,
         quote_token_program: Pubkey,
         fee_recipient: Pubkey,
+        coin_creator: Pubkey,
         is_cashback_coin: bool,
+        cashback_fee_basis_points: u64,
     ) -> Self {
         let is_mayhem_mode = fee_recipient == MAYHEM_FEE_RECIPIENT_SWAP;
         Self {
@@ -372,7 +383,9 @@ impl PumpSwapParams {
             base_token_program,
             quote_token_program,
             is_mayhem_mode,
+            coin_creator,
             is_cashback_coin,
+            cashback_fee_basis_points,
         }
     }
 
@@ -398,7 +411,9 @@ impl PumpSwapParams {
         base_token_program: Pubkey,
         quote_token_program: Pubkey,
         fee_recipient: Pubkey,
+        coin_creator: Pubkey,
         is_cashback_coin: bool,
+        cashback_fee_basis_points: u64,
     ) -> Self {
         Self::new(
             pool,
@@ -413,7 +428,9 @@ impl PumpSwapParams {
             base_token_program,
             quote_token_program,
             fee_recipient,
+            coin_creator,
             is_cashback_coin,
+            cashback_fee_basis_points,
         )
     }
 
@@ -495,6 +512,8 @@ impl PumpSwapParams {
                 crate::constants::TOKEN_PROGRAM_2022
             },
             is_mayhem_mode: pool_data.is_mayhem_mode,
+            coin_creator: pool_data.coin_creator,
+            cashback_fee_basis_points: 0,
         })
     }
 }

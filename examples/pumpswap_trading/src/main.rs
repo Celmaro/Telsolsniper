@@ -162,7 +162,9 @@ async fn pumpswap_trade_with_grpc_buy_event(trade_info: PumpSwapBuyEvent) -> Any
         trade_info.base_token_program,
         trade_info.quote_token_program,
         trade_info.protocol_fee_recipient,
+        pool_data.coin_creator,
         pool_data.is_cashback_coin,
+        trade_info.cashback_fee_basis_points,
     );
     let mint = if trade_info.base_mint == sol_trade_sdk::constants::USDC_TOKEN_ACCOUNT
         || trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT
@@ -191,7 +193,9 @@ async fn pumpswap_trade_with_grpc_sell_event(trade_info: PumpSwapSellEvent) -> A
         trade_info.base_token_program,
         trade_info.quote_token_program,
         trade_info.protocol_fee_recipient,
+        pool_data.coin_creator,
         pool_data.is_cashback_coin,
+        trade_info.cashback_fee_basis_points,
     );
     let mint = if trade_info.base_mint == sol_trade_sdk::constants::USDC_TOKEN_ACCOUNT
         || trade_info.base_mint == sol_trade_sdk::constants::WSOL_TOKEN_ACCOUNT

@@ -76,6 +76,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         if params_coin_creator_vault_authority != accounts::DEFAULT_COIN_CREATOR_VAULT_AUTHORITY {
             creator = params_coin_creator_vault_authority;
         }
+        let cashback_fee_bps = protocol_params.cashback_fee_basis_points;
 
         let (mut token_amount, sol_amount) = if quote_is_wsol_or_usdc {
             let result = buy_quote_input_internal(
@@ -84,6 +85,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
                 &creator,
+                cashback_fee_bps,
             )
             .unwrap();
             // base_amount_out, max_quote_amount_in
@@ -95,6 +97,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
                 &creator,
+                cashback_fee_bps,
             )
             .unwrap();
             // min_quote_amount_out, base_amount_in
@@ -202,11 +205,15 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 accounts.push(AccountMeta::new(wsol_ata, false));
             }
         }
-        // remainingAccounts: @pump-fun/pump-swap-sdk 要求末尾传 poolV2Pda(baseMint)，勿删
-        let pool_v2 = get_pool_v2_pda(&base_mint)
-            .ok_or_else(|| anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint))?;
-        accounts.push(AccountMeta::new_readonly(pool_v2, false));
-        // Apr 2026: protocol fee recipient + quote ATA (after pool-v2)
+        // `pool-v2` only when coin_creator ≠ default (@pump-fun/pump-swap-sdk remainingAccounts)；
+        // 否则多出的一格会把 buyback pubkey 错位，触发 BuybackFeeRecipientNotAuthorized（6053）。
+        if protocol_params.coin_creator != Pubkey::default() {
+            let pool_v2 = get_pool_v2_pda(&base_mint).ok_or_else(|| {
+                anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint)
+            })?;
+            accounts.push(AccountMeta::new_readonly(pool_v2, false));
+        }
+        // Trailing accounts: GlobalConfig.buyback_fee_recipients 中任 pubkey + quote ATA（与 pump-swap-sdk 静态池对齐；轮换时需查链上）。
         let protocol_extra = get_protocol_extra_fee_recipient_random();
         accounts.push(AccountMeta::new_readonly(protocol_extra, false));
         accounts.push(AccountMeta::new(
@@ -299,6 +306,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
         if params_coin_creator_vault_authority != accounts::DEFAULT_COIN_CREATOR_VAULT_AUTHORITY {
             creator = params_coin_creator_vault_authority;
         }
+        let cashback_fee_bps = protocol_params.cashback_fee_basis_points;
 
         let (token_amount, mut sol_amount) = if quote_is_wsol_or_usdc {
             let result = sell_base_input_internal(
@@ -307,6 +315,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
                 &creator,
+                cashback_fee_bps,
             )
             .unwrap();
             // base_amount_in, min_quote_amount_out
@@ -318,6 +327,7 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 pool_base_token_reserves,
                 pool_quote_token_reserves,
                 &creator,
+                cashback_fee_bps,
             )
             .unwrap();
             // max_quote_amount_in, base_amount_out
@@ -410,10 +420,12 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
                 accounts.push(AccountMeta::new(accumulator, false));
             }
         }
-        // remainingAccounts: @pump-fun/pump-swap-sdk sell 要求末尾传 poolV2Pda(baseMint)，勿删
-        let pool_v2 = get_pool_v2_pda(&base_mint)
-            .ok_or_else(|| anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint))?;
-        accounts.push(AccountMeta::new_readonly(pool_v2, false));
+        if protocol_params.coin_creator != Pubkey::default() {
+            let pool_v2 = get_pool_v2_pda(&base_mint).ok_or_else(|| {
+                anyhow!("pool_v2 PDA derivation failed for base_mint {}", base_mint)
+            })?;
+            accounts.push(AccountMeta::new_readonly(pool_v2, false));
+        }
         let protocol_extra = get_protocol_extra_fee_recipient_random();
         accounts.push(AccountMeta::new_readonly(protocol_extra, false));
         accounts.push(AccountMeta::new(
