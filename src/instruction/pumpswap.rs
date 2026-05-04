@@ -1,10 +1,13 @@
 use crate::{
     constants::trade::trade::DEFAULT_SLIPPAGE,
+    instruction::pumpswap_ix_data::{
+        encode_pumpswap_buy_exact_quote_in_ix_data, encode_pumpswap_buy_ix_data,
+        encode_pumpswap_buy_two_args, encode_pumpswap_sell_ix_data,
+    },
     instruction::utils::pumpswap::{
         accounts, fee_recipient_ata, get_mayhem_fee_recipient_random, get_pool_v2_pda,
         get_protocol_extra_fee_recipient_random, get_user_volume_accumulator_pda,
         get_user_volume_accumulator_quote_ata, get_user_volume_accumulator_wsol_ata,
-        BUY_DISCRIMINATOR, BUY_EXACT_QUOTE_IN_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
     trading::{
         common::wsol_manager,
@@ -221,35 +224,35 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             false,
         ));
 
-        // Create instruction data（buy/buy_exact_quote_in 第三参数 track_volume: OptionBool，仅代币支持返现时传 Some(true)；sell 仅两参数）
-        let track_volume = if protocol_params.is_cashback_coin { [1u8, 1u8] } else { [1u8, 0u8] }; // Some(true) / Some(false)
-        let data: Vec<u8> = if quote_is_wsol_or_usdc {
-            let mut buf = [0u8; 26];
-            if params.use_exact_sol_amount.unwrap_or(true) {
+        // buy / buy_exact_quote_in：栈上 `[u8;25]` + `new_with_bytes`，避免每笔 `Vec` 堆分配。
+        let track_volume: u8 = if protocol_params.is_cashback_coin { 1 } else { 0 };
+        if quote_is_wsol_or_usdc {
+            let ix_data = if params.use_exact_sol_amount.unwrap_or(true) {
                 let min_base_amount_out = crate::utils::calc::common::calculate_with_slippage_sell(
                     token_amount,
                     params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
                 );
-                buf[..8].copy_from_slice(&BUY_EXACT_QUOTE_IN_DISCRIMINATOR);
-                buf[8..16].copy_from_slice(&params.input_amount.unwrap_or(0).to_le_bytes());
-                buf[16..24].copy_from_slice(&min_base_amount_out.to_le_bytes());
-                buf[24..26].copy_from_slice(&track_volume);
+                encode_pumpswap_buy_exact_quote_in_ix_data(
+                    params.input_amount.unwrap_or(0),
+                    min_base_amount_out,
+                    track_volume,
+                )
             } else {
-                buf[..8].copy_from_slice(&BUY_DISCRIMINATOR);
-                buf[8..16].copy_from_slice(&token_amount.to_le_bytes());
-                buf[16..24].copy_from_slice(&sol_amount.to_le_bytes());
-                buf[24..26].copy_from_slice(&track_volume);
-            }
-            buf.to_vec()
+                encode_pumpswap_buy_ix_data(token_amount, sol_amount, track_volume)
+            };
+            instructions.push(Instruction::new_with_bytes(
+                accounts::AMM_PROGRAM,
+                &ix_data,
+                accounts,
+            ));
         } else {
-            let mut buf = [0u8; 24];
-            buf[..8].copy_from_slice(&SELL_DISCRIMINATOR);
-            buf[8..16].copy_from_slice(&sol_amount.to_le_bytes());
-            buf[16..24].copy_from_slice(&token_amount.to_le_bytes());
-            buf.to_vec()
-        };
-
-        instructions.push(Instruction { program_id: accounts::AMM_PROGRAM, accounts, data });
+            let ix_data = encode_pumpswap_sell_ix_data(sol_amount, token_amount);
+            instructions.push(Instruction::new_with_bytes(
+                accounts::AMM_PROGRAM,
+                &ix_data,
+                accounts,
+            ));
+        }
         if close_wsol_ata {
             // Close wSOL ATA account, reclaim rent
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));
@@ -433,27 +436,14 @@ impl InstructionBuilder for PumpSwapInstructionBuilder {
             false,
         ));
 
-        // Create instruction data
-        let mut data = [0u8; 24];
-        if quote_is_wsol_or_usdc {
-            data[..8].copy_from_slice(&SELL_DISCRIMINATOR);
-            // base_amount_in
-            data[8..16].copy_from_slice(&token_amount.to_le_bytes());
-            // min_quote_amount_out
-            data[16..24].copy_from_slice(&sol_amount.to_le_bytes());
+        // 栈数组 + `new_with_bytes`，避免 `data.to_vec()`。
+        let ix_data = if quote_is_wsol_or_usdc {
+            encode_pumpswap_sell_ix_data(token_amount, sol_amount)
         } else {
-            data[..8].copy_from_slice(&BUY_DISCRIMINATOR);
-            // base_amount_out
-            data[8..16].copy_from_slice(&sol_amount.to_le_bytes());
-            // max_quote_amount_in
-            data[16..24].copy_from_slice(&token_amount.to_le_bytes());
-        }
+            encode_pumpswap_buy_two_args(sol_amount, token_amount)
+        };
 
-        instructions.push(Instruction {
-            program_id: accounts::AMM_PROGRAM,
-            accounts,
-            data: data.to_vec(),
-        });
+        instructions.push(Instruction::new_with_bytes(accounts::AMM_PROGRAM, &ix_data, accounts));
 
         if close_wsol_ata {
             instructions.extend(crate::trading::common::close_wsol(&params.payer.pubkey()));

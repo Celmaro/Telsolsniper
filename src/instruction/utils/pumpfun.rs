@@ -219,6 +219,12 @@ pub const BUY_DISCRIMINATOR: [u8; 8] = [102, 6, 61, 18, 1, 218, 235, 234];
 pub const BUY_EXACT_SOL_IN_DISCRIMINATOR: [u8; 8] = [56, 252, 116, 8, 158, 223, 205, 95];
 pub const SELL_DISCRIMINATOR: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
 
+/// Anchor account discriminator for `SharingConfig` on `pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ` (`pump_fees.json`).
+pub const SHARING_CONFIG_ACCOUNT_DISCRIMINATOR: [u8; 8] = [216, 74, 9, 0, 56, 140, 93, 75];
+
+/// `ConfigStatus::Active` as serialized by Anchor (enum variant index; `Paused` = 0).
+const SHARING_CONFIG_STATUS_ACTIVE: u8 = 1;
+
 /// Check if a pubkey is one of the Mayhem fee recipients
 #[inline]
 pub fn is_mayhem_fee_recipient(pubkey: &Pubkey) -> bool {
@@ -235,6 +241,50 @@ pub fn is_amm_fee_recipient(pubkey: &Pubkey) -> bool {
         || pubkey == &global_constants::PUMPFUN_AMM_FEE_5
         || pubkey == &global_constants::PUMPFUN_AMM_FEE_6
         || pubkey == &global_constants::PUMPFUN_AMM_FEE_7
+}
+
+/// Non-mayhem bonding-curve fee pool: primary fee recipient + AMM protocol fee slots (`getFeeRecipient` when `mayhemMode === false`).
+#[inline]
+pub fn is_standard_bonding_fee_recipient(pubkey: &Pubkey) -> bool {
+    *pubkey == global_constants::FEE_RECIPIENT || is_amm_fee_recipient(pubkey)
+}
+
+/// Bonding-curve trade: `mayhemMode` 与账户 #2 fee recipient 必须同属 Mayhem 池或同属普通池，否则会 Anchor `NotAuthorized`（fee_recipient 校验）。
+/// gRPC 偶尔只带对一侧的字段时，用 fee 地址与静态池对齐。
+#[inline]
+pub fn reconcile_mayhem_mode_for_trade(
+    mayhem_from_event: Option<bool>,
+    fee_recipient: &Pubkey,
+) -> bool {
+    if *fee_recipient == Pubkey::default() {
+        return mayhem_from_event.unwrap_or(false);
+    }
+    let fee_m = is_mayhem_fee_recipient(fee_recipient);
+    let fee_s = is_standard_bonding_fee_recipient(fee_recipient);
+    match mayhem_from_event {
+        Some(log_m) => {
+            if fee_m && !log_m {
+                true
+            } else if fee_s && log_m && !fee_m {
+                false
+            } else {
+                log_m
+            }
+        }
+        None => fee_m,
+    }
+}
+
+/// Whether `pk` is allowed as account #2 for this bonding-curve mode. Unknown pubkeys (not in static pools) are accepted — chain is authoritative.
+#[inline]
+pub fn fee_recipient_ok_for_bonding_curve_mode(pk: &Pubkey, is_mayhem_mode: bool) -> bool {
+    let is_m = is_mayhem_fee_recipient(pk);
+    let is_s = is_standard_bonding_fee_recipient(pk);
+    if is_mayhem_mode {
+        !(is_s && !is_m)
+    } else {
+        !(is_m && !is_s)
+    }
 }
 
 /// Mayhem: random among `Global.reservedFeeRecipient` + `Global.reservedFeeRecipients` (`fees.ts` `getFeeRecipient` when `mayhemMode === true`).
@@ -279,10 +329,12 @@ pub fn get_protocol_extra_fee_recipient_random() -> Pubkey {
         .unwrap_or(&global_constants::PROTOCOL_EXTRA_FEE_RECIPIENTS[0])
 }
 
-/// 账户 #2 fee recipient：优先使用 gRPC/ShredStream 解析值（同笔 create_v2+buy 的 `observed_fee_recipient` 或 `tradeEvent.feeRecipient`）；未提供时按 mayhem 从静态池随机。
+/// 账户 #2 fee recipient：优先使用 gRPC/ShredStream 解析值（同笔 create_v2+buy 的 `observed_fee_recipient` 或 `tradeEvent.feeRecipient`）；未提供或与 `is_mayhem_mode` 池不一致时按 mayhem 从静态池随机（避免 NotAuthorized）。
 #[inline]
 pub fn pump_fun_fee_recipient_meta(from_stream: Pubkey, is_mayhem_mode: bool) -> AccountMeta {
-    if from_stream != Pubkey::default() {
+    let trust_stream = from_stream != Pubkey::default()
+        && fee_recipient_ok_for_bonding_curve_mode(&from_stream, is_mayhem_mode);
+    if trust_stream {
         AccountMeta {
             pubkey: from_stream,
             is_signer: false,
@@ -384,16 +436,41 @@ pub fn is_phantom_default_creator_vault(pk: &Pubkey) -> bool {
 ///   `creator_vault` was filled from **instruction accounts** (e.g. `fill_trade_accounts` index 9),
 ///   **trust that vault** — unless it equals [`phantom_default_creator_vault`] (bad derivation / cache).
 /// - If event `creator_vault` is **missing** → [`get_creator_vault_pda`]`(creator)` (never `PDA(default)`).
-/// - If it **matches** `PDA(creator)` or `PDA(fee_sharing_config(mint))` → use it (fast path, matches ix).
-/// - If it **does not match** either (e.g. stale vault but `creator` from tradeEvent is correct) → use
-///   [`get_creator_vault_pda`]`(creator)` so seeds match on-chain bonding curve (fixes 2006 Left≠Right).
+/// - If it **matches** `PDA(creator)` → use it (fast path).
+/// - If **Creator Rewards Sharing is active** (`fee_sharing_creator_vault_if_active` / RPC) and the event
+///   vault matches `PDA(["creator-vault", fee_sharing_config_pda])` → use it.
+/// - If `fee_sharing_creator_vault_if_active` is **None**, do **not** trust a stale event vault that merely
+///   equals the theoretical sharing-layout PDA — fall back to `PDA(creator)` (sharing may have migrated off).
+/// - If the event vault is some other stale value but `creator` is correct → `PDA(creator)` (fixes 2006 Left≠Right).
+///
+/// For **Creator Rewards Sharing** (`fee_sharing_creator_vault_if_active`), prefer
+/// [`resolve_creator_vault_for_ix_with_fee_sharing`] or [`fetch_fee_sharing_creator_vault_if_active`].
 #[inline]
 pub fn resolve_creator_vault_for_ix(
     creator: &Pubkey,
     creator_vault_from_event: Pubkey,
     mint: &Pubkey,
 ) -> Option<Pubkey> {
+    resolve_creator_vault_for_ix_with_fee_sharing(creator, creator_vault_from_event, mint, None)
+}
+
+/// Same as [`resolve_creator_vault_for_ix`], but when `fee_sharing_creator_vault_if_active` is
+/// `Some(PDA(["creator-vault", fee_sharing_config_pda(mint)]))` from an RPC hint, overrides stale
+/// `PDA(creator)` so sell/buy match on-chain seeds (Anchor 2006).
+#[inline]
+pub fn resolve_creator_vault_for_ix_with_fee_sharing(
+    creator: &Pubkey,
+    creator_vault_from_event: Pubkey,
+    mint: &Pubkey,
+    fee_sharing_creator_vault_if_active: Option<Pubkey>,
+) -> Option<Pubkey> {
     let phantom = phantom_default_creator_vault();
+
+    let fee_sharing_vault: Option<Pubkey> = fee_sharing_creator_vault_if_active.and_then(|v| {
+        let sharing_pk = get_fee_sharing_config_pda(mint)?;
+        let expected = get_creator_vault_pda(&sharing_pk)?;
+        if v == expected { Some(v) } else { None }
+    });
 
     if *creator == Pubkey::default() {
         if creator_vault_from_event == Pubkey::default() {
@@ -405,25 +482,81 @@ pub fn resolve_creator_vault_for_ix(
         return Some(creator_vault_from_event);
     }
 
-    // Real creator: poisoned cache may hold phantom vault — always remap to PDA(creator).
     if creator_vault_from_event == phantom {
+        if let Some(vs) = fee_sharing_vault {
+            let v_derived = get_creator_vault_pda(creator)?;
+            if vs != v_derived {
+                return Some(vs);
+            }
+        }
         return get_creator_vault_pda(creator);
     }
 
     let v_derived = get_creator_vault_pda(creator)?;
+
+    if let Some(vs) = fee_sharing_vault {
+        if vs != v_derived
+            && (creator_vault_from_event == Pubkey::default()
+                || creator_vault_from_event == v_derived
+                || creator_vault_from_event != vs)
+        {
+            return Some(vs);
+        }
+    }
+
     if creator_vault_from_event == Pubkey::default() {
         return Some(v_derived);
     }
     if creator_vault_from_event == v_derived {
         return Some(creator_vault_from_event);
     }
-    if let Some(sharing) = get_fee_sharing_config_pda(mint) {
-        let v_sharing = get_creator_vault_pda(&sharing)?;
-        if creator_vault_from_event == v_sharing {
-            return Some(creator_vault_from_event);
+    // 仅当 RPC / 调用方已确认 Creator Rewards Sharing **仍 Active**（hint 为 Some）时，才信任
+    // `creator_vault == PDA(["creator-vault", fee_sharing_config])`。hint 为 None 时可能是「已停用」或从未拉取：
+    // 此时旧缓存里的 fee-sharing vault 必须回退到 `PDA(creator)`，否则易与链上 seeds 不一致（2006）。
+    if fee_sharing_creator_vault_if_active.is_some() {
+        if let Some(sharing) = get_fee_sharing_config_pda(mint) {
+            let v_sharing = get_creator_vault_pda(&sharing)?;
+            if creator_vault_from_event == v_sharing {
+                return Some(creator_vault_from_event);
+            }
         }
     }
     Some(v_derived)
+}
+
+/// Read pump-fees `SharingConfig` for `mint`; if **Active** and `mint` matches, return
+/// `PDA(["creator-vault", fee_sharing_config_pda])` on Pump program (same as npm `pump-sdk`).
+#[inline]
+pub async fn fetch_fee_sharing_creator_vault_if_active(
+    rpc: &SolanaRpcClient,
+    mint: &Pubkey,
+) -> Result<Option<Pubkey>, anyhow::Error> {
+    let Some(config_pda) = get_fee_sharing_config_pda(mint) else {
+        return Ok(None);
+    };
+    let acc = match rpc.get_account(&config_pda).await {
+        Ok(a) => a,
+        Err(_) => return Ok(None),
+    };
+    if acc.owner != accounts::FEE_PROGRAM {
+        return Ok(None);
+    }
+    let d = acc.data.as_slice();
+    if d.len() < 43 || d[..8] != SHARING_CONFIG_ACCOUNT_DISCRIMINATOR {
+        return Ok(None);
+    }
+    if d[10] != SHARING_CONFIG_STATUS_ACTIVE {
+        return Ok(None);
+    }
+    let mint_on_chain = Pubkey::new_from_array(
+        d[11..43]
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("SharingConfig mint slice"))?,
+    );
+    if mint_on_chain != *mint {
+        return Ok(None);
+    }
+    Ok(get_creator_vault_pda(&config_pda))
 }
 
 #[inline]
@@ -548,6 +681,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_prefers_fee_sharing_vault_when_rpc_hint_and_differs_from_creator_pda() {
+        let creator = Pubkey::new_unique();
+        let mint = Pubkey::new_unique();
+        let v_derived = get_creator_vault_pda(&creator).unwrap();
+        let sharing_pk = get_fee_sharing_config_pda(&mint).unwrap();
+        let vs = get_creator_vault_pda(&sharing_pk).unwrap();
+        assert_ne!(v_derived, vs);
+        let resolved = resolve_creator_vault_for_ix_with_fee_sharing(
+            &creator,
+            v_derived,
+            &mint,
+            Some(vs),
+        );
+        assert_eq!(resolved, Some(vs));
+    }
+
+    #[test]
     fn resolve_remaps_phantom_vault_when_creator_known() {
         let creator = Pubkey::new_unique();
         let mint = Pubkey::new_unique();
@@ -555,6 +705,45 @@ mod tests {
         assert_eq!(
             resolve_creator_vault_for_ix(&creator, phantom_default_creator_vault(), &mint),
             Some(expected)
+        );
+    }
+
+    #[test]
+    fn resolve_stale_fee_sharing_vault_falls_back_to_creator_pda_when_hint_inactive() {
+        let creator = Pubkey::new_unique();
+        let mint = Pubkey::new_unique();
+        let v_derived = get_creator_vault_pda(&creator).unwrap();
+        let sharing_pk = get_fee_sharing_config_pda(&mint).unwrap();
+        let vs = get_creator_vault_pda(&sharing_pk).unwrap();
+        assert_ne!(v_derived, vs);
+        let resolved = resolve_creator_vault_for_ix_with_fee_sharing(&creator, vs, &mint, None);
+        assert_eq!(
+            resolved,
+            Some(v_derived),
+            "hint None: stale sharing-layout vault in cache must not win over PDA(creator)"
+        );
+    }
+
+    #[test]
+    fn reconcile_mayhem_prefers_fee_when_log_says_false_but_fee_is_mayhem_pool() {
+        let fee = global_constants::MAYHEM_FEE_RECIPIENTS[0];
+        assert!(reconcile_mayhem_mode_for_trade(Some(false), &fee));
+    }
+
+    #[test]
+    fn reconcile_mayhem_prefers_fee_when_log_says_true_but_fee_is_standard_pool() {
+        let fee = global_constants::PUMPFUN_AMM_FEE_4;
+        assert!(!reconcile_mayhem_mode_for_trade(Some(true), &fee));
+    }
+
+    #[test]
+    fn pump_fee_meta_rejects_standard_fee_when_building_mayhem_ix() {
+        let fee = global_constants::PUMPFUN_AMM_FEE_4;
+        let m = pump_fun_fee_recipient_meta(fee, true);
+        assert!(
+            global_constants::MAYHEM_FEE_RECIPIENTS.contains(&m.pubkey),
+            "expected fallback to mayhem pool, got {}",
+            m.pubkey
         );
     }
 }

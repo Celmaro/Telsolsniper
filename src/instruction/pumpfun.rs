@@ -7,12 +7,15 @@ use crate::{
     },
 };
 use crate::{
+    instruction::pumpfun_ix_data::{
+        encode_pumpfun_buy_exact_sol_in_ix_data, encode_pumpfun_buy_ix_data,
+        encode_pumpfun_sell_ix_data, TRACK_VOLUME_TRUE,
+    },
     instruction::utils::pumpfun::{
         accounts, get_bonding_curve_pda, get_bonding_curve_v2_pda,
         get_protocol_extra_fee_recipient_random, get_user_volume_accumulator_pda,
-        pump_fun_fee_recipient_meta, resolve_creator_vault_for_ix,
+        pump_fun_fee_recipient_meta, resolve_creator_vault_for_ix_with_fee_sharing,
         global_constants::{self},
-        BUY_DISCRIMINATOR, BUY_EXACT_SOL_IN_DISCRIMINATOR, SELL_DISCRIMINATOR,
     },
     utils::calc::{
         common::{calculate_with_slippage_buy, calculate_with_slippage_sell},
@@ -46,10 +49,11 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         // creator_vault must be PDA(creator) per bonding curve. Event vault: use only if == derived;
         // if stream sends a mismatched vault (wrong token / stale), fall back to derived.
         let creator = bonding_curve.creator;
-        let creator_vault_pda = resolve_creator_vault_for_ix(
+        let creator_vault_pda = resolve_creator_vault_for_ix_with_fee_sharing(
             &creator,
             protocol_params.creator_vault,
             &params.output_mint,
+            protocol_params.fee_sharing_creator_vault_if_active,
         )
         .ok_or_else(|| {
             anyhow!(
@@ -130,26 +134,19 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
             );
         }
 
-        // IDL: buy/buy_exact_sol_in 第三参数 track_volume: OptionBool，仅代币支持返现时传 Some(true)
-        let track_volume = if bonding_curve.is_cashback_coin { [1u8, 1u8] } else { [1u8, 0u8] }; // Some(true) / Some(false)
-        let mut buy_data = [0u8; 26];
-        if params.use_exact_sol_amount.unwrap_or(true) {
-            // buy_exact_sol_in(spendable_sol_in: u64, min_tokens_out: u64, track_volume)
+        let buy_data = if params.use_exact_sol_amount.unwrap_or(true) {
             let min_tokens_out = calculate_with_slippage_sell(
                 buy_token_amount,
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE),
             );
-            buy_data[..8].copy_from_slice(&BUY_EXACT_SOL_IN_DISCRIMINATOR);
-            buy_data[8..16].copy_from_slice(&params.input_amount.unwrap_or(0).to_le_bytes());
-            buy_data[16..24].copy_from_slice(&min_tokens_out.to_le_bytes());
-            buy_data[24..26].copy_from_slice(&track_volume);
+            encode_pumpfun_buy_exact_sol_in_ix_data(
+                params.input_amount.unwrap_or(0),
+                min_tokens_out,
+                TRACK_VOLUME_TRUE,
+            )
         } else {
-            // buy(token_amount: u64, max_sol_cost: u64, track_volume)
-            buy_data[..8].copy_from_slice(&BUY_DISCRIMINATOR);
-            buy_data[8..16].copy_from_slice(&buy_token_amount.to_le_bytes());
-            buy_data[16..24].copy_from_slice(&max_sol_cost.to_le_bytes());
-            buy_data[24..26].copy_from_slice(&track_volume);
-        }
+            encode_pumpfun_buy_ix_data(buy_token_amount, max_sol_cost, TRACK_VOLUME_TRUE)
+        };
 
         // Fee recipient: gRPC/ShredStream 填入的 `PumpFunParams.fee_recipient`（同笔 create_v2+buy 或 trade 日志）优先；热路径无 RPC。
         let fee_recipient_meta =
@@ -206,10 +203,11 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
 
         let bonding_curve = &protocol_params.bonding_curve;
         let creator = bonding_curve.creator;
-        let creator_vault_pda = resolve_creator_vault_for_ix(
+        let creator_vault_pda = resolve_creator_vault_for_ix_with_fee_sharing(
             &creator,
             protocol_params.creator_vault,
             &params.input_mint,
+            protocol_params.fee_sharing_creator_vault_if_active,
         )
         .ok_or_else(|| {
             anyhow!(
@@ -269,10 +267,7 @@ impl InstructionBuilder for PumpFunInstructionBuilder {
         // ========================================
         let mut instructions = Vec::with_capacity(2);
 
-        let mut sell_data = [0u8; 24];
-        sell_data[..8].copy_from_slice(&SELL_DISCRIMINATOR);
-        sell_data[8..16].copy_from_slice(&token_amount.to_le_bytes());
-        sell_data[16..24].copy_from_slice(&min_sol_output.to_le_bytes());
+        let sell_data = encode_pumpfun_sell_ix_data(token_amount, min_sol_output);
 
         let fee_recipient_meta =
             pump_fun_fee_recipient_meta(protocol_params.fee_recipient, is_mayhem_mode);
