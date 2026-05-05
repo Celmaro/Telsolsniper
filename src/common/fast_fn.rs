@@ -154,6 +154,8 @@ pub enum PdaCacheKey {
     PumpFunUserVolume(Pubkey),
     PumpFunBondingCurve(Pubkey),
     PumpFunBondingCurveV2(Pubkey),
+    /// Pump-fees program `sharing-config` PDA for a mint (`feeSharingConfigPda`).
+    PumpFunFeeSharingConfig(Pubkey),
     PumpFunCreatorVault(Pubkey),
     BonkPool(Pubkey, Pubkey),
     BonkVault(Pubkey, Pubkey),

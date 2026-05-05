@@ -447,23 +447,23 @@ impl BranchOptimizer {
 
     /// Prefetch: load cache line at ptr into L1. Caller must ensure ptr is valid, read-only, no concurrent write. 预取：将 ptr 所在缓存行加载到 L1；调用方需保证有效、只读、无并发写。
     #[inline(always)]
-    pub unsafe fn prefetch_read_data<T>(ptr: *const T) {
+    pub unsafe fn prefetch_read_data<T>(_ptr: *const T) {
         #[cfg(target_arch = "x86_64")]
         {
             use std::arch::x86_64::_mm_prefetch;
             use std::arch::x86_64::_MM_HINT_T0;
-            _mm_prefetch(ptr as *const i8, _MM_HINT_T0);
+            _mm_prefetch(_ptr as *const i8, _MM_HINT_T0);
         }
     }
 
     /// Prefetch for write (T1 hint). 写预取（T1 提示）。
     #[inline(always)]
-    pub unsafe fn prefetch_write_data<T>(ptr: *const T) {
+    pub unsafe fn prefetch_write_data<T>(_ptr: *const T) {
         #[cfg(target_arch = "x86_64")]
         {
             use std::arch::x86_64::_mm_prefetch;
             use std::arch::x86_64::_MM_HINT_T1;
-            _mm_prefetch(ptr as *const i8, _MM_HINT_T1);
+            _mm_prefetch(_ptr as *const i8, _MM_HINT_T1);
         }
     }
 }

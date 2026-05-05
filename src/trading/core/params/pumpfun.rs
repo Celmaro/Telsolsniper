@@ -12,15 +12,24 @@ use std::sync::Arc;
 /// **Creator vault**: Pump buy/sell pass `creator_vault` = `PDA(["creator-vault", authority])`.
 /// Usually `authority` is [`BondingCurveAccount::creator`]; with **Creator Rewards Sharing** it is
 /// `fee_sharing_config_pda(mint)` (see [`fetch_fee_sharing_creator_vault_if_active`](crate::instruction::utils::pumpfun::fetch_fee_sharing_creator_vault_if_active)).
-/// Keep `bonding_curve.creator` in sync with chain; ix building uses [`resolve_creator_vault_for_ix_with_fee_sharing`](crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing).
+/// **Buy/sell**：`creator_vault` 及（若可得）**`tradeEvent` / CPI 日志中的 `creator`** 优先于陈旧的曲线快照；
+/// ix 组装与链下询价见 [`Self::effective_creator_for_trade`]、[`crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing`]。
 #[derive(Clone)]
 pub struct PumpFunParams {
     pub bonding_curve: Arc<BondingCurveAccount>,
     pub associated_bonding_curve: Pubkey,
-    /// Resolved by [`resolve_creator_vault_for_ix_with_fee_sharing`](crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing): ix vault when it matches `PDA(creator)`, fee-sharing vault, or RPC hint.
+    /// 最新一笔可观测 trade 的 **`tradeEvent.creator`（日志）**。当 `Some` 且非 default 时，
+    /// **优先于** `bonding_curve.creator` 用于链下 creator-fee 询价与 `creator_vault` 在缺省 ix 时的推导。
+    /// Pump 上 creator 可能随交易推进，调用方应在每次解析到带 `creator` 的 trade 后更新（如 `.with_observed_trade_creator`）。
+    pub observed_trade_creator: Option<Pubkey>,
+    /// Resolved by [`resolve_creator_vault_for_ix_with_fee_sharing`](crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing)：
+    /// **显式 `creator_vault`（非 default、非 phantom）永远优先并按原值使用**，不会再用 `creator` 重算覆盖；
+    /// 未传时再按 `fee_sharing_creator_vault_if_active`、`PDA(effective_creator)`（见 [`Self::effective_creator_for_trade`]）。
     pub creator_vault: Pubkey,
     /// `Some(PDA(["creator-vault", fee_sharing_config]))` when pump-fees `SharingConfig` is **Active**; set by `from_mint_by_rpc` / [`refresh_fee_sharing_creator_vault_from_rpc`](Self::refresh_fee_sharing_creator_vault_from_rpc).
     pub fee_sharing_creator_vault_if_active: Option<Pubkey>,
+    /// SPL Token or Token-2022 program id owning the **mint** (from gRPC / parser / cache).
+    /// **`Pubkey::default()`**：ix 构建时使用 SDK 默认 **Token-2022**（与多数 Pump.fun 新发一致）；显式传入 Legacy 或 Token-2022 id 可覆盖该默认值。
     pub token_program: Pubkey,
     /// Whether to close token account when selling, only effective during sell operations
     pub close_token_account_when_sell: Option<bool>,
@@ -38,6 +47,7 @@ impl PumpFunParams {
         Self {
             bonding_curve: Arc::new(BondingCurveAccount { ..Default::default() }),
             associated_bonding_curve: Pubkey::default(),
+            observed_trade_creator: None,
             creator_vault: creator_vault,
             fee_sharing_creator_vault_if_active: None,
             token_program: token_program,
@@ -87,6 +97,7 @@ impl PumpFunParams {
         Self {
             bonding_curve: Arc::new(bonding_curve_account),
             associated_bonding_curve: associated_bonding_curve,
+            observed_trade_creator: (creator != Pubkey::default()).then_some(creator),
             creator_vault: creator_vault_resolved,
             fee_sharing_creator_vault_if_active: None,
             close_token_account_when_sell: close_token_account_when_sell,
@@ -142,6 +153,7 @@ impl PumpFunParams {
         Self {
             bonding_curve: Arc::new(bonding_curve),
             associated_bonding_curve: associated_bonding_curve,
+            observed_trade_creator: (creator != Pubkey::default()).then_some(creator),
             creator_vault: creator_vault_resolved,
             fee_sharing_creator_vault_if_active: None,
             close_token_account_when_sell: close_token_account_when_sell,
@@ -150,6 +162,7 @@ impl PumpFunParams {
         }
     }
 
+    /// 仅 RPC 读取曲线快照；[`Self::observed_trade_creator`] 为 `None`，便于 bot 缓存合并时用粘性的 trade 日志 creator 覆盖陈旧曲线推导。
     pub async fn from_mint_by_rpc(
         rpc: &SolanaRpcClient,
         mint: &Pubkey,
@@ -189,12 +202,22 @@ impl PumpFunParams {
         Ok(Self {
             bonding_curve: Arc::new(bonding_curve),
             associated_bonding_curve: associated_bonding_curve,
+            observed_trade_creator: None,
             creator_vault,
             fee_sharing_creator_vault_if_active,
             close_token_account_when_sell: None,
             token_program: mint_account.owner,
             fee_recipient: Pubkey::default(),
         })
+    }
+
+    /// 链下公式与 **`creator_vault` 推导回退**：**日志/事件 `creator`**（若已写入 `observed_trade_creator`）
+    /// 优先，否则使用 `bonding_curve.creator`。
+    #[inline]
+    pub fn effective_creator_for_trade(&self) -> Pubkey {
+        self.observed_trade_creator
+            .filter(|c| *c != Pubkey::default())
+            .unwrap_or(self.bonding_curve.creator)
     }
 
     /// One `getAccount` on pump-fees `SharingConfig` + re-resolves [`Self::creator_vault`]. Call before sell
@@ -207,7 +230,7 @@ impl PumpFunParams {
         self.fee_sharing_creator_vault_if_active =
             crate::instruction::utils::pumpfun::fetch_fee_sharing_creator_vault_if_active(rpc, mint)
                 .await?;
-        let c = self.bonding_curve.creator;
+        let c = self.effective_creator_for_trade();
         if let Some(v) =
             crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing(
                 &c,
@@ -221,10 +244,17 @@ impl PumpFunParams {
         Ok(self)
     }
 
-    /// Updates the cached `creator_vault` field only. Buy/sell ix use [`BondingCurveAccount::creator`].
+    /// Updates the cached `creator_vault` field only. Buy/sell ix use [`Self::effective_creator_for_trade`] + resolve.
     #[inline]
     pub fn with_creator_vault(mut self, creator_vault: Pubkey) -> Self {
         self.creator_vault = creator_vault;
+        self
+    }
+
+    /// 覆盖 **最新一笔 trade 日志中的 `creator`**（`tradeEvent.creator`）。`None` 或 default 会清除覆盖。
+    #[inline]
+    pub fn with_observed_trade_creator(mut self, c: Option<Pubkey>) -> Self {
+        self.observed_trade_creator = c.filter(|x| *x != Pubkey::default());
         self
     }
 

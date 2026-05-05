@@ -335,6 +335,10 @@ PumpFun and PumpSwap support **cashback** for eligible tokens: part of the tradi
 - The **pumpfun_copy_trading** and **pumpfun_sniper_trading** examples use sol-parser-sdk for gRPC subscription and pass `e.is_cashback_coin` when building params.
 - **Claim**: Use `client.claim_cashback_pumpfun()` and `client.claim_cashback_pumpswap(...)` to claim accumulated cashback.
 
+#### PumpFun: troubleshooting (on-chain errors)
+
+For **Anchor 2006 / `NotAuthorized` (6000) / wrong token program / BuyZeroAmount (6020) / slippage (6042)** and related issues, see **[docs/PUMP_ERRORS_AND_TROUBLESHOOTING_CN.md](docs/PUMP_ERRORS_AND_TROUBLESHOOTING_CN.md)** (Chinese). An English appendix may be added later.
+
 #### PumpFun: Creator Rewards Sharing (creator_vault)
 
 Some PumpFun coins use **Creator Rewards Sharing**, so the on-chain `creator_vault` can differ from the default derivation. If you reuse cached params from a **buy** when **selling**, you may see program error **2006 (seeds constraint violated)**. To avoid this:

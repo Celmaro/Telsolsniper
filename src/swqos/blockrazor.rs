@@ -429,7 +429,7 @@ impl BlockRazorClient {
                 let (content, _signature) =
                     serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
 
-                let mut query_params: Vec<(&str, &str)> = vec![
+                let query_params: Vec<(&str, &str)> = vec![
                     ("auth", auth_token.as_str()),
                     // mev_protection=true: sandwichMitigation mode skips blacklisted Leader slots (MEV protection).
                     // revertProtection is unrelated to MEV; not set.

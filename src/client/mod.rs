@@ -372,7 +372,7 @@ pub struct TradeBuyParams {
     /// When Some(false), uses regular buy instruction where slippage is applied to SOL/quote input.
     /// This option only applies to PumpFun and PumpSwap DEXes; it is ignored for other DEXes.
     pub use_exact_sol_amount: Option<bool>,
-    /// 可选：事件收到时间（微秒，与 sol-parser-sdk 的 metadata.grpc_recv_us / clock::now_micros 同源）。不传且开启 log_enabled 时 SDK 用 now_micros() 作为起点，打印起点→提交耗时。
+    /// Optional upstream receive timestamp (e.g. gRPC recv) in microseconds for latency tracing.
     pub grpc_recv_us: Option<i64>,
 }
 
@@ -418,7 +418,7 @@ pub struct TradeSellParams {
     pub gas_fee_strategy: GasFeeStrategy,
     /// Whether to simulate the transaction instead of executing it
     pub simulate: bool,
-    /// 可选：事件收到时间（微秒，与 sol-parser-sdk clock 同源）。不传且开启 log_enabled 时 SDK 用 now_micros() 作为起点。
+    /// Optional upstream receive timestamp (e.g. gRPC recv) in microseconds for latency tracing.
     pub grpc_recv_us: Option<i64>,
 }
 
