@@ -152,9 +152,10 @@ let swqos_configs: Vec<SwqosConfig> = vec![
     SwqosConfig::Jito("your uuid".to_string(), SwqosRegion::Frankfurt, None),
     SwqosConfig::Temporal("your api_token".to_string(), SwqosRegion::Frankfurt, None),
     SwqosConfig::FlashBlock("your api_token".to_string(), SwqosRegion::Frankfurt, None),
-    SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt, None),
-    // Astralane: 4th param = AstralaneTransport — Binary (default), Plain (/iris), or Quic
-    SwqosConfig::Astralane("your_astralane_api_key".to_string(), SwqosRegion::Frankfurt, None, None), // Binary HTTP /irisb
+    // None transport = gRPC first, JSON HTTP fallback
+    SwqosConfig::BlockRazor("your api_token".to_string(), SwqosRegion::Frankfurt, None, None),
+    // None mode = persistent QUIC first, Binary HTTP fallback
+    SwqosConfig::Astralane("your_astralane_api_key".to_string(), SwqosRegion::Frankfurt, None, None),
     SwqosConfig::SpeedLanding("your api_token".to_string(), SwqosRegion::Frankfurt, None),
     // Lunar Lander: 4th param None = QUIC (default); Some(SwqosTransport::Http) = binary HTTP
     SwqosConfig::LunarLander("your_hellomoon_api_key".to_string(), SwqosRegion::Frankfurt, None, None),
@@ -350,6 +351,9 @@ let temporal_config = SwqosConfig::Temporal(
 - If a custom URL is provided (`Some(url)`), it will be used instead of the regional endpoint
 - If no custom URL is provided (`None`), the system will use the default endpoint for the specified `SwqosRegion`
 - This allows for maximum flexibility while maintaining backward compatibility 
+- Temporal defaults to HTTP/3 QUIC and falls back to Binary Batch HTTP. A custom Temporal URL is an explicit HTTP Batch endpoint.
+- BlockRazor defaults to gRPC `SendBinaryTransaction` and falls back to JSON HTTP. `Some(SwqosTransport::Http)` or `Some(SwqosTransport::Grpc)` forces one transport.
+- Astralane defaults to persistent QUIC and falls back to Binary HTTP. An explicit `AstralaneTransport` forces QUIC, Binary HTTP, or Plain HTTP.
 - For Glaive, a custom QUIC URL is `host:4000`; a custom HTTP URL is an absolute `http://` or `https://` base URL. The SDK appends `/binary` and authentication parameters for HTTP.
 
 When using multiple MEV services, you need to use `Durable Nonce`. Fetch the latest nonce value and attach it to the high-level buy/sell params:
@@ -378,7 +382,7 @@ client.buy_simple(buy_params).await?;
 
 #### Astralane (Binary / Plain HTTP / QUIC)
 
-Astralane supports **Binary** HTTP (`/irisb`), **Plain** HTTP (`/iris`), and **QUIC** (`host:7000`, or `:9000` when global `mev_protection` is true). Pass `Some(AstralaneTransport::Plain)`, `Some(AstralaneTransport::Quic)`, or use `None` / omit for **Binary** (default). Global `mev_protection` adds `mev-protect=true` on HTTP or selects QUIC port 9000.
+Astralane supports **Binary** HTTP (`/irisb`), **Plain** HTTP (`/iris`), and **QUIC** (`host:7000`, or `:9000` when global `mev_protection` is true). `None` uses persistent QUIC first with Binary HTTP fallback. Pass an explicit `AstralaneTransport` to force one transport. Global `mev_protection` adds `mev-protect=true` on HTTP or selects QUIC port 9000.
 
 ```rust
 use sol_trade_sdk::{swqos::{SwqosConfig, SwqosRegion}, AstralaneTransport};
@@ -395,7 +399,8 @@ let swqos_configs: Vec<SwqosConfig> = vec![
 // Then create TradeConfig / TradingClient as usual with swqos_configs
 ```
 
-- **Binary** (default): `None` or `Some(AstralaneTransport::Binary)` — `/irisb`, bincode body.
+- **Default chain**: `None` — persistent QUIC, then Binary HTTP on transport or service failure.
+- **Binary**: `Some(AstralaneTransport::Binary)` — `/irisb`, bincode body.
 - **Plain**: `Some(AstralaneTransport::Plain)` — `/iris`.
 - **QUIC**: `Some(AstralaneTransport::Quic)` — regional `host:7000` / `:9000` (MEV); same API key.
 

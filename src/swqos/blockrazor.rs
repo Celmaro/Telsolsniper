@@ -1,17 +1,15 @@
-use crate::swqos::common::{
-    default_http_client_builder, poll_transaction_confirmation, serialize_transaction_and_encode,
-};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation};
+use base64::prelude::{Engine as _, BASE64_STANDARD};
 use rand::seq::IndexedRandom;
 use reqwest::Client;
 use std::{sync::Arc, time::Instant};
 
 use arc_swap::ArcSwap;
-use solana_transaction_status::UiTransactionEncoding;
 use std::time::Duration;
 
 use crate::swqos::SwqosClientTrait;
 use crate::swqos::{SwqosType, TradeType};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use solana_sdk::transaction::VersionedTransaction;
 
 use crate::{common::SolanaRpcClient, constants::swqos::BLOCKRAZOR_TIP_ACCOUNTS};
@@ -24,6 +22,12 @@ use tonic::transport::Channel;
 // Include pre-generated gRPC code
 pub mod serverpb {
     include!("pb/serverpb.rs");
+}
+
+#[derive(Clone)]
+pub struct BlockRazorHttpFallback {
+    endpoint: String,
+    http_client: Client,
 }
 
 // gRPC client wrapper
@@ -53,11 +57,11 @@ impl BlockRazorGrpcClient {
         Ok(response.into_inner().status)
     }
 
-    pub async fn send_transaction(
+    pub async fn send_binary_transaction(
         &self,
-        transaction: String,
+        transaction: Vec<u8>,
         mode: String,
-        safe_window: Option<i32>,
+        safe_window: i32,
         revert_protection: bool,
     ) -> Result<String> {
         // 检查交易数据大小
@@ -69,8 +73,8 @@ impl BlockRazorGrpcClient {
         let apikey = AsciiMetadataValue::try_from(self.auth_token.as_str())
             .map_err(|e| anyhow::anyhow!("Invalid API key format: {}", e))?;
 
-        let mut request = tonic::Request::new(serverpb::SendRequest {
-            transaction,
+        let mut request = tonic::Request::new(serverpb::SendBinaryRequest {
+            binary_transaction: transaction,
             mode: String::from(mode),
             safe_window,
             revert_protection,
@@ -78,9 +82,10 @@ impl BlockRazorGrpcClient {
         request.metadata_mut().insert("apikey", apikey);
 
         let response = client
-            .send_transaction(request)
+            .send_binary_transaction(request)
             .await
-            .map_err(|e| anyhow::anyhow!("gRPC send transaction failed: {}", e))?;
+            .map_err(anyhow::Error::new)
+            .context("gRPC SendBinaryTransaction failed")?;
         Ok(response.into_inner().signature)
     }
 }
@@ -93,8 +98,9 @@ pub enum BlockRazorBackend {
         grpc_client: Arc<ArcSwap<BlockRazorGrpcClient>>,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
-        /// When true, gRPC send_transaction sets revert_protection=true for MEV protection.
+        /// When true, requests use BlockRazor's sandwich-mitigation mode.
         mev_protection: bool,
+        http_fallback: Option<BlockRazorHttpFallback>,
     },
     Http {
         endpoint: String,
@@ -102,7 +108,7 @@ pub enum BlockRazorBackend {
         http_client: Client,
         ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
         stop_ping: Arc<AtomicBool>,
-        /// When true, HTTP request adds revertProtection=true query param for MEV protection.
+        /// When true, requests use BlockRazor's sandwich-mitigation mode.
         mev_protection: bool,
     },
 }
@@ -185,6 +191,7 @@ impl BlockRazorClient {
                 ping_handle,
                 stop_ping,
                 mev_protection,
+                http_fallback: None,
             },
         };
 
@@ -193,6 +200,43 @@ impl BlockRazorClient {
             client_clone.start_ping_task().await;
         });
 
+        Ok(client)
+    }
+
+    pub async fn new_grpc_with_http_fallback(
+        rpc_url: String,
+        grpc_endpoint: String,
+        http_endpoint: String,
+        auth_token: String,
+        mev_protection: bool,
+    ) -> Result<Self> {
+        let channel = tonic::transport::Channel::from_shared(grpc_endpoint.clone())
+            .map_err(|error| anyhow::anyhow!("Invalid gRPC endpoint: {error}"))?
+            .timeout(Duration::from_secs(30))
+            .connect()
+            .await
+            .map_err(|error| anyhow::anyhow!("Failed to connect to gRPC endpoint: {error}"))?;
+        let grpc_client =
+            Arc::new(ArcSwap::from_pointee(BlockRazorGrpcClient::new(channel, auth_token.clone())));
+        let client = Self {
+            rpc_client: Arc::new(SolanaRpcClient::new(rpc_url)),
+            backend: BlockRazorBackend::Grpc {
+                endpoint: grpc_endpoint,
+                auth_token,
+                grpc_client,
+                ping_handle: Arc::new(tokio::sync::Mutex::new(None)),
+                stop_ping: Arc::new(AtomicBool::new(false)),
+                mev_protection,
+                http_fallback: Some(BlockRazorHttpFallback {
+                    endpoint: http_endpoint,
+                    http_client: default_http_client_builder().user_agent("").build().unwrap(),
+                }),
+            },
+        };
+        let client_clone = client.clone();
+        tokio::spawn(async move {
+            client_clone.start_ping_task().await;
+        });
         Ok(client)
     }
 
@@ -356,11 +400,11 @@ impl BlockRazorClient {
     }
 
     async fn send_http_ping(http_client: &Client, endpoint: &str, auth_token: &str) -> Result<()> {
-        let ping_url = endpoint.replace("/v2/sendTransaction", "/v2/health");
+        let ping_url = endpoint.replace("/sendTransaction", "/health");
         let response = http_client
             .post(&ping_url)
-            .query(&[("auth", auth_token)])
-            .header("Content-Type", "text/plain")
+            .header("Content-Type", "application/json")
+            .header("apikey", auth_token)
             .timeout(Duration::from_millis(1500))
             .body(&[] as &[u8])
             .send()
@@ -385,6 +429,47 @@ impl BlockRazorClient {
         Ok(BlockRazorGrpcClient::new(channel, auth_token.to_string()))
     }
 
+    fn should_fallback_grpc(error: &anyhow::Error) -> bool {
+        error.downcast_ref::<tonic::Status>().is_some_and(|status| {
+            matches!(
+                status.code(),
+                tonic::Code::Unavailable | tonic::Code::DeadlineExceeded | tonic::Code::Internal
+            )
+        })
+    }
+
+    async fn submit_http(
+        http_client: &Client,
+        endpoint: &str,
+        auth_token: &str,
+        mev_protection: bool,
+        binary_transaction: &[u8],
+    ) -> Result<()> {
+        let payload = serde_json::json!({
+            "transaction": BASE64_STANDARD.encode(binary_transaction),
+            "mode": if mev_protection { "sandwichMitigation" } else { "fast" },
+            "safeWindow": 3,
+            "revertProtection": false,
+        });
+        let response = http_client
+            .post(endpoint)
+            .header("Content-Type", "application/json")
+            .header("apikey", auth_token)
+            .json(&payload)
+            .send()
+            .await?;
+        let status = response.status();
+        let response_body = response.text().await.unwrap_or_default();
+        if !status.is_success() {
+            anyhow::bail!(
+                "BlockRazor HTTP sendTransaction failed: status {} body: {}",
+                status,
+                response_body
+            );
+        }
+        Ok(())
+    }
+
     async fn send_transaction_impl(
         &self,
         trade_type: TradeType,
@@ -392,116 +477,71 @@ impl BlockRazorClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start_time = Instant::now();
+        let binary_transaction = bincode::serialize(transaction)
+            .context("BlockRazor transaction serialization failed")?;
 
         match &self.backend {
-            BlockRazorBackend::Grpc { grpc_client, mev_protection, .. } => {
-                let (content, _signature) =
-                    serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
-
-                // 使用 load() 无锁获取客户端引用
+            BlockRazorBackend::Grpc {
+                grpc_client,
+                auth_token,
+                mev_protection,
+                http_fallback,
+                ..
+            } => {
                 let client = grpc_client.load();
-                let signature = client
-                    .send_transaction(
-                        content,
-                        // mev_protection=true: sandwichMitigation mode skips blacklisted Leader slots (MEV protection).
-                        // revert_protection is unrelated to MEV; keep false.
+                let result = client
+                    .send_binary_transaction(
+                        binary_transaction.clone(),
                         if *mev_protection {
                             "sandwichMitigation".to_string()
                         } else {
                             "fast".to_string()
                         },
-                        None,
+                        3,
                         false,
                     )
                     .await;
-                match signature {
-                    Ok(sig) => {
-                        if !sig.is_empty() {
-                            if crate::common::sdk_log::sdk_log_enabled() {
-                                crate::common::sdk_log::log_swqos_submitted(
-                                    "BlockRazor",
-                                    trade_type,
-                                    start_time.elapsed(),
-                                );
-                            }
-                        } else {
-                            if crate::common::sdk_log::sdk_log_enabled() {
-                                crate::common::sdk_log::log_swqos_submission_failed(
-                                    "BlockRazor",
-                                    trade_type,
-                                    start_time.elapsed(),
-                                    "empty signature".to_string(),
-                                );
-                            }
-                            return Err(anyhow::anyhow!(
-                                "BlockRazor gRPC returned empty signature"
-                            ));
-                        }
+                let should_fallback = result.as_ref().is_err_and(Self::should_fallback_grpc);
+                if should_fallback {
+                    if let Some(fallback) = http_fallback {
+                        tracing::warn!(target: "sol_trade_sdk", "BlockRazor gRPC submit failed; using HTTP fallback");
+                        Self::submit_http(
+                            &fallback.http_client,
+                            &fallback.endpoint,
+                            auth_token,
+                            *mev_protection,
+                            &binary_transaction,
+                        )
+                        .await?;
+                    } else if let Err(error) = result {
+                        return Err(error);
                     }
-                    Err(e) => {
-                        if crate::common::sdk_log::sdk_log_enabled() {
-                            crate::common::sdk_log::log_swqos_submission_failed(
-                                "BlockRazor",
-                                trade_type,
-                                start_time.elapsed(),
-                                format!("gRPC error: {}", e),
-                            );
-                        }
-                        return Err(anyhow::anyhow!(
-                            "BlockRazor gRPC sendTransaction failed: {}",
-                            e
-                        ));
-                    }
+                } else if let Err(error) = result {
+                    return Err(error);
+                } else if result.as_ref().is_ok_and(String::is_empty) {
+                    anyhow::bail!("BlockRazor gRPC returned an empty signature");
                 }
             }
             BlockRazorBackend::Http {
                 endpoint, auth_token, http_client, mev_protection, ..
             } => {
-                let (content, _signature) =
-                    serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
-
-                let query_params: Vec<(&str, &str)> = vec![
-                    ("auth", auth_token.as_str()),
-                    // mev_protection=true: sandwichMitigation mode skips blacklisted Leader slots (MEV protection).
-                    // revertProtection is unrelated to MEV; not set.
-                    ("mode", if *mev_protection { "sandwichMitigation" } else { "fast" }),
-                ];
-
-                let response = http_client
-                    .post(endpoint)
-                    .query(&query_params)
-                    .header("Content-Type", "text/plain")
-                    .body(content)
-                    .send()
-                    .await?;
-
-                let status = response.status();
-                if status.is_success() {
-                    let _ = response.bytes().await;
-                    if crate::common::sdk_log::sdk_log_enabled() {
-                        crate::common::sdk_log::log_swqos_submitted(
-                            "blockrazor",
-                            trade_type,
-                            start_time.elapsed(),
-                        );
-                    }
-                } else {
-                    let body = response.text().await.unwrap_or_default();
-                    if crate::common::sdk_log::sdk_log_enabled() {
-                        crate::common::sdk_log::log_swqos_submission_failed(
-                            "blockrazor",
-                            trade_type,
-                            start_time.elapsed(),
-                            format!("status {} body: {}", status, body),
-                        );
-                    }
-                    return Err(anyhow::anyhow!(
-                        "BlockRazor HTTP sendTransaction failed: status {} body: {}",
-                        status,
-                        body
-                    ));
-                }
+                Self::submit_http(
+                    http_client,
+                    endpoint,
+                    auth_token,
+                    *mev_protection,
+                    &binary_transaction,
+                )
+                .await?;
             }
+        }
+
+        if crate::common::sdk_log::sdk_log_enabled() {
+            crate::common::sdk_log::log_swqos_submitted(
+                "BlockRazor",
+                trade_type,
+                start_time.elapsed(),
+            );
         }
 
         let start_time = Instant::now();
@@ -555,5 +595,26 @@ impl Drop for BlockRazorClient {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fallback_policy_rejects_auth_rate_limit_and_malformed_errors() {
+        assert!(BlockRazorClient::should_fallback_grpc(&anyhow::Error::new(
+            tonic::Status::unavailable("down"),
+        )));
+        assert!(!BlockRazorClient::should_fallback_grpc(&anyhow::Error::new(
+            tonic::Status::unauthenticated("bad key"),
+        )));
+        assert!(!BlockRazorClient::should_fallback_grpc(&anyhow::Error::new(
+            tonic::Status::resource_exhausted("rate limited"),
+        )));
+        assert!(!BlockRazorClient::should_fallback_grpc(
+            &anyhow::anyhow!("malformed transaction",)
+        ));
     }
 }

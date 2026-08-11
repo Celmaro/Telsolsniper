@@ -12,6 +12,17 @@ pub struct SendRequest {
     pub revert_protection: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SendBinaryRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub binary_transaction: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "2")]
+    pub mode: ::prost::alloc::string::String,
+    #[prost(int32, tag = "3")]
+    pub safe_window: i32,
+    #[prost(bool, tag = "4")]
+    pub revert_protection: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendResponse {
     #[prost(string, tag = "1")]
     pub signature: ::prost::alloc::string::String,
@@ -30,10 +41,10 @@ pub mod server_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     #[derive(Debug, Clone)]
     pub struct ServerClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -77,9 +88,8 @@ pub mod server_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ServerClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -118,39 +128,40 @@ pub mod server_client {
             &mut self,
             request: impl tonic::IntoRequest<super::SendRequest>,
         ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/serverpb.Server/SendTransaction",
-            );
+            let path = http::uri::PathAndQuery::from_static("/serverpb.Server/SendTransaction");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("serverpb.Server", "SendTransaction"));
+            req.extensions_mut().insert(GrpcMethod::new("serverpb.Server", "SendTransaction"));
             self.inner.unary(req, path, codec).await
+        }
+        pub async fn send_binary_transaction(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SendBinaryRequest>,
+        ) -> std::result::Result<tonic::Response<super::SendResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|error| {
+                tonic::Status::unknown(format!("Service was not ready: {}", error.into()))
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/serverpb.Server/SendBinaryTransaction");
+            let mut request = request.into_request();
+            request
+                .extensions_mut()
+                .insert(GrpcMethod::new("serverpb.Server", "SendBinaryTransaction"));
+            self.inner.unary(request, path, codec).await
         }
         pub async fn get_health(
             &mut self,
             request: impl tonic::IntoRequest<super::HealthRequest>,
         ) -> std::result::Result<tonic::Response<super::HealthResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/serverpb.Server/GetHealth",
-            );
+            let path = http::uri::PathAndQuery::from_static("/serverpb.Server/GetHealth");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new("serverpb.Server", "GetHealth"));
             self.inner.unary(req, path, codec).await
@@ -164,7 +175,7 @@ pub mod server_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ServerServer.
@@ -200,10 +211,7 @@ pub mod server_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -258,13 +266,9 @@ pub mod server_server {
                 "/serverpb.Server/SendTransaction" => {
                     #[allow(non_camel_case_types)]
                     struct SendTransactionSvc<T: Server>(pub Arc<T>);
-                    impl<T: Server> tonic::server::UnaryService<super::SendRequest>
-                    for SendTransactionSvc<T> {
+                    impl<T: Server> tonic::server::UnaryService<super::SendRequest> for SendTransactionSvc<T> {
                         type Response = super::SendResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SendRequest>,
@@ -301,21 +305,16 @@ pub mod server_server {
                 "/serverpb.Server/GetHealth" => {
                     #[allow(non_camel_case_types)]
                     struct GetHealthSvc<T: Server>(pub Arc<T>);
-                    impl<T: Server> tonic::server::UnaryService<super::HealthRequest>
-                    for GetHealthSvc<T> {
+                    impl<T: Server> tonic::server::UnaryService<super::HealthRequest> for GetHealthSvc<T> {
                         type Response = super::HealthResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::HealthRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Server>::get_health(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Server>::get_health(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -341,25 +340,16 @@ pub mod server_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::BoxBody::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::BoxBody::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE);
+                    Ok(response)
+                }),
             }
         }
     }

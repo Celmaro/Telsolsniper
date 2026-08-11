@@ -20,6 +20,7 @@ pub mod soyas;
 pub mod speedlanding;
 pub mod stellium;
 pub mod temporal;
+mod temporal_quic;
 pub mod zeroslot;
 
 use std::sync::Arc;
@@ -83,11 +84,11 @@ pub enum SwqosTransport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum AstralaneTransport {
     /// Binary over HTTP：`…/irisb?api-key=…&method=sendTransaction`（与 `AstralaneClient` 当前序列化一致）。
-    #[default]
     Binary,
     /// Plain HTTP：`…/iris?…`（非 irisb 路径）。
     Plain,
     /// QUIC（`host:7000`；MEV 时 `host:9000`）。
+    #[default]
     Quic,
 }
 
@@ -256,7 +257,8 @@ pub enum SwqosConfig {
     NextBlock(String, SwqosRegion, Option<String>),
     /// Bloxroute(api_token, region, custom_url)
     Bloxroute(String, SwqosRegion, Option<String>),
-    /// Temporal(api_token, region, custom_url)
+    /// Temporal(api_token, region, custom_url). Without a custom URL, uses QUIC/H3 then HTTP Batch fallback.
+    /// A custom URL remains an explicit HTTP Binary Batch endpoint.
     Temporal(String, SwqosRegion, Option<String>),
     /// ZeroSlot(api_token, region, custom_url)
     ZeroSlot(String, SwqosRegion, Option<String>),
@@ -266,7 +268,8 @@ pub enum SwqosConfig {
     FlashBlock(String, SwqosRegion, Option<String>),
     /// BlockRazor(api_token, region, custom_url, transport). transport=None 或 Grpc => gRPC; Some(Http) => HTTP.
     BlockRazor(String, SwqosRegion, Option<String>, Option<SwqosTransport>),
-    /// Astralane(api_token, region, custom_url, mode). `None` => [`AstralaneTransport::Binary`]（`/irisb`）。
+    /// Astralane(api_token, region, custom_url, mode). `None` => QUIC then Binary HTTP fallback.
+    /// A custom URL with no mode remains an explicit Binary HTTP endpoint.
     Astralane(String, SwqosRegion, Option<String>, Option<AstralaneTransport>),
     /// Stellium(api_token, region, custom_url)
     Stellium(String, SwqosRegion, Option<String>),
@@ -424,9 +427,24 @@ impl SwqosConfig {
                 Ok(Arc::new(zeroslot_client))
             }
             SwqosConfig::Temporal(auth_token, region, url) => {
-                let endpoint = SwqosConfig::get_endpoint(SwqosType::Temporal, region, url);
-                let temporal_client =
-                    TemporalClient::new(rpc_url.clone(), endpoint.to_string(), auth_token);
+                if let Some(endpoint) = url {
+                    return Ok(Arc::new(TemporalClient::new(
+                        rpc_url.clone(),
+                        endpoint,
+                        auth_token,
+                    )));
+                }
+                let endpoint = SWQOS_ENDPOINTS_TEMPORAL[region as usize].to_string();
+                let temporal_client = TemporalClient::new_quic_with_fallback(
+                    rpc_url.clone(),
+                    endpoint.clone(),
+                    auth_token.clone(),
+                )
+                .await
+                .unwrap_or_else(|error| {
+                    tracing::warn!(target: "sol_trade_sdk", "Temporal QUIC setup failed; using HTTP Batch only: {error}");
+                    TemporalClient::new(rpc_url.clone(), endpoint, auth_token)
+                });
                 Ok(Arc::new(temporal_client))
             }
             SwqosConfig::Bloxroute(auth_token, region, url) => {
@@ -458,44 +476,115 @@ impl SwqosConfig {
                 Ok(Arc::new(flashblock_client))
             }
             SwqosConfig::BlockRazor(auth_token, region, url, transport) => {
-                // BlockRazor: transport=None 或 transport=Grpc 时使用 gRPC，transport=Http 时使用 HTTP
-                let use_http = transport.map_or(false, |t| t == SwqosTransport::Http);
-                let endpoint = SwqosConfig::get_endpoint_with_transport(
-                    SwqosType::BlockRazor,
-                    region,
-                    url,
-                    transport,
-                    mev_protection,
-                );
-                if use_http {
-                    let blockrazor_client = BlockRazorClient::new_http(
+                let region_index = region as usize;
+                if url.is_some() && transport.is_none() {
+                    return Ok(Arc::new(BlockRazorClient::new_http(
                         rpc_url.clone(),
-                        endpoint.to_string(),
+                        url.unwrap(),
                         auth_token,
                         mev_protection,
-                    );
-                    Ok(Arc::new(blockrazor_client))
-                } else {
-                    // 使用 gRPC 模式（默认或用户明确指定了 gRPC）
-                    let blockrazor_client = BlockRazorClient::new_grpc(
-                        rpc_url.clone(),
-                        endpoint.to_string(),
-                        auth_token,
-                        mev_protection,
-                    )
-                    .await?;
-                    Ok(Arc::new(blockrazor_client))
+                    )));
+                }
+                match transport {
+                    Some(SwqosTransport::Http) => {
+                        let endpoint = url.unwrap_or_else(|| {
+                            SWQOS_ENDPOINTS_BLOCKRAZOR[region_index].to_string()
+                        });
+                        Ok(Arc::new(BlockRazorClient::new_http(
+                            rpc_url.clone(),
+                            endpoint,
+                            auth_token,
+                            mev_protection,
+                        )))
+                    }
+                    Some(SwqosTransport::Grpc) => {
+                        let endpoint = url.unwrap_or_else(|| {
+                            SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC[region_index].to_string()
+                        });
+                        Ok(Arc::new(
+                            BlockRazorClient::new_grpc(
+                                rpc_url.clone(),
+                                endpoint,
+                                auth_token,
+                                mev_protection,
+                            )
+                            .await?,
+                        ))
+                    }
+                    Some(SwqosTransport::Quic) => {
+                        anyhow::bail!(
+                            "BlockRazor does not support the QUIC transaction-submission transport"
+                        )
+                    }
+                    None => {
+                        let grpc_endpoint =
+                            SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC[region_index].to_string();
+                        let http_endpoint = SWQOS_ENDPOINTS_BLOCKRAZOR[region_index].to_string();
+                        let client = BlockRazorClient::new_grpc_with_http_fallback(
+                            rpc_url.clone(),
+                            grpc_endpoint,
+                            http_endpoint.clone(),
+                            auth_token.clone(),
+                            mev_protection,
+                        )
+                        .await
+                        .unwrap_or_else(|error| {
+                            tracing::warn!(target: "sol_trade_sdk", "BlockRazor gRPC setup failed; using HTTP only: {error}");
+                            BlockRazorClient::new_http(
+                                rpc_url.clone(),
+                                http_endpoint,
+                                auth_token,
+                                mev_protection,
+                            )
+                        });
+                        Ok(Arc::new(client))
+                    }
                 }
             }
             SwqosConfig::Astralane(auth_token, region, url, mode) => {
-                let mode = mode.unwrap_or_default();
-                match mode {
+                let region_index = region as usize;
+                if mode.is_none() {
+                    if let Some(endpoint) = url {
+                        return Ok(Arc::new(AstralaneClient::new(
+                            rpc_url.clone(),
+                            endpoint,
+                            auth_token,
+                            mev_protection,
+                        )));
+                    }
+                    let quic_endpoint = if mev_protection {
+                        SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[region_index].to_string()
+                    } else {
+                        SWQOS_ENDPOINTS_ASTRALANE_QUIC[region_index].to_string()
+                    };
+                    let http_endpoint = SWQOS_ENDPOINTS_ASTRALANE_BINARY[region_index].to_string();
+                    let client = AstralaneClient::new_quic_with_http_fallback(
+                        rpc_url.clone(),
+                        &quic_endpoint,
+                        http_endpoint.clone(),
+                        auth_token.clone(),
+                        mev_protection,
+                    )
+                    .await
+                    .unwrap_or_else(|error| {
+                        tracing::warn!(target: "sol_trade_sdk", "Astralane QUIC setup failed; using Binary HTTP only: {error}");
+                        AstralaneClient::new(
+                            rpc_url.clone(),
+                            http_endpoint,
+                            auth_token,
+                            mev_protection,
+                        )
+                    });
+                    return Ok(Arc::new(client));
+                }
+
+                match mode.unwrap() {
                     AstralaneTransport::Quic => {
                         let quic_endpoint = url.unwrap_or_else(|| {
                             if mev_protection {
-                                SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[region as usize].to_string()
+                                SWQOS_ENDPOINTS_ASTRALANE_QUIC_MEV[region_index].to_string()
                             } else {
-                                SWQOS_ENDPOINTS_ASTRALANE_QUIC[region as usize].to_string()
+                                SWQOS_ENDPOINTS_ASTRALANE_QUIC[region_index].to_string()
                             }
                         });
                         let astralane_client =
@@ -505,7 +594,7 @@ impl SwqosConfig {
                     }
                     AstralaneTransport::Plain => {
                         let endpoint = url.unwrap_or_else(|| {
-                            SWQOS_ENDPOINTS_ASTRALANE_PLAIN[region as usize].to_string()
+                            SWQOS_ENDPOINTS_ASTRALANE_PLAIN[region_index].to_string()
                         });
                         let astralane_client = AstralaneClient::new(
                             rpc_url.clone(),
@@ -517,7 +606,7 @@ impl SwqosConfig {
                     }
                     AstralaneTransport::Binary => {
                         let endpoint = url.unwrap_or_else(|| {
-                            SWQOS_ENDPOINTS_ASTRALANE_BINARY[region as usize].to_string()
+                            SWQOS_ENDPOINTS_ASTRALANE_BINARY[region_index].to_string()
                         });
                         let astralane_client = AstralaneClient::new(
                             rpc_url.clone(),

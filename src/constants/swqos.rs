@@ -326,19 +326,18 @@ pub const SWQOS_ENDPOINTS_FLASHBLOCK: [&str; 10] = [
     "http://fra.flashblock.trade", // Default: 非地理区域；EU 枢纽
 ];
 
-/// BlockRazor Send Transaction v2: plain-text Base64 body, auth in URI, Content-Type: text/plain. Keep-alive: POST /v2/health.
-/// 若 HTTP 返回 500，可尝试 HTTPS：https://<region>.solana.blockrazor.io/v2/sendTransaction（Frankfurt/NewYork/Tokyo），通过 custom_url 覆盖。
+/// BlockRazor Send Transaction: JSON body, `apikey` header. Keep-alive: POST `/health`.
 pub const SWQOS_ENDPOINTS_BLOCKRAZOR: [&str; 10] = [
-    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://amsterdam.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://london.solana.blockrazor.xyz:443/v2/sendTransaction", // Dublin: UK nearest published
-    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction", // SLC: 文档无美西；美国仅 NY，受可用区限制
-    "http://tokyo.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://tokyo.solana.blockrazor.xyz:443/v2/sendTransaction", // SG: 已公布 APAC 仅 Tokyo，为距 SG 最近
-    "http://london.solana.blockrazor.xyz:443/v2/sendTransaction",
-    "http://newyork.solana.blockrazor.xyz:443/v2/sendTransaction", // LosAngeles: 无美西入口；美国仅 NY
-    "http://frankfurt.solana.blockrazor.xyz:443/v2/sendTransaction", // Default: 非地理区域；EU 枢纽
+    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
+    "http://amsterdam.solana.blockrazor.xyz:443/sendTransaction",
+    "http://london.solana.blockrazor.xyz:443/sendTransaction",
+    "http://newyork.solana.blockrazor.xyz:443/sendTransaction",
+    "http://tokyo.solana.blockrazor.xyz:443/sendTransaction",
+    "http://singapore.solana.blockrazor.xyz:443/sendTransaction",
+    "http://london.solana.blockrazor.xyz:443/sendTransaction",
+    "http://losangeles.solana.blockrazor.xyz:443/sendTransaction",
+    "http://frankfurt.solana.blockrazor.xyz:443/sendTransaction",
 ];
 
 /// BlockRazor gRPC endpoints. Region order matches [`SwqosRegion`].
@@ -350,9 +349,9 @@ pub const SWQOS_ENDPOINTS_BLOCKRAZOR_GRPC: [&str; 10] = [
     "http://london.solana-grpc.blockrazor.xyz:80",
     "http://newyork.solana-grpc.blockrazor.xyz:80", // SLC: 与 HTTP 一致；美国仅 NY
     "http://tokyo.solana-grpc.blockrazor.xyz:80",
-    "http://tokyo.solana-grpc.blockrazor.xyz:80",
+    "http://singapore.solana-grpc.blockrazor.xyz:80",
     "http://london.solana-grpc.blockrazor.xyz:80",
-    "http://newyork.solana-grpc.blockrazor.xyz:80", // LosAngeles: 与 HTTP 一致
+    "http://losangeles.solana-grpc.blockrazor.xyz:80",
     "http://frankfurt.solana-grpc.blockrazor.xyz:80", // Default: 非地理区域
 ];
 

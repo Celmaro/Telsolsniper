@@ -52,7 +52,7 @@ async fn create_trading_client_simple() -> AnyResult<TradingClient> {
             SwqosRegion::Frankfurt,
             None,
             Some(AstralaneTransport::Quic),
-        ), // QUIC；None / Some(Binary) / Some(Plain) 为 HTTP
+        ), // Explicit QUIC; None uses QUIC first with Binary HTTP fallback
         // Helius Sender: 4th param swqos_only Some(true) => min tip 0.000005 SOL; None => 0.0002 SOL
         SwqosConfig::Helius("".to_string(), SwqosRegion::Default, None, Some(true)),
         // Glaive defaults to persistent QUIC (UDP/4000). Use Some(Http) for binary HTTP.

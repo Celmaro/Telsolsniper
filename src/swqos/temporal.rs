@@ -1,27 +1,21 @@
-use crate::swqos::common::{
-    default_http_client_builder, poll_transaction_confirmation, serialize_transaction_and_encode,
-};
+use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation};
+use crate::swqos::temporal_quic::{TemporalQuicSender, MAX_BATCH_SIZE};
+use crate::swqos::{SwqosClientTrait, SwqosType, TradeType};
+use crate::{common::SolanaRpcClient, constants::swqos::NOZOMI_TIP_ACCOUNTS};
+use anyhow::{Context, Result};
+use bincode::serialize as bincode_serialize;
 use rand::seq::IndexedRandom;
 use reqwest::Client;
-use serde_json::json;
 use sha2::{Digest, Sha256};
-use solana_transaction_status::UiTransactionEncoding;
-use std::time::Duration;
-use std::{sync::Arc, time::Instant};
-
-use crate::swqos::SwqosClientTrait;
-use crate::swqos::{SwqosType, TradeType};
-use anyhow::Result;
+use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::transaction::VersionedTransaction;
-
-use crate::{common::SolanaRpcClient, constants::swqos::NOZOMI_TIP_ACCOUNTS};
-
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 
 const SPECIAL_API_KEY_PREFIX: &str = "298b5025";
 const SPECIAL_API_KEY_SUFFIX: &str = "a055323";
-
 const SPECIAL_API_KEY_HASH: &str =
     "e7be933c8058aebcb4d08a6120fb4dfd2ead568d42527a3fc2b60a703f25e48d";
 const TEMPORAL_COMMUNITY_TIP_ADDRESS: &str = "mwGELGMgGGrNL1UibNCQeJHDE7qdPptWRYB6noUHmTj";
@@ -35,12 +29,13 @@ fn fast_sha256_hex(input: &str) -> String {
 
 #[derive(Clone)]
 pub struct TemporalClient {
-    pub rpc_client: Arc<SolanaRpcClient>,
-    pub endpoint: String,
-    pub auth_token: String,
-    pub http_client: Client,
-    pub ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
-    pub stop_ping: Arc<AtomicBool>,
+    rpc_client: Arc<SolanaRpcClient>,
+    endpoint: String,
+    auth_token: String,
+    http_client: Client,
+    quic_sender: Option<Arc<tokio::sync::Mutex<TemporalQuicSender>>>,
+    ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
+    stop_ping: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -64,17 +59,12 @@ impl SwqosClientTrait for TemporalClient {
     }
 
     fn get_tip_account(&self) -> Result<String> {
-        let api_key = &self.auth_token;
-        if api_key.len() >= SPECIAL_API_KEY_PREFIX.len() + SPECIAL_API_KEY_SUFFIX.len() {
-            if api_key.starts_with(SPECIAL_API_KEY_PREFIX)
-                && api_key.ends_with(SPECIAL_API_KEY_SUFFIX)
-            {
-                let current_api_key_hash = fast_sha256_hex(api_key);
-
-                if current_api_key_hash == SPECIAL_API_KEY_HASH {
-                    return Ok(TEMPORAL_COMMUNITY_TIP_ADDRESS.to_string());
-                }
-            }
+        if self.auth_token.len() >= SPECIAL_API_KEY_PREFIX.len() + SPECIAL_API_KEY_SUFFIX.len()
+            && self.auth_token.starts_with(SPECIAL_API_KEY_PREFIX)
+            && self.auth_token.ends_with(SPECIAL_API_KEY_SUFFIX)
+            && fast_sha256_hex(&self.auth_token) == SPECIAL_API_KEY_HASH
+        {
+            return Ok(TEMPORAL_COMMUNITY_TIP_ADDRESS.to_string());
         }
 
         let tip_account = *NOZOMI_TIP_ACCOUNTS
@@ -90,85 +80,89 @@ impl SwqosClientTrait for TemporalClient {
 }
 
 impl TemporalClient {
+    /// Explicit/custom Temporal URLs remain HTTP Binary Batch submissions.
     pub fn new(rpc_url: String, endpoint: String, auth_token: String) -> Self {
-        let rpc_client = SolanaRpcClient::new(rpc_url);
-        let http_client = default_http_client_builder().build().unwrap();
+        Self::build(rpc_url, endpoint, auth_token, None)
+    }
 
-        let client = Self {
-            rpc_client: Arc::new(rpc_client),
+    /// Default Temporal path: persistent HTTP/3 QUIC, then warm Binary Batch HTTP fallback.
+    pub async fn new_quic_with_fallback(
+        rpc_url: String,
+        endpoint: String,
+        auth_token: String,
+    ) -> Result<Self> {
+        let mut sender = TemporalQuicSender::new(&endpoint, &auth_token)?;
+        if let Err(error) = sender.warmup().await {
+            tracing::warn!(target: "sol_trade_sdk", "Temporal QUIC warmup failed; HTTP fallback remains ready: {error}");
+        }
+        Ok(Self::build(
+            rpc_url,
             endpoint,
             auth_token,
-            http_client,
+            Some(Arc::new(tokio::sync::Mutex::new(sender))),
+        ))
+    }
+
+    fn build(
+        rpc_url: String,
+        endpoint: String,
+        auth_token: String,
+        quic_sender: Option<Arc<tokio::sync::Mutex<TemporalQuicSender>>>,
+    ) -> Self {
+        let client = Self {
+            rpc_client: Arc::new(SolanaRpcClient::new(rpc_url)),
+            endpoint,
+            auth_token,
+            http_client: default_http_client_builder().build().unwrap(),
+            quic_sender,
             ping_handle: Arc::new(tokio::sync::Mutex::new(None)),
             stop_ping: Arc::new(AtomicBool::new(false)),
         };
-
-        // Start ping task
         let client_clone = client.clone();
         tokio::spawn(async move {
             client_clone.start_ping_task().await;
         });
-
         client
     }
 
-    /// Start periodic ping task to keep connections active
-    async fn start_ping_task(&self) {
-        let endpoint = self.endpoint.clone();
-        let auth_token = self.auth_token.clone();
-        let http_client = self.http_client.clone();
-        let stop_ping = self.stop_ping.clone();
-
-        let handle = tokio::spawn(async move {
-            // Immediate first ping to warm connection and reduce first-submit cold start latency
-            if let Err(e) = Self::send_ping_request(&http_client, &endpoint, &auth_token).await {
-                eprintln!("Temporal ping request failed: {}", e);
-            }
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
-            loop {
-                interval.tick().await;
-                if stop_ping.load(Ordering::Relaxed) {
-                    break;
-                }
-                if let Err(e) = Self::send_ping_request(&http_client, &endpoint, &auth_token).await
-                {
-                    eprintln!("Temporal ping request failed: {}", e);
-                }
-            }
-        });
-
-        // Update ping_handle - use Mutex to safely update
-        {
-            let mut ping_guard = self.ping_handle.lock().await;
-            if let Some(old_handle) = ping_guard.as_ref() {
-                old_handle.abort();
-            }
-            *ping_guard = Some(handle);
-        }
+    fn batch_url(endpoint: &str, auth_token: &str) -> String {
+        format!("{}/api/sendBatch?c={}", endpoint.trim_end_matches('/'), auth_token)
     }
 
-    /// Send ping request to /ping endpoint
-    async fn send_ping_request(
-        http_client: &Client,
-        endpoint: &str,
-        _auth_token: &str,
-    ) -> Result<()> {
-        // Build ping URL (no auth token required for ping endpoint)
-        let ping_url = if endpoint.ends_with('/') {
-            format!("{}ping", endpoint)
-        } else {
-            format!("{}/ping", endpoint)
-        };
-
-        // Short timeout for ping; consume body so connection is returned to pool for reuse by submit
-        let response =
-            http_client.get(&ping_url).timeout(Duration::from_millis(1500)).send().await?;
+    async fn submit_http_batch(&self, body: bytes::Bytes) -> Result<()> {
+        let response = self
+            .http_client
+            .post(Self::batch_url(&self.endpoint, &self.auth_token))
+            .header("Content-Type", "application/octet-stream")
+            .body(body)
+            .send()
+            .await
+            .context("Temporal Binary Batch HTTP request failed")?;
         let status = response.status();
-        let _ = response.bytes().await;
+        let response_body = response.text().await.unwrap_or_default();
         if !status.is_success() {
-            eprintln!("Temporal ping request returned non-success status: {}", status);
+            anyhow::bail!(
+                "Temporal Binary Batch HTTP failed: status {} body: {}",
+                status,
+                response_body
+            );
         }
         Ok(())
+    }
+
+    async fn submit_batch(&self, transactions: &[&[u8]]) -> Result<()> {
+        let body = TemporalQuicSender::encode_batch(transactions)?;
+        if let Some(sender) = &self.quic_sender {
+            let result = sender.lock().await.send_raw(body.clone()).await;
+            match result {
+                Ok(()) => return Ok(()),
+                Err(error) if error.is_transport_failure() => {
+                    tracing::warn!(target: "sol_trade_sdk", "Temporal QUIC submit failed; using HTTP fallback: {error}");
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        self.submit_http_batch(body).await
     }
 
     pub async fn send_transaction(
@@ -177,85 +171,20 @@ impl TemporalClient {
         transaction: &VersionedTransaction,
         wait_confirmation: bool,
     ) -> Result<()> {
-        let start_time = Instant::now();
-        let (content, signature) =
-            serialize_transaction_and_encode(transaction, UiTransactionEncoding::Base64)?;
-
-        // Build request body according to Nozomi documentation requirements
-        let request_body = serde_json::to_string(&json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "sendTransaction",
-            "params": [
-                content,
-                { "encoding": "base64" }
-            ]
-        }))?;
-
-        let mut url = String::with_capacity(self.endpoint.len() + self.auth_token.len() + 20);
-        url.push_str(&self.endpoint);
-        url.push_str("/?c=");
-        url.push_str(&self.auth_token);
-
-        let response_text = self
-            .http_client
-            .post(&url)
-            .body(request_body)
-            .header("Content-Type", "application/json")
-            .send()
-            .await?
-            .text()
-            .await?;
-
-        if let Ok(response_json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if response_json.get("result").is_some() {
-                crate::common::sdk_log::log_swqos_submitted(
-                    "nozomi",
-                    trade_type,
-                    start_time.elapsed(),
-                );
-            } else if let Some(_error) = response_json.get("error") {
-                crate::common::sdk_log::log_swqos_submission_failed(
-                    "nozomi",
-                    trade_type,
-                    start_time.elapsed(),
-                    _error,
-                );
-            }
-        } else {
-            crate::common::sdk_log::log_swqos_submission_failed(
-                "nozomi",
-                trade_type,
-                start_time.elapsed(),
-                response_text,
-            );
+        let started = Instant::now();
+        let transaction_bytes =
+            bincode_serialize(transaction).context("Temporal transaction serialization failed")?;
+        self.submit_batch(&[transaction_bytes.as_slice()]).await?;
+        if crate::common::sdk_log::sdk_log_enabled() {
+            crate::common::sdk_log::log_swqos_submitted("Temporal", trade_type, started.elapsed());
         }
-
-        let start_time: Instant = Instant::now();
-        match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
-            Ok(_) => (),
-            Err(e) => {
-                println!(" signature: {:?}", signature);
-                println!(
-                    " [nozomi] {} confirmation failed: {:?}",
-                    trade_type,
-                    start_time.elapsed()
-                );
-                return Err(e);
-            }
-        }
-        if wait_confirmation {
-            println!(" signature: {:?}", signature);
-            println!(
-                " [{:width$}] {} confirmed: {:?}",
-                "nozomi",
-                trade_type,
-                start_time.elapsed(),
-                width = crate::common::sdk_log::SWQOS_LABEL_WIDTH
-            );
-        }
-
-        Ok(())
+        poll_transaction_confirmation(
+            &self.rpc_client,
+            *transaction.get_signature(),
+            wait_confirmation,
+        )
+        .await
+        .map(|_| ())
     }
 
     pub async fn send_transactions(
@@ -264,27 +193,69 @@ impl TemporalClient {
         transactions: &Vec<VersionedTransaction>,
         wait_confirmation: bool,
     ) -> Result<()> {
-        for transaction in transactions {
-            self.send_transaction(trade_type, transaction, wait_confirmation).await?;
+        for batch in transactions.chunks(MAX_BATCH_SIZE) {
+            let encoded: Vec<Vec<u8>> = batch
+                .iter()
+                .map(|transaction| {
+                    bincode_serialize(transaction)
+                        .context("Temporal transaction serialization failed")
+                })
+                .collect::<Result<_>>()?;
+            let references: Vec<&[u8]> = encoded.iter().map(Vec::as_slice).collect();
+            let started = Instant::now();
+            self.submit_batch(&references).await?;
+            if crate::common::sdk_log::sdk_log_enabled() {
+                crate::common::sdk_log::log_swqos_submitted(
+                    "Temporal",
+                    trade_type,
+                    started.elapsed(),
+                );
+            }
+            for transaction in batch {
+                poll_transaction_confirmation(
+                    &self.rpc_client,
+                    *transaction.get_signature(),
+                    wait_confirmation,
+                )
+                .await?;
+            }
         }
         Ok(())
+    }
+
+    async fn start_ping_task(&self) {
+        let endpoint = self.endpoint.clone();
+        let http_client = self.http_client.clone();
+        let stop_ping = self.stop_ping.clone();
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                if stop_ping.load(Ordering::Relaxed) {
+                    break;
+                }
+                let ping_url = format!("{}/ping", endpoint.trim_end_matches('/'));
+                if let Ok(response) =
+                    http_client.get(ping_url).timeout(Duration::from_millis(1500)).send().await
+                {
+                    let _ = response.bytes().await;
+                }
+            }
+        });
+        let mut guard = self.ping_handle.lock().await;
+        if let Some(previous) = guard.replace(handle) {
+            previous.abort();
+        }
     }
 }
 
 impl Drop for TemporalClient {
     fn drop(&mut self) {
-        // Ensure ping task stops when client is destroyed
         self.stop_ping.store(true, Ordering::Relaxed);
-
-        // Try to stop ping task immediately
-        // Use tokio::spawn to avoid blocking Drop
-        let ping_handle = self.ping_handle.clone();
-        tokio::spawn(async move {
-            let mut ping_guard = ping_handle.lock().await;
-            if let Some(handle) = ping_guard.as_ref() {
+        if let Ok(mut guard) = self.ping_handle.try_lock() {
+            if let Some(handle) = guard.take() {
                 handle.abort();
             }
-            *ping_guard = None;
-        });
+        }
     }
 }
