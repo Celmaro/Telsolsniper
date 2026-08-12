@@ -887,6 +887,8 @@ pub fn claim_cashback_pumpfun_instruction(payer: &Pubkey) -> Option<Instruction>
         AccountMeta::new(*payer, true),
         AccountMeta::new(user_volume_accumulator, false),
         crate::constants::SYSTEM_PROGRAM_META,
+        accounts::EVENT_AUTHORITY_META,
+        accounts::PUMPFUN_META,
     ];
     let ix =
         Instruction::new_with_bytes(accounts::PUMPFUN, &CLAIM_CASHBACK_DISCRIMINATOR, ix_accounts);
@@ -976,8 +978,20 @@ mod tests {
     fn test_claim_cashback_instruction() {
         let payer = Pubkey::new_unique();
         let ix = claim_cashback_pumpfun_instruction(&payer).unwrap();
-        assert_eq!(ix.accounts.len(), 3);
-        assert_eq!(ix.accounts[0].pubkey, payer);
+        let accumulator = get_user_volume_accumulator_pda(&payer).unwrap();
+
+        assert_eq!(ix.program_id, accounts::PUMPFUN);
+        assert_eq!(ix.data, [37, 58, 35, 126, 190, 53, 228, 197]);
+        assert_eq!(
+            ix.accounts,
+            vec![
+                AccountMeta::new(payer, true),
+                AccountMeta::new(accumulator, false),
+                crate::constants::SYSTEM_PROGRAM_META,
+                accounts::EVENT_AUTHORITY_META,
+                accounts::PUMPFUN_META,
+            ]
+        );
     }
 
     #[test]
