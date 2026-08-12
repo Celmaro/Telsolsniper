@@ -119,8 +119,8 @@ pub fn get_sell_sol_amount_from_token_amount(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::common::MAX_SLIPPAGE_BASIS_POINTS;
+    use super::*;
 
     // Matches defaults used by BonkParams::from_dev_trade
     const VIRTUAL_BASE: u128 = 1_073_025_605_596_382;
@@ -174,22 +174,10 @@ mod tests {
     fn normal_slippage_matches_uncapped_formula() {
         const BPS: u128 = 100;
 
-        let buy_no_slip = get_buy_token_amount_from_sol_amount(
-            1_000_000,
-            VIRTUAL_BASE,
-            VIRTUAL_QUOTE,
-            0,
-            0,
-            0,
-        );
-        let buy_with_slip = get_buy_token_amount_from_sol_amount(
-            1_000_000,
-            VIRTUAL_BASE,
-            VIRTUAL_QUOTE,
-            0,
-            0,
-            BPS,
-        );
+        let buy_no_slip =
+            get_buy_token_amount_from_sol_amount(1_000_000, VIRTUAL_BASE, VIRTUAL_QUOTE, 0, 0, 0);
+        let buy_with_slip =
+            get_buy_token_amount_from_sol_amount(1_000_000, VIRTUAL_BASE, VIRTUAL_QUOTE, 0, 0, BPS);
         let expected_buy = buy_no_slip - ((buy_no_slip as u128 * BPS) / 10_000) as u64;
         assert_eq!(buy_with_slip, expected_buy);
         assert!(buy_with_slip < buy_no_slip);
