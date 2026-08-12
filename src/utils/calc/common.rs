@@ -144,19 +144,16 @@ mod tests {
     fn clamp_slippage_basis_points_caps_at_max() {
         assert_eq!(clamp_slippage_basis_points(0), 0);
         assert_eq!(clamp_slippage_basis_points(100), 100);
-        assert_eq!(clamp_slippage_basis_points(MAX_SLIPPAGE_BASIS_POINTS), MAX_SLIPPAGE_BASIS_POINTS);
+        assert_eq!(
+            clamp_slippage_basis_points(MAX_SLIPPAGE_BASIS_POINTS),
+            MAX_SLIPPAGE_BASIS_POINTS
+        );
         assert_eq!(clamp_slippage_basis_points(10_000), MAX_SLIPPAGE_BASIS_POINTS);
         assert_eq!(clamp_slippage_basis_points(u64::MAX), MAX_SLIPPAGE_BASIS_POINTS);
 
         assert_eq!(clamp_slippage_basis_points_u128(0), 0);
         assert_eq!(clamp_slippage_basis_points_u128(100), 100);
-        assert_eq!(
-            clamp_slippage_basis_points_u128(10_000),
-            MAX_SLIPPAGE_BASIS_POINTS as u128
-        );
-        assert_eq!(
-            clamp_slippage_basis_points_u128(u128::MAX),
-            MAX_SLIPPAGE_BASIS_POINTS as u128
-        );
+        assert_eq!(clamp_slippage_basis_points_u128(10_000), MAX_SLIPPAGE_BASIS_POINTS as u128);
+        assert_eq!(clamp_slippage_basis_points_u128(u128::MAX), MAX_SLIPPAGE_BASIS_POINTS as u128);
     }
 }

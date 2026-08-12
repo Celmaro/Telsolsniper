@@ -42,6 +42,7 @@
 ## 📋 目录
 
 - [✨ 项目特性](#-项目特性)
+- [📚 使用文档](#-使用文档)
 - [📦 安装](#-安装)
 - [🛠️ 使用示例](#️-使用示例)
   - [📋 使用示例](#-使用示例)
@@ -103,8 +104,20 @@
 8. **并发交易**: 所有已配置的 SWQoS 通道和默认 RPC 通道都会发出提交；首个成功只影响返回，较慢通道会继续提交
 9. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
 10. **中间件系统**: 支持自定义指令中间件，可在交易执行前对指令进行修改、添加或移除
-11. **共享基础设施**: 多钱包可共享同一套 RPC 与 SWQoS 客户端，降低资源占用
-12. **热路径 RPC 边界**: 交易执行使用调用方传入的 blockhash 或 durable nonce，不在热路径查询 blockhash、账户或余额
+11. **[买入前风险门](docs/PRE_BUY_RISK_GATE_CN.md)**: 在交易构建和提交前，通过本地缓存执行 mint authority、freeze authority、持仓聚类、白名单或黑名单判断
+12. **共享基础设施**: 多钱包可共享同一套 RPC 与 SWQoS 客户端，降低资源占用
+13. **热路径 RPC 边界**: 交易执行使用调用方传入的 blockhash 或 durable nonce，不在热路径查询 blockhash、账户或余额
+
+## 📚 使用文档
+
+| 文档 | 用途 |
+|---|---|
+| [买入前风险门](docs/PRE_BUY_RISK_GATE_CN.md) | 在构建和提交交易之前，通过本地风险缓存拒绝危险买入 |
+| [低延迟 Bot 集成](docs/LOW_LATENCY_BOTS_CN.md) | 组织事件处理、状态刷新、blockhash、账户和提交流程 |
+| [交易参数](docs/TRADING_PARAMETERS_CN.md) | 选择买卖金额模式、账户策略、ALT 和 nonce 设置 |
+| [Gas 费策略](docs/GAS_FEE_STRATEGY_CN.md) | 配置 compute unit 价格、limit、relay tip 和通道费率 |
+| [地址查找表](docs/ADDRESS_LOOKUP_TABLE_CN.md) | 使用一个或多个 ALT 缩小 versioned transaction |
+| [Durable Nonce](docs/NONCE_CACHE_CN.md) | 构建和刷新 durable nonce 交易流程 |
 
 ## 📦 安装
 

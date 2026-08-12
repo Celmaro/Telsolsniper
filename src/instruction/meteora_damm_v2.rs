@@ -462,4 +462,43 @@ mod tests {
         assert_eq!(ix.accounts[2].pubkey, expected_wsol_ata);
         assert_ne!(ix.accounts[2].pubkey, wrong_sol_ata);
     }
+
+    #[tokio::test]
+    async fn meteora_buy_create_output_account_uses_pool_output_token_program() {
+        let protocol_params = MeteoraDammV2Params::new(
+            pk(1),
+            pk(2),
+            pk(3),
+            crate::constants::WSOL_TOKEN_ACCOUNT,
+            pk(4),
+            crate::constants::TOKEN_PROGRAM,
+            crate::constants::TOKEN_PROGRAM_2022,
+        );
+        let mut params = swap_params(protocol_params);
+        params.create_output_mint_ata = true;
+
+        let instructions =
+            MeteoraDammV2InstructionBuilder.build_buy_instructions(&params).await.unwrap();
+        let expected_output_ata =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
+                &params.payer.pubkey(),
+                &pk(4),
+                &crate::constants::TOKEN_PROGRAM_2022,
+                params.open_seed_optimize,
+            );
+        let wrong_output_ata =
+            crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
+                &params.payer.pubkey(),
+                &pk(4),
+                &crate::constants::TOKEN_PROGRAM,
+                params.open_seed_optimize,
+            );
+        let swap_ix = instructions.last().unwrap();
+
+        assert_eq!(instructions[0].program_id, crate::constants::SYSTEM_PROGRAM);
+        assert_eq!(instructions[1].program_id, crate::constants::TOKEN_PROGRAM_2022);
+        assert_eq!(swap_ix.accounts[3].pubkey, expected_output_ata);
+        assert_ne!(swap_ix.accounts[3].pubkey, wrong_output_ata);
+        assert_eq!(swap_ix.accounts[10].pubkey, crate::constants::TOKEN_PROGRAM_2022);
+    }
 }

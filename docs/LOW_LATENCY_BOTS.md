@@ -10,6 +10,29 @@ filter -> deduplicate -> reject stale event -> map post-trade state -> Simple*Pa
 
 Do not initialize clients, synchronously fetch a blockhash, query balances, or search for pools in this path. An RPC fallback is valid for incomplete shred data but is no longer a purely low-latency path.
 
+## Pre-buy risk gate
+
+Install a `TradeRiskGate` on `TradingClient` when a strategy must reject risky mints before buying. The gate runs synchronously after basic parameter validation and before transaction construction/submission.
+
+Fetch remote risk data in a background task and atomically publish immutable local snapshots before the event reaches the buy path. Define missing and stale-cache behavior explicitly; do not call RPC or an audit API from the gate.
+
+See the [Pre-Buy Risk Gate Guide](PRE_BUY_RISK_GATE.md) for its purpose, API behavior, complete cache example, fail-open/fail-closed policy, and hot-path requirements.
+
+## Submit and confirmation latency
+
+SDK timing logs separate local construction, submit, and confirmation. If `build_instructions` and `before_submit` are sub-millisecond but `submit` or `confirm` takes hundreds of milliseconds or seconds, the bottleneck is not local instruction building.
+
+Common causes and fixes:
+
+| Symptom | Likely cause | Action |
+|---|---|---|
+| `confirm` is slow but signature was returned | Commitment/RPC polling latency | Use `wait_tx_confirmed=false` and monitor signatures externally, or confirm at `processed`/`confirmed` instead of waiting for finalization |
+| `submit` is slow on direct RPC | RPC endpoint latency or preflight path | Use a low-latency paid RPC/SWQoS lane and consider skip-preflight behavior through the selected sender |
+| Transaction lands late under load | Insufficient priority fee or relay tip | Raise compute-unit price and provider tip within the strategy's budget |
+| Direct example is slower than stream bot | Direct flow fetches pool state and balances | Preload pool params, ATAs, ALTs, blockhashes, and only refresh correctness-critical state outside the hot path |
+
+For direct transactions, fetching pool state by RPC is expected to dominate more than SDK compute. For bots, keep direct RPC reads in a warmup/refresher task and pass fresh params plus a recent blockhash into `buy`/`sell`.
+
 ## Trade intent
 
 | Goal | Parameter |

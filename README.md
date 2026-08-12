@@ -42,6 +42,7 @@
 ## 📋 Table of Contents
 
 - [✨ Features](#-features)
+- [📚 Documentation Guides](#-documentation-guides)
 - [📦 Installation](#-installation)
 - [🛠️ Usage Examples](#️-usage-examples)
   - [📋 Example Usage](#-example-usage)
@@ -103,8 +104,20 @@ This release updates PumpSwap for the July 2026 virtual quote reserve rollout. P
 8. **Concurrent Trading**: Submit through every configured SWQoS provider plus the default RPC lane; the first accepted result can return early while slower routes continue submitting
 9. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
 10. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
-11. **Shared Infrastructure**: Share expensive RPC and SWQoS clients across multiple wallets for reduced resource usage
-12. **Hot-Path RPC Boundary**: Trade execution uses caller-supplied blockhash or durable nonce and never queries RPC for blockhash, account, or balance data
+11. **[Pre-Buy Risk Gate](docs/PRE_BUY_RISK_GATE.md)**: Optional zero-allocation hot-path hook for cached mint authority, freeze authority, holder-cluster, allowlist, or blocklist checks before buy submission
+12. **Shared Infrastructure**: Share expensive RPC and SWQoS clients across multiple wallets for reduced resource usage
+13. **Hot-Path RPC Boundary**: Trade execution uses caller-supplied blockhash or durable nonce and never queries RPC for blockhash, account, or balance data
+
+## 📚 Documentation Guides
+
+| Guide | Purpose |
+|---|---|
+| [Pre-Buy Risk Gate](docs/PRE_BUY_RISK_GATE.md) | Reject risky buys from a local cache before transaction construction and submission |
+| [Low-Latency Bot Integration](docs/LOW_LATENCY_BOTS.md) | Structure event processing, state refresh, blockhash, account, and submit paths |
+| [Trading Parameters](docs/TRADING_PARAMETERS.md) | Choose buy/sell amount modes, account policies, ALTs, and nonce settings |
+| [Gas Fee Strategy](docs/GAS_FEE_STRATEGY.md) | Configure compute-unit prices, limits, relay tips, and per-lane fees |
+| [Address Lookup Tables](docs/ADDRESS_LOOKUP_TABLE.md) | Reduce versioned transaction size with one or more ALTs |
+| [Durable Nonce](docs/NONCE_CACHE.md) | Build and refresh durable-nonce transaction workflows |
 
 ## 📦 Installation
 
