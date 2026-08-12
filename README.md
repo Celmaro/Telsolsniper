@@ -88,9 +88,9 @@ This SDK is available in multiple languages:
 
 ## 🔖 Current Release
 
-**Rust crate:** `sol-trade-sdk = "4.0.23"`
+**Rust crate:** `sol-trade-sdk = "5.0.1"`
 
-This release updates PumpSwap for the July 2026 virtual quote reserve rollout. Pool and event schemas include `virtual_quote_reserves`, and all PumpSwap buy, sell, pricing, and dynamic-fee calculations use `quote_vault_balance + virtual_quote_reserves`.
+This release synchronizes the current official Meteora, Raydium, and Orca program IDLs used by the trading SDK. Explicitly versioned historical IDLs remain available as compatibility snapshots, and Raydium AMM V4 continues to use its source-defined instruction layout because it is not an Anchor program.
 
 ## ✨ Features
 
@@ -134,14 +134,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "4.0.23" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.1" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "4.0.23"
+sol-trade-sdk = "5.0.1"
 ```
 
 ## 🛠️ Usage Examples
