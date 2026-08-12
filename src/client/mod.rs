@@ -50,6 +50,16 @@ fn validate_protocol_params(dex_type: DexType, params: &DexParamEnum) -> bool {
     }
 }
 
+/// Optional pre-buy gate for cached token/routing risk checks.
+///
+/// Implement this trait to plug in mint/freeze authority checks, holder/insider
+/// clustering, allowlists, or blocklists before the SDK builds and submits a buy
+/// transaction. Keep remote calls in a background refresher and make this method
+/// read only local state: it executes inline on the trade hot path.
+pub trait TradeRiskGate: Send + Sync {
+    fn check_buy(&self, params: &TradeBuyParams) -> Result<(), anyhow::Error>;
+}
+
 #[inline]
 fn normalize_swqos_configs(rpc_url: &str, configs: &[SwqosConfig]) -> Vec<SwqosConfig> {
     let mut out = configs.to_vec();
@@ -729,6 +739,9 @@ pub struct TradingClient {
     pub infrastructure: Arc<TradingInfrastructure>,
     /// Optional middleware manager for custom transaction processing
     pub middleware_manager: Option<Arc<MiddlewareManager>>,
+    /// Optional pre-buy risk gate. When present, buy requests must pass this
+    /// cached check before transaction construction/submission.
+    pub risk_gate: Option<Arc<dyn TradeRiskGate>>,
     /// Whether to use seed optimization for all ATA operations (default: true)
     /// Applies to all token account creations across buy and sell operations
     pub use_seed_optimize: bool,
@@ -757,6 +770,7 @@ impl Clone for TradingClient {
             payer: self.payer.clone(),
             infrastructure: self.infrastructure.clone(),
             middleware_manager: self.middleware_manager.clone(),
+            risk_gate: self.risk_gate.clone(),
             use_seed_optimize: self.use_seed_optimize,
             use_dedicated_sender_threads: self.use_dedicated_sender_threads,
             sender_thread_cores: self.sender_thread_cores.clone(),
@@ -997,6 +1011,7 @@ impl TradingClient {
             payer,
             infrastructure,
             middleware_manager: None,
+            risk_gate: None,
             use_seed_optimize,
             use_dedicated_sender_threads: false,
             sender_thread_cores: None,
@@ -1043,6 +1058,7 @@ impl TradingClient {
             payer,
             infrastructure,
             middleware_manager: None,
+            risk_gate: None,
             use_seed_optimize,
             use_dedicated_sender_threads: false,
             sender_thread_cores: None,
@@ -1222,6 +1238,7 @@ impl TradingClient {
             payer,
             infrastructure: infrastructure.clone(),
             middleware_manager: None,
+            risk_gate: None,
             use_seed_optimize: trade_config.use_seed_optimize,
             use_dedicated_sender_threads: false,
             sender_thread_cores: None,
@@ -1249,6 +1266,16 @@ impl TradingClient {
     /// Returns the modified SolanaTrade instance with middleware manager attached
     pub fn with_middleware_manager(mut self, middleware_manager: MiddlewareManager) -> Self {
         self.middleware_manager = Some(Arc::new(middleware_manager));
+        self
+    }
+
+    /// Adds a pre-buy risk gate.
+    ///
+    /// The gate runs after basic parameter validation and before instruction
+    /// construction/submission. The callback is synchronous by design; use only
+    /// local cached state and refresh network-backed data outside the hot path.
+    pub fn with_risk_gate(mut self, risk_gate: Arc<dyn TradeRiskGate>) -> Self {
+        self.risk_gate = Some(risk_gate);
         self
     }
 
@@ -1372,13 +1399,16 @@ impl TradingClient {
                 " Current version only supports USD1 trading on Bonk protocols"
             ));
         }
-        let protocol_params = params.extension_params;
-        if !validate_protocol_params(params.dex_type, &protocol_params) {
+        if !validate_protocol_params(params.dex_type, &params.extension_params) {
             return Err(anyhow::anyhow!(
                 "Invalid protocol params for Trade (dex={:?})",
                 params.dex_type
             ));
         }
+        if let Some(risk_gate) = self.risk_gate.as_deref() {
+            risk_gate.check_buy(&params)?;
+        }
+        let protocol_params = params.extension_params;
         let input_token_mint = if params.input_token_type == TradeTokenType::SOL {
             SOL_TOKEN_ACCOUNT
         } else if params.input_token_type == TradeTokenType::WSOL {
@@ -1861,6 +1891,7 @@ mod tests {
     use super::*;
     use crate::instruction::utils::pumpfun::global_constants;
     use crate::swqos::SwqosRegion;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     fn dummy_pumpfun_params() -> DexParamEnum {
@@ -2104,5 +2135,145 @@ mod tests {
         assert!(low.recent_blockhash.is_none());
         assert_eq!(low.durable_nonce.as_ref().and_then(|n| n.nonce_account), Some(nonce_account));
         assert_eq!(low.durable_nonce.as_ref().and_then(|n| n.current_nonce), Some(nonce_hash));
+    }
+
+    struct RejectingRiskGate {
+        calls: AtomicUsize,
+    }
+
+    impl TradeRiskGate for RejectingRiskGate {
+        fn check_buy(&self, params: &TradeBuyParams) -> Result<(), anyhow::Error> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err(anyhow::anyhow!("blocked mint {}", params.mint))
+        }
+    }
+
+    #[tokio::test]
+    async fn buy_calls_risk_gate_before_submit() {
+        let infra = Arc::new(TradingInfrastructure {
+            rpc: Arc::new(SolanaRpcClient::new("https://example.invalid".to_string())),
+            swqos_clients: Arc::new(Vec::new()),
+            config: InfrastructureConfig::new(
+                "https://example.invalid".to_string(),
+                Vec::new(),
+                solana_commitment_config::CommitmentConfig::processed(),
+            ),
+            max_sender_concurrency: 1,
+            effective_core_ids: Arc::new(Vec::new()),
+        });
+        let gate = Arc::new(RejectingRiskGate { calls: AtomicUsize::new(0) });
+        let client = TradingClient::from_infrastructure(Arc::new(Keypair::new()), infra, true)
+            .with_risk_gate(gate.clone());
+
+        let err = client
+            .buy(TradeBuyParams {
+                dex_type: DexType::PumpFun,
+                input_token_type: TradeTokenType::SOL,
+                mint: Pubkey::new_unique(),
+                input_token_amount: 10_000,
+                slippage_basis_points: Some(100),
+                recent_blockhash: Some(Hash::new_unique()),
+                extension_params: dummy_pumpfun_params(),
+                address_lookup_table_accounts: Vec::new(),
+                wait_tx_confirmed: false,
+                wait_for_all_submits: false,
+                create_input_token_ata: false,
+                close_input_token_ata: false,
+                create_mint_ata: false,
+                durable_nonce: None,
+                fixed_output_token_amount: None,
+                gas_fee_strategy: GasFeeStrategy::new(),
+                simulate: false,
+                use_exact_sol_amount: Some(true),
+                grpc_recv_us: None,
+            })
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("blocked mint"), "{err}");
+        assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn buy_simple_uses_the_same_risk_gate() {
+        let infra = Arc::new(TradingInfrastructure {
+            rpc: Arc::new(SolanaRpcClient::new("https://example.invalid".to_string())),
+            swqos_clients: Arc::new(Vec::new()),
+            config: InfrastructureConfig::new(
+                "https://example.invalid".to_string(),
+                Vec::new(),
+                solana_commitment_config::CommitmentConfig::processed(),
+            ),
+            max_sender_concurrency: 1,
+            effective_core_ids: Arc::new(Vec::new()),
+        });
+        let gate = Arc::new(RejectingRiskGate { calls: AtomicUsize::new(0) });
+        let client = TradingClient::from_infrastructure(Arc::new(Keypair::new()), infra, true)
+            .with_risk_gate(gate.clone());
+
+        let err = client
+            .buy_simple(SimpleBuyParams::new(
+                DexType::PumpFun,
+                TradeTokenType::SOL,
+                Pubkey::new_unique(),
+                BuyAmount::ExactInput(10_000),
+                dummy_pumpfun_params(),
+                Hash::new_unique(),
+                GasFeeStrategy::new(),
+            ))
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("blocked mint"), "{err}");
+        assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn buy_validates_before_calling_risk_gate() {
+        let infra = Arc::new(TradingInfrastructure {
+            rpc: Arc::new(SolanaRpcClient::new("https://example.invalid".to_string())),
+            swqos_clients: Arc::new(Vec::new()),
+            config: InfrastructureConfig::new(
+                "https://example.invalid".to_string(),
+                Vec::new(),
+                solana_commitment_config::CommitmentConfig::processed(),
+            ),
+            max_sender_concurrency: 1,
+            effective_core_ids: Arc::new(Vec::new()),
+        });
+        let gate = Arc::new(RejectingRiskGate { calls: AtomicUsize::new(0) });
+        let client = TradingClient::from_infrastructure(Arc::new(Keypair::new()), infra, true)
+            .with_risk_gate(gate.clone());
+
+        let err = client
+            .buy(TradeBuyParams {
+                dex_type: DexType::PumpFun,
+                input_token_type: TradeTokenType::SOL,
+                mint: Pubkey::new_unique(),
+                input_token_amount: 0,
+                slippage_basis_points: Some(100),
+                recent_blockhash: Some(Hash::new_unique()),
+                extension_params: dummy_pumpfun_params(),
+                address_lookup_table_accounts: Vec::new(),
+                wait_tx_confirmed: false,
+                wait_for_all_submits: false,
+                create_input_token_ata: false,
+                close_input_token_ata: false,
+                create_mint_ata: false,
+                durable_nonce: None,
+                fixed_output_token_amount: None,
+                gas_fee_strategy: GasFeeStrategy::new(),
+                simulate: false,
+                use_exact_sol_amount: Some(true),
+                grpc_recv_us: None,
+            })
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("input amount must be greater than zero"), "{err}");
+        assert_eq!(gate.calls.load(Ordering::SeqCst), 0);
     }
 }
