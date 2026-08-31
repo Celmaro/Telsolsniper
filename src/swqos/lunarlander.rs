@@ -6,9 +6,9 @@ use std::{sync::Arc, time::Instant};
 use crate::swqos::SwqosClientTrait;
 use crate::swqos::{SwqosType, TradeType};
 use anyhow::Result;
-use bincode::serialize as bincode_serialize;
 use solana_sdk::transaction::VersionedTransaction;
 use std::time::Duration;
+use wincode::serialize as wincode_serialize;
 
 use crate::{common::SolanaRpcClient, constants::swqos::LUNARLANDER_TIP_ACCOUNTS};
 
@@ -186,7 +186,7 @@ impl LunarLanderClient {
             .signatures
             .first()
             .ok_or_else(|| anyhow::anyhow!("LunarLander transaction has no signature"))?;
-        let body_bytes = bincode_serialize(transaction)
+        let body_bytes = wincode_serialize(transaction)
             .map_err(|e| anyhow::anyhow!("LunarLander binary serialize failed: {}", e))?;
 
         match &self.backend {

@@ -144,6 +144,7 @@ impl GlaiveClient {
             }
             GlaiveBackend::Quic(quic) => quic.send_transaction(&serialized).await,
         };
+        drop(serialized);
 
         if let Err(error) = submit_result {
             if crate::common::sdk_log::sdk_log_enabled() {

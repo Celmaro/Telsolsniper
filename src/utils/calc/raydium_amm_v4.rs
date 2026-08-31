@@ -2,6 +2,8 @@ use crate::instruction::utils::raydium_amm_v4::accounts::{
     SWAP_FEE_DENOMINATOR, SWAP_FEE_NUMERATOR, TRADE_FEE_DENOMINATOR, TRADE_FEE_NUMERATOR,
 };
 
+use super::common::calculate_min_amount_out;
+
 /// Computes trading fee using ceiling division.
 ///
 /// # Arguments
@@ -135,8 +137,7 @@ pub fn compute_swap_amount(
         SWAP_FEE_NUMERATOR,
     );
 
-    let min_amount_out = ((swap_result.output_amount as f64)
-        * (1.0 - (slippage_basis_points as f64) / 10000.0)) as u64;
+    let min_amount_out = calculate_min_amount_out(swap_result.output_amount, slippage_basis_points);
 
     let all_trade = swap_result.input_amount == amount_in;
 
@@ -146,5 +147,41 @@ pub fn compute_swap_amount(
         amount_out: swap_result.output_amount,
         min_amount_out,
         fee: swap_result.trade_fee,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::calc::common::{calculate_min_amount_out, MAX_SLIPPAGE_BASIS_POINTS};
+
+    #[test]
+    fn min_amount_out_uses_exact_integer_slippage() {
+        let no_slippage = compute_swap_amount(u64::MAX, u64::MAX, true, u64::MAX, 0);
+        let one_percent = compute_swap_amount(u64::MAX, u64::MAX, true, u64::MAX, 100);
+
+        assert_eq!(one_percent.amount_out, no_slippage.amount_out);
+        assert_eq!(
+            one_percent.min_amount_out,
+            calculate_min_amount_out(one_percent.amount_out, 100)
+        );
+    }
+
+    #[test]
+    fn min_amount_out_rounds_down_after_applying_slippage() {
+        assert_eq!(calculate_min_amount_out(101, 100), 99);
+    }
+
+    #[test]
+    fn excessive_slippage_is_clamped_without_underflow() {
+        let excessive = compute_swap_amount(1_000_000, 2_000_000, true, 100_000, u64::MAX);
+        let clamped =
+            compute_swap_amount(1_000_000, 2_000_000, true, 100_000, MAX_SLIPPAGE_BASIS_POINTS);
+
+        assert_eq!(excessive.min_amount_out, clamped.min_amount_out);
+        assert_eq!(
+            excessive.min_amount_out,
+            calculate_min_amount_out(excessive.amount_out, MAX_SLIPPAGE_BASIS_POINTS)
+        );
     }
 }

@@ -517,9 +517,11 @@ impl ZeroAllocSerializer {
         // 清空缓冲区但保持容量
         buffer.clear();
 
-        // 直接序列化到缓冲区
-        let serialized = bincode::serialize(value)?;
-        buffer.extend_from_slice(&serialized);
+        // 直接序列化到复用缓冲区，避免临时 Vec 和整块复制。
+        if let Err(error) = bincode::serialize_into(&mut buffer, value) {
+            let _ = self.buffer_pool.push(buffer);
+            return Err(error.into());
+        }
 
         // 更新大小提示，用于优化后续分配
         self.size_hints.insert(event_type.to_string(), buffer.len());

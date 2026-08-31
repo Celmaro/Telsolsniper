@@ -10,13 +10,13 @@ use crossbeam_queue::ArrayQueue;
 use once_cell::sync::Lazy;
 use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::signature::Signature;
-use solana_transaction_status::UiTransactionEncoding;
+use solana_transaction_status_client_types::UiTransactionEncoding;
 use std::sync::Arc;
 
 /// Max number of reusable buffers kept in the queue.
-const SERIALIZER_POOL_SIZE: usize = 10_000;
-/// Per-buffer reserved capacity (bytes).
-const SERIALIZER_BUFFER_SIZE: usize = 256 * 1024;
+const SERIALIZER_POOL_SIZE: usize = 256;
+/// Solana V1 transactions are capped at 4 KiB; Legacy and V0 are capped at 1232 bytes.
+const SERIALIZER_BUFFER_SIZE: usize = 4 * 1024;
 /// Cold-start prewarm count. Keep small to avoid first-submit spikes.
 const SERIALIZER_PREWARM_BUFFERS: usize = 64;
 
@@ -49,21 +49,35 @@ impl ZeroAllocSerializer {
         data: &T,
         _label: &str,
     ) -> Result<Vec<u8>> {
-        // Try to get a buffer from the pool
         let mut buffer =
             self.buffer_pool.pop().unwrap_or_else(|| Vec::with_capacity(self.buffer_size));
-
-        // Serialize into buffer
-        let serialized = bincode::serialize(data)?;
         buffer.clear();
-        buffer.extend_from_slice(&serialized);
+        if let Err(error) = bincode::serialize_into(&mut buffer, data) {
+            self.return_buffer(buffer);
+            return Err(error.into());
+        }
+        Ok(buffer)
+    }
 
+    pub fn serialize_transaction<T: SerializableTransaction>(
+        &self,
+        transaction: &T,
+    ) -> Result<Vec<u8>> {
+        let mut buffer =
+            self.buffer_pool.pop().unwrap_or_else(|| Vec::with_capacity(self.buffer_size));
+        buffer.clear();
+        if let Err(error) = wincode::serialize_into(&mut buffer, transaction) {
+            self.return_buffer(buffer);
+            return Err(error.into());
+        }
         Ok(buffer)
     }
 
     pub fn return_buffer(&self, buffer: Vec<u8>) {
-        // Return buffer to the pool
-        let _ = self.buffer_pool.push(buffer);
+        // Do not let an atypically large generic payload permanently inflate the hot pool.
+        if buffer.capacity() <= self.buffer_size {
+            let _ = self.buffer_pool.push(buffer);
+        }
     }
 
     /// Get pool statistics.
@@ -121,6 +135,13 @@ impl std::ops::Deref for PooledTxBufGuard {
     }
 }
 
+impl AsRef<[u8]> for PooledTxBufGuard {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl Drop for PooledTxBufGuard {
     fn drop(&mut self) {
         if !self.0.is_empty() {
@@ -129,13 +150,15 @@ impl Drop for PooledTxBufGuard {
     }
 }
 
-/// Serialize transaction to bincode bytes using buffer pool. The returned guard returns the buffer
-/// to the pool when dropped; use `&*guard` or `guard.as_ref()` for `&[u8]`.
+/// Serialize a transaction with wincode into a pooled, Solana wire-compatible byte buffer.
+///
+/// The public name retains `bincode` for API compatibility. The returned guard sends the buffer
+/// back to the pool when dropped; use `&*guard` or `guard.as_ref()` for `&[u8]`.
 pub fn serialize_transaction_bincode_sync(
     transaction: &impl SerializableTransaction,
 ) -> Result<(PooledTxBufGuard, Signature)> {
     let signature = transaction.get_signature();
-    let serialized_tx = SERIALIZER.serialize_zero_alloc(transaction, "transaction")?;
+    let serialized_tx = SERIALIZER.serialize_transaction(transaction)?;
     Ok((PooledTxBufGuard(serialized_tx), *signature))
 }
 
@@ -144,18 +167,28 @@ pub fn return_serialization_buffer(buffer: Vec<u8>) {
     SERIALIZER.return_buffer(buffer);
 }
 
+#[inline]
+fn validate_binary_encoding(encoding: UiTransactionEncoding) -> Result<()> {
+    if matches!(encoding, UiTransactionEncoding::Base58 | UiTransactionEncoding::Base64) {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!("Unsupported encoding"))
+    }
+}
+
 /// Sync serialize + encode using buffer pool; use in hot path to reduce allocs.
 /// Base64 path uses SIMD-accelerated encoding.
 pub fn serialize_transaction_sync(
     transaction: &impl SerializableTransaction,
     encoding: UiTransactionEncoding,
 ) -> Result<(String, Signature)> {
+    validate_binary_encoding(encoding)?;
     let signature = transaction.get_signature();
-    let serialized_tx = SERIALIZER.serialize_zero_alloc(transaction, "transaction")?;
+    let serialized_tx = SERIALIZER.serialize_transaction(transaction)?;
     let serialized = match encoding {
         UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
         UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
-        _ => return Err(anyhow::anyhow!("Unsupported encoding")),
+        _ => unreachable!("encoding validated above"),
     };
     SERIALIZER.return_buffer(serialized_tx);
     Ok((serialized, *signature))
@@ -166,15 +199,16 @@ pub async fn serialize_transaction(
     transaction: &impl SerializableTransaction,
     encoding: UiTransactionEncoding,
 ) -> Result<(String, Signature)> {
+    validate_binary_encoding(encoding)?;
     let signature = transaction.get_signature();
 
     // Use zero-allocation serialization
-    let serialized_tx = SERIALIZER.serialize_zero_alloc(transaction, "transaction")?;
+    let serialized_tx = SERIALIZER.serialize_transaction(transaction)?;
 
     let serialized = match encoding {
         UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
         UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
-        _ => return Err(anyhow::anyhow!("Unsupported encoding")),
+        _ => unreachable!("encoding validated above"),
     };
 
     // Return buffer to pool immediately
@@ -188,13 +222,14 @@ pub fn serialize_transactions_batch_sync(
     transactions: &[impl SerializableTransaction],
     encoding: UiTransactionEncoding,
 ) -> Result<Vec<String>> {
+    validate_binary_encoding(encoding)?;
     let mut results = Vec::with_capacity(transactions.len());
     for tx in transactions {
-        let serialized_tx = SERIALIZER.serialize_zero_alloc(tx, "transaction")?;
+        let serialized_tx = SERIALIZER.serialize_transaction(tx)?;
         let encoded = match encoding {
             UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
             UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
-            _ => return Err(anyhow::anyhow!("Unsupported encoding")),
+            _ => unreachable!("encoding validated above"),
         };
         SERIALIZER.return_buffer(serialized_tx);
         results.push(encoded);
@@ -207,15 +242,16 @@ pub async fn serialize_transactions_batch(
     transactions: &[impl SerializableTransaction],
     encoding: UiTransactionEncoding,
 ) -> Result<Vec<String>> {
+    validate_binary_encoding(encoding)?;
     let mut results = Vec::with_capacity(transactions.len());
 
     for tx in transactions {
-        let serialized_tx = SERIALIZER.serialize_zero_alloc(tx, "transaction")?;
+        let serialized_tx = SERIALIZER.serialize_transaction(tx)?;
 
         let encoded = match encoding {
             UiTransactionEncoding::Base58 => bs58::encode(&serialized_tx).into_string(),
             UiTransactionEncoding::Base64 => SIMDSerializer::encode_base64_simd(&serialized_tx),
-            _ => return Err(anyhow::anyhow!("Unsupported encoding")),
+            _ => unreachable!("encoding validated above"),
         };
 
         SERIALIZER.return_buffer(serialized_tx);
@@ -233,6 +269,10 @@ pub fn get_serializer_stats() -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use solana_sdk::{
+        message::{legacy::Message, v0, v1, VersionedMessage},
+        transaction::{Transaction, VersionedTransaction},
+    };
     use std::time::Instant;
 
     #[test]
@@ -274,6 +314,58 @@ mod tests {
 
         let (available_after, _) = serializer.get_pool_stats();
         assert_eq!(available_after, 1);
+    }
+
+    #[test]
+    fn oversized_buffer_is_not_retained() {
+        let serializer = ZeroAllocSerializer::new_with_prewarm(8, 64, 0);
+        serializer.return_buffer(Vec::with_capacity(65));
+        assert_eq!(serializer.get_pool_stats(), (0, 8));
+    }
+
+    fn assert_pooled_wincode_matches<T: SerializableTransaction>(transaction: &T) {
+        let expected = wincode::serialize(transaction).unwrap();
+        let serializer = ZeroAllocSerializer::new_with_prewarm(1, 1232, 1);
+        let actual = serializer.serialize_transaction(transaction).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_wincode_transaction_bytes_match_wire_formats() {
+        let legacy = VersionedTransaction {
+            signatures: vec![Signature::default()],
+            message: VersionedMessage::Legacy(Message::default()),
+        };
+        assert_eq!(wincode::serialize(&legacy).unwrap(), bincode::serialize(&legacy).unwrap());
+        assert_pooled_wincode_matches(&legacy);
+
+        let v0 = VersionedTransaction {
+            signatures: vec![Signature::default()],
+            message: VersionedMessage::V0(v0::Message::default()),
+        };
+        assert_eq!(wincode::serialize(&v0).unwrap(), bincode::serialize(&v0).unwrap());
+        assert_pooled_wincode_matches(&v0);
+
+        // V1 has its own 4KB wire format and intentionally is not bincode-compatible.
+        let v1 = VersionedTransaction {
+            signatures: vec![Signature::default()],
+            message: VersionedMessage::V1(v1::Message::default()),
+        };
+        assert_pooled_wincode_matches(&v1);
+
+        let legacy_transaction = Transaction::default();
+        assert_eq!(
+            wincode::serialize(&legacy_transaction).unwrap(),
+            bincode::serialize(&legacy_transaction).unwrap()
+        );
+        assert_pooled_wincode_matches(&legacy_transaction);
+    }
+
+    #[test]
+    fn unsupported_encoding_is_rejected_before_pool_use() {
+        assert!(validate_binary_encoding(UiTransactionEncoding::Json).is_err());
+        assert!(validate_binary_encoding(UiTransactionEncoding::JsonParsed).is_err());
+        assert!(validate_binary_encoding(UiTransactionEncoding::Base64).is_ok());
     }
 
     fn legacy_eager_zero_fill_serializer(

@@ -100,15 +100,13 @@ impl SpeedlandingClient {
     }
 
     /// Ensure we have a live connection: if current one is closed, reconnect under lock so
-    /// concurrent senders wait and then all use the new connection. Uses blocking lock so
-    /// waiters get the updated connection.
+    /// concurrent senders wait and then all use the new connection.
     async fn ensure_connected(&self) -> Result<Arc<Connection>> {
-        let guard = self.reconnect.lock().await;
         let current = self.connection.load_full();
         if current.close_reason().is_none() {
             return Ok(current);
         }
-        drop(guard);
+
         let _guard = self.reconnect.lock().await;
         let current = self.connection.load_full();
         if current.close_reason().is_some() {
@@ -192,6 +190,7 @@ impl SwqosClientTrait for SpeedlandingClient {
                 return Err(e.into());
             }
         }
+        drop(buf_guard);
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {

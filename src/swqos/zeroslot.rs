@@ -1,5 +1,4 @@
 use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation};
-use bincode;
 use rand::seq::IndexedRandom;
 use reqwest::Client;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -146,7 +145,7 @@ impl ZeroSlotClient {
 
         // Binary-Tx: Send raw binary transaction bytes directly
         // This is faster than JSON-RPC as it avoids unnecessary encoding/decoding
-        let tx_bytes = bincode::serialize(transaction)?;
+        let tx_bytes = wincode::serialize(transaction)?;
 
         // Build URL for Binary-Tx endpoint: {endpoint}/txb?api-key={auth_token}
         let mut url = String::with_capacity(self.endpoint.len() + self.auth_token.len() + 20);

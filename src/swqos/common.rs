@@ -1,9 +1,8 @@
 use crate::common::types::SolanaRpcClient;
 use crate::swqos::serialization;
 use anyhow::Result;
-use base64::engine::general_purpose::{self, STANDARD};
+use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use bincode::serialize;
 use reqwest::Client;
 use serde_json;
 use serde_json::json;
@@ -12,7 +11,9 @@ use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::signature::Signature;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_sdk::transaction::{Transaction, TransactionError};
-use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEncoding};
+use solana_transaction_status_client_types::{
+    option_serializer::OptionSerializer, TransactionConfirmationStatus, UiTransactionEncoding,
+};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -79,8 +80,9 @@ pub trait FormatBase64VersionedTransaction {
 
 impl FormatBase64VersionedTransaction for VersionedTransaction {
     fn to_base64_string(&self) -> String {
-        let tx_bytes = bincode::serialize(self).unwrap();
-        general_purpose::STANDARD.encode(tx_bytes)
+        serialization::serialize_transaction_sync(self, UiTransactionEncoding::Base64)
+            .expect("transaction serialization failed")
+            .0
     }
 }
 
@@ -186,9 +188,7 @@ pub async fn poll_any_transaction_confirmation(
             } else {
                 // Extract error message from log_messages
                 let mut error_msg = String::new();
-                if let solana_transaction_status::option_serializer::OptionSerializer::Some(logs) =
-                    &meta.log_messages
-                {
+                if let OptionSerializer::Some(logs) = &meta.log_messages {
                     for log in logs {
                         if let Some(idx) = log.find("Error Message: ") {
                             let msg = log[idx + 15..].trim_end_matches('.').to_string();
@@ -251,12 +251,9 @@ pub async fn send_nb_transaction(
     auth_token: &str,
     transaction: &Transaction,
 ) -> Result<Signature, anyhow::Error> {
-    // Serialize transaction
-    let serialized = bincode::serialize(transaction)
-        .map_err(|e| anyhow::anyhow!("Transaction serialization failed: {}", e))?;
-
-    // Base64 encode
-    let encoded = STANDARD.encode(serialized);
+    let (encoded, _) =
+        serialization::serialize_transaction_sync(transaction, UiTransactionEncoding::Base64)
+            .map_err(|e| anyhow::anyhow!("Transaction serialization failed: {}", e))?;
 
     let request_data = json!({
         "transaction": {
@@ -318,12 +315,5 @@ pub async fn serialize_smart_transaction_and_encode(
     transaction: &impl SerializableTransaction,
     encoding: UiTransactionEncoding,
 ) -> Result<(String, Signature)> {
-    let signature = transaction.get_signature();
-    let serialized_tx = serialize(transaction)?;
-    let serialized = match encoding {
-        UiTransactionEncoding::Base58 => bs58::encode(serialized_tx).into_string(),
-        UiTransactionEncoding::Base64 => STANDARD.encode(serialized_tx),
-        _ => return Err(anyhow::anyhow!("Unsupported encoding")),
-    };
-    Ok((serialized, *signature))
+    serialization::serialize_transaction_sync(transaction, encoding)
 }

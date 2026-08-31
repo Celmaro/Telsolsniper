@@ -575,6 +575,7 @@ impl SystemCallBypassManager {
 
         let ptr = unsafe { pool.pool.as_mut_ptr().add(pool.offset) };
         pool.offset += (size + 7) & !7; // 8字节对齐
+        drop(pool);
 
         Ok(ptr)
     }

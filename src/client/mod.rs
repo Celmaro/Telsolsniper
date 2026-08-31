@@ -1173,7 +1173,6 @@ impl TradingClient {
                 error!(target: "sol_trade_sdk", "   💡 Possible causes: insufficient SOL, RPC timeout, or fee");
                 error!(target: "sol_trade_sdk", "   🔧 Solutions: fund wallet (e.g. 0.1 SOL), retry, check RPC");
             }
-            std::thread::sleep(std::time::Duration::from_secs(5));
             panic!(
                 "❌ WSOL ATA creation failed and account does not exist: {}. Error: {}",
                 wsol_ata, err

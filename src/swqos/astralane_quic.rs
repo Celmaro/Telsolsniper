@@ -2,6 +2,7 @@
 //! 用于向 Astralane QUIC TPU 提交交易，不依赖外部 crate，便于审计与安全可控。
 
 use anyhow::{Context, Result};
+use arc_swap::ArcSwap;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Connection, Endpoint, IdleTimeout, TransportConfig};
 use rcgen::{CertificateParams, KeyPair};
@@ -39,7 +40,8 @@ pub mod error_code {
 /// QUIC client for sending transactions to Astralane's TPU endpoint.
 pub struct AstralaneQuicClient {
     endpoint: Endpoint,
-    connection: Mutex<Connection>,
+    connection: ArcSwap<Connection>,
+    reconnect: Mutex<()>,
     server_addr: SocketAddr,
     server_candidates: Vec<SocketAddr>,
     next_server_idx: AtomicUsize,
@@ -173,7 +175,8 @@ impl AstralaneQuicClient {
 
         Ok(Self {
             endpoint,
-            connection: Mutex::new(connection),
+            connection: ArcSwap::from_pointee(connection),
+            reconnect: Mutex::new(()),
             server_addr: selected_addr,
             server_candidates: candidates,
             next_server_idx: AtomicUsize::new(0),
@@ -217,25 +220,11 @@ impl AstralaneQuicClient {
             );
         }
 
-        let conn = {
-            let mut guard = self.connection.lock().await;
-            if let Some(reason) = guard.close_reason() {
-                if let quinn::ConnectionError::ApplicationClosed(ref info) = reason {
-                    let code = info.error_code.into_inner();
-                    if code != error_code::OK as u64 {
-                        anyhow::bail!(
-                            "Server closed connection: {} (code {})",
-                            error_code::describe(code as u32),
-                            code
-                        );
-                    }
-                }
-                warn!("[astralane-quic] Connection dead, reconnecting to {} ...", self.server_addr);
-                let new_conn = self.reconnect_next_candidate().await?;
-                *guard = new_conn.clone();
-                info!("[astralane-quic] Reconnected");
-            }
-            guard.clone()
+        let current = self.connection.load_full();
+        let conn = if current.close_reason().is_some() {
+            self.reconnect_if_stale(&current).await?
+        } else {
+            current
         };
 
         let mut send_stream =
@@ -254,10 +243,16 @@ impl AstralaneQuicClient {
 
     /// Reconnect to the server if the connection was closed.
     pub async fn reconnect(&self) -> Result<()> {
-        let mut guard = self.connection.lock().await;
-        if guard.close_reason().is_some() {
+        let current = self.connection.load_full();
+        if current.close_reason().is_some() {
+            let _guard = self.reconnect.lock().await;
+            let current = self.connection.load_full();
+            if current.close_reason().is_none() {
+                return Ok(());
+            }
+            Self::validate_close_reason(&current)?;
             info!("[astralane-quic] Reconnecting at {}", self.server_addr);
-            *guard = self.reconnect_next_candidate().await?;
+            self.connection.store(Arc::new(self.reconnect_next_candidate().await?));
             info!("[astralane-quic] Reconnected");
         }
         Ok(())
@@ -265,12 +260,41 @@ impl AstralaneQuicClient {
 
     /// Check if the connection is still alive.
     pub async fn is_connected(&self) -> bool {
-        self.connection.lock().await.close_reason().is_none()
+        self.connection.load().close_reason().is_none()
     }
 
     /// Close the connection gracefully.
     pub async fn close(&self) {
-        self.connection.lock().await.close(error_code::OK.into(), b"client closing");
+        self.connection.load().close(error_code::OK.into(), b"client closing");
+    }
+
+    async fn reconnect_if_stale(&self, stale: &Arc<Connection>) -> Result<Arc<Connection>> {
+        Self::validate_close_reason(stale)?;
+        let _guard = self.reconnect.lock().await;
+        let current = self.connection.load_full();
+        if !Arc::ptr_eq(&current, stale) && current.close_reason().is_none() {
+            return Ok(current);
+        }
+        Self::validate_close_reason(&current)?;
+
+        warn!("[astralane-quic] Connection dead, reconnecting to {} ...", self.server_addr);
+        self.connection.store(Arc::new(self.reconnect_next_candidate().await?));
+        info!("[astralane-quic] Reconnected");
+        Ok(self.connection.load_full())
+    }
+
+    fn validate_close_reason(connection: &Connection) -> Result<()> {
+        if let Some(quinn::ConnectionError::ApplicationClosed(info)) = connection.close_reason() {
+            let code = info.error_code.into_inner();
+            if code != error_code::OK as u64 {
+                anyhow::bail!(
+                    "Server closed connection: {} (code {})",
+                    error_code::describe(code as u32),
+                    code
+                );
+            }
+        }
+        Ok(())
     }
 
     fn build_client_config(api_key: &str) -> Result<ClientConfig> {
@@ -306,7 +330,7 @@ impl AstralaneQuicClient {
 
 impl Drop for AstralaneQuicClient {
     fn drop(&mut self) {
-        self.connection.get_mut().close(error_code::OK.into(), b"client closing");
+        self.connection.load().close(error_code::OK.into(), b"client closing");
     }
 }
 

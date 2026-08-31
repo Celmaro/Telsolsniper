@@ -41,7 +41,11 @@ use solana_sdk::{
 
 #[inline]
 fn effective_pump_mint_token_program(protocol_params: &PumpFunParams, mint: &Pubkey) -> Pubkey {
-    if mint.to_string().ends_with("pump") {
+    let mut encoded = [0_u8; 44];
+    let has_pump_suffix = bs58::encode(mint.as_ref())
+        .onto(&mut encoded[..])
+        .is_ok_and(|len| encoded[..len].ends_with(b"pump"));
+    if has_pump_suffix {
         return TOKEN_PROGRAM_2022;
     }
     let tp = protocol_params.token_program;
@@ -1185,7 +1189,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let serialized = bincode::serialize(&transaction).unwrap();
+        let serialized = wincode::serialize(&transaction).unwrap();
 
         assert!(
             serialized.len() <= 1232,

@@ -23,11 +23,7 @@ use solana_sdk::{
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::{
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::sync::Notify;
 
 use fnv::FnvHasher;
@@ -148,15 +144,21 @@ async fn run_one_swqos_job(job: SwqosJob) {
 
 async fn swqos_worker_loop(queue: Arc<ArrayQueue<SwqosJob>>, notify: Arc<Notify>) {
     loop {
-        let notified = notify.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
+        let job = {
+            let notified = notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            match queue.pop() {
+                Some(job) => Some(job),
+                None => {
+                    notified.await;
+                    None
+                }
+            }
+        };
 
-        if let Some(job) = queue.pop() {
-            drop(notified);
+        if let Some(job) = job {
             run_one_swqos_job(job).await;
-        } else {
-            notified.await;
         }
     }
 }
@@ -235,6 +237,7 @@ fn ensure_dedicated_pool(
         target_workers,
         &mut guard,
     );
+    drop(guard);
     (queue, notify)
 }
 
@@ -354,20 +357,22 @@ fn is_landed_error(error: &anyhow::Error) -> bool {
 }
 
 struct ResultCollector {
-    results: Arc<ArrayQueue<TaskResult>>,
-    success_flag: Arc<AtomicBool>,
-    landed_failed_flag: Arc<AtomicBool>, // 🔧 Tx landed on-chain but failed (nonce consumed)
-    completed_count: Arc<AtomicUsize>,
+    results: ArrayQueue<TaskResult>,
+    success_flag: AtomicBool,
+    landed_failed_flag: AtomicBool, // 🔧 Tx landed on-chain but failed (nonce consumed)
+    completed_count: AtomicUsize,
+    result_notify: Notify,
     total_tasks: usize,
 }
 
 impl ResultCollector {
     fn new(capacity: usize) -> Self {
         Self {
-            results: Arc::new(ArrayQueue::new(capacity)),
-            success_flag: Arc::new(AtomicBool::new(false)),
-            landed_failed_flag: Arc::new(AtomicBool::new(false)),
-            completed_count: Arc::new(AtomicUsize::new(0)),
+            results: ArrayQueue::new(capacity),
+            success_flag: AtomicBool::new(false),
+            landed_failed_flag: AtomicBool::new(false),
+            completed_count: AtomicUsize::new(0),
+            result_notify: Notify::new(),
             total_tasks: capacity,
         }
     }
@@ -387,16 +392,23 @@ impl ResultCollector {
         }
 
         self.completed_count.fetch_add(1, Ordering::Release);
+        self.result_notify.notify_one();
     }
 
     async fn wait_for_success(
         &self,
     ) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
-        let start = Instant::now();
-        let timeout = std::time::Duration::from_secs(5);
-        let poll_interval = std::time::Duration::from_millis(1000);
+        let deadline = tokio::time::Instant::now() + FAST_SUBMIT_RESULT_TIMEOUT;
+        let deadline_sleep = tokio::time::sleep_until(deadline);
+        tokio::pin!(deadline_sleep);
 
         loop {
+            // Register before checking state so a concurrent submit cannot be missed
+            // between the predicate check and the await.
+            let notified = self.result_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
             if self.success_flag.load(Ordering::Acquire) {
                 let mut signatures = Vec::new();
                 let mut has_success = false;
@@ -454,10 +466,10 @@ impl ResultCollector {
                 return None;
             }
 
-            if start.elapsed() > timeout {
-                return None;
+            tokio::select! {
+                _ = notified.as_mut() => {}
+                _ = deadline_sleep.as_mut() => return None,
             }
-            tokio::time::sleep(poll_interval).await;
         }
     }
 
@@ -495,22 +507,31 @@ impl ResultCollector {
         &self,
         timeout: Duration,
     ) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
-        let start = Instant::now();
-        let poll_interval = Duration::from_millis(1);
+        let deadline = tokio::time::Instant::now() + timeout;
+        let deadline_sleep = tokio::time::sleep_until(deadline);
+        tokio::pin!(deadline_sleep);
+
         loop {
+            let notified = self.result_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
             if self.success_flag.load(Ordering::Acquire)
                 || self.landed_failed_flag.load(Ordering::Acquire)
                 || self.completed_count.load(Ordering::Acquire) >= self.total_tasks
-                || start.elapsed() >= timeout
             {
                 return self.get_first();
             }
-            tokio::time::sleep(poll_interval).await;
+
+            tokio::select! {
+                _ = notified.as_mut() => {}
+                _ = deadline_sleep.as_mut() => return self.get_first(),
+            }
         }
     }
 
     /// 等待全部任务完成（不等待链上确认），然后收集并返回所有已返回的签名。
-    /// 轮询间隔 2ms，避免 50ms 间隔在最后一笔返回时多等几十 ms 拉高 submit 耗时。
+    /// 提交完成时由 worker 主动唤醒，避免固定间隔轮询增加调度开销和返回延迟。
     /// Re-enabled via `SwapParams.wait_for_all_submits` for callers that need
     /// every submitted signature, either for external monitoring or for
     /// executor-level poll-any confirmation after parallel submit.
@@ -518,19 +539,49 @@ impl ResultCollector {
         &self,
         timeout_secs: u64,
     ) -> Option<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
-        let start = Instant::now();
-        let primary = Duration::from_secs(timeout_secs);
-        let poll_interval = Duration::from_millis(2);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
+        let deadline_sleep = tokio::time::sleep_until(deadline);
+        tokio::pin!(deadline_sleep);
+
+        let mut timed_out = false;
         while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
-            if start.elapsed() > primary {
+            let notified = self.result_notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+
+            if self.completed_count.load(Ordering::Acquire) >= self.total_tasks {
                 break;
             }
-            tokio::time::sleep(poll_interval).await;
+
+            tokio::select! {
+                _ = notified.as_mut() => {}
+                _ = deadline_sleep.as_mut() => {
+                    timed_out = true;
+                    break;
+                }
+            }
         }
+
         // Bound the opt-in "all submits" path tightly. A slow relay must not
         // delay poll-any confirmation by multiple seconds after the submit
         // window; give only a short grace for a just-finished worker to publish.
-        tokio::time::sleep(FAST_SUBMIT_DRAIN_GRACE).await;
+        if timed_out {
+            let grace_deadline = tokio::time::Instant::now() + FAST_SUBMIT_DRAIN_GRACE;
+            while self.completed_count.load(Ordering::Acquire) < self.total_tasks {
+                let notified = self.result_notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+
+                if self.completed_count.load(Ordering::Acquire) >= self.total_tasks {
+                    break;
+                }
+
+                tokio::select! {
+                    _ = notified.as_mut() => {}
+                    _ = tokio::time::sleep_until(grace_deadline) => break,
+                }
+            }
+        }
         self.get_first()
     }
 }
@@ -770,9 +821,22 @@ pub async fn execute_parallel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn value(cu_price: u64, tip: f64) -> GasFeeStrategyValue {
         GasFeeStrategyValue { cu_limit: 100_000, cu_price, tip }
+    }
+
+    fn task_result(success: bool, landed_on_chain: bool) -> TaskResult {
+        TaskResult {
+            success,
+            signature: Signature::default(),
+            error: (!success).then(|| anyhow!("submit failed")),
+            swqos_type: SwqosType::Default,
+            strategy_type: GasFeeStrategyType::Normal,
+            landed_on_chain,
+            submit_done_us: crate::common::clock::now_micros(),
+        }
     }
 
     #[test]
@@ -848,5 +912,59 @@ mod tests {
             start.elapsed() < Duration::from_millis(150),
             "wait_for_all_submitted should not add multi-second grace after timeout"
         );
+    }
+
+    #[tokio::test]
+    async fn wait_for_first_submitted_wakes_on_success() {
+        let collector = Arc::new(ResultCollector::new(2));
+        let waiter = collector.clone();
+        let waiting =
+            tokio::spawn(
+                async move { waiter.wait_for_first_submitted(Duration::from_secs(1)).await },
+            );
+
+        tokio::task::yield_now().await;
+        collector.submit(task_result(true, true));
+
+        let result = tokio::time::timeout(Duration::from_millis(100), waiting)
+            .await
+            .expect("success notification should wake the waiter")
+            .expect("waiter task should finish")
+            .expect("submitted result should be returned");
+        assert!(result.0);
+        assert_eq!(result.1.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn wait_for_success_wakes_on_landed_failure() {
+        let collector = Arc::new(ResultCollector::new(2));
+        let waiter = collector.clone();
+        let waiting = tokio::spawn(async move { waiter.wait_for_success().await });
+
+        tokio::task::yield_now().await;
+        collector.submit(task_result(false, true));
+
+        let result = tokio::time::timeout(Duration::from_millis(100), waiting)
+            .await
+            .expect("landed-failure notification should wake the waiter")
+            .expect("waiter task should finish")
+            .expect("landed failure should be returned");
+        assert!(!result.0);
+        assert!(result.2.is_some());
+    }
+
+    #[tokio::test]
+    async fn wait_for_all_submitted_handles_preexisting_notifications() {
+        let collector = ResultCollector::new(2);
+        collector.submit(task_result(false, false));
+        collector.submit(task_result(true, true));
+
+        let result =
+            tokio::time::timeout(Duration::from_millis(100), collector.wait_for_all_submitted(1))
+                .await
+                .expect("completed state should be observed without polling")
+                .expect("completed results should be returned");
+        assert!(result.0);
+        assert_eq!(result.1.len(), 2);
     }
 }

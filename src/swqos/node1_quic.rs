@@ -5,9 +5,9 @@
 //! Reuses a single authenticated connection; reconnects and re-auth when connection is closed.
 
 use anyhow::{Context, Result};
+use arc_swap::ArcSwap;
 use quinn::crypto::rustls::QuicClientConfig;
 use quinn::{ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, TransportConfig};
-use std::net::ToSocketAddrs;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::common::SolanaRpcClient;
 use crate::constants::swqos::NODE1_TIP_ACCOUNTS;
 use crate::swqos::common::poll_transaction_confirmation;
+use crate::swqos::serialization::serialize_transaction_bincode_sync;
 use crate::swqos::{SwqosClientTrait, SwqosType, TradeType};
 use rand::seq::IndexedRandom;
 use solana_sdk::transaction::VersionedTransaction;
@@ -28,11 +29,13 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(5);
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
 const MAX_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_TX_SIZE: usize = 1232;
+const MAX_RESPONSE_MESSAGE_SIZE: usize = 64 * 1024;
 
 /// Node1 QUIC client: one authenticated connection, reuse for all transactions.
 pub struct Node1QuicClient {
     endpoint: Endpoint,
-    connection: Mutex<Connection>,
+    connection: ArcSwap<Connection>,
+    reconnect: Mutex<()>,
     server_addr: String,
     server_name: String,
     api_key_uuid: [u8; 16],
@@ -42,8 +45,8 @@ pub struct Node1QuicClient {
 impl Node1QuicClient {
     /// Connect and authenticate. Reuse the returned client for all subsequent sends.
     pub async fn connect(server_addr: &str, api_key: &str, rpc_url: String) -> Result<Self> {
-        let socket_addr = server_addr
-            .to_socket_addrs()
+        let socket_addr = tokio::net::lookup_host(server_addr)
+            .await
             .context("resolve Node1 QUIC server address")?
             .next()
             .context("no socket address for Node1 QUIC")?;
@@ -72,7 +75,8 @@ impl Node1QuicClient {
 
         Ok(Self {
             endpoint,
-            connection: Mutex::new(connection),
+            connection: ArcSwap::from_pointee(connection),
+            reconnect: Mutex::new(()),
             server_addr: server_addr.to_string(),
             server_name: server_name.to_string(),
             api_key_uuid: api_key_bytes,
@@ -110,35 +114,38 @@ impl Node1QuicClient {
         }
     }
 
-    async fn ensure_connected(&self) -> Result<Connection> {
-        let guard = self.connection.lock().await;
-        if let Some(_reason) = guard.close_reason() {
-            drop(guard);
-            let socket_addr = self
-                .server_addr
-                .to_socket_addrs()
-                .context("resolve Node1 QUIC server address")?
-                .next()
-                .context("no socket address")?;
-            let connecting = self
-                .endpoint
-                .connect(socket_addr, &self.server_name)
-                .context("Node1 QUIC reconnect failed")?;
-            let connection = timeout(CONNECT_TIMEOUT, connecting)
-                .await
-                .context("Node1 QUIC reconnect timeout")?
-                .context("Node1 QUIC re-handshake failed")?;
-
-            timeout(AUTH_TIMEOUT, Self::authenticate(&connection, &self.api_key_uuid))
-                .await
-                .context("Node1 QUIC re-auth timeout")??;
-
-            let mut g = self.connection.lock().await;
-            *g = connection.clone();
-            Ok(connection)
-        } else {
-            Ok(guard.clone())
+    async fn ensure_connected(&self) -> Result<Arc<Connection>> {
+        let current = self.connection.load_full();
+        if current.close_reason().is_none() {
+            return Ok(current);
         }
+
+        let _guard = self.reconnect.lock().await;
+        let current = self.connection.load_full();
+        if current.close_reason().is_none() {
+            return Ok(current);
+        }
+
+        let socket_addr = tokio::net::lookup_host(&self.server_addr)
+            .await
+            .context("resolve Node1 QUIC server address during reconnect")?
+            .next()
+            .context("no socket address for Node1 QUIC during reconnect")?;
+        let connecting = self
+            .endpoint
+            .connect(socket_addr, &self.server_name)
+            .context("Node1 QUIC reconnect failed")?;
+        let connection = timeout(CONNECT_TIMEOUT, connecting)
+            .await
+            .context("Node1 QUIC reconnect timeout")?
+            .context("Node1 QUIC re-handshake failed")?;
+
+        timeout(AUTH_TIMEOUT, Self::authenticate(&connection, &self.api_key_uuid))
+            .await
+            .context("Node1 QUIC re-auth timeout")??;
+
+        self.connection.store(Arc::new(connection));
+        Ok(self.connection.load_full())
     }
 
     async fn read_response(recv: &mut RecvStream) -> Result<(u16, String)> {
@@ -148,6 +155,13 @@ impl Node1QuicClient {
             .map_err(|e| anyhow::anyhow!("read response header: {:?}", e))?;
         let status = u16::from_be_bytes(header[0..2].try_into().unwrap());
         let msg_len = u32::from_be_bytes(header[2..6].try_into().unwrap()) as usize;
+        if msg_len > MAX_RESPONSE_MESSAGE_SIZE {
+            anyhow::bail!(
+                "Node1 QUIC response too large ({} > {})",
+                msg_len,
+                MAX_RESPONSE_MESSAGE_SIZE
+            );
+        }
         let mut msg = vec![0u8; msg_len];
         if msg_len > 0 {
             recv.read_exact(&mut msg)
@@ -184,8 +198,8 @@ impl SwqosClientTrait for Node1QuicClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start = Instant::now();
-        let signature = transaction.signatures.first().copied().unwrap_or_default();
-        let tx_bytes = bincode::serialize(transaction).context("Node1 QUIC: bincode serialize")?;
+        let (tx_bytes, signature) = serialize_transaction_bincode_sync(transaction)
+            .context("Node1 QUIC: wincode serialize")?;
 
         let (status, msg) = timeout(SEND_TIMEOUT, self.send_transaction_bytes(&tx_bytes))
             .await
@@ -205,6 +219,7 @@ impl SwqosClientTrait for Node1QuicClient {
             println!(" [node1-quic] {} submitted: {:?}", trade_type, start.elapsed());
         }
 
+        drop(tx_bytes);
         let start = Instant::now();
         match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => {
@@ -253,7 +268,7 @@ impl SwqosClientTrait for Node1QuicClient {
 
 impl Drop for Node1QuicClient {
     fn drop(&mut self) {
-        self.connection.get_mut().close(0u32.into(), b"client closing");
+        self.connection.load().close(0u32.into(), b"client closing");
     }
 }
 

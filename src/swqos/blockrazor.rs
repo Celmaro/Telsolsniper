@@ -292,7 +292,7 @@ impl BlockRazorClient {
 
                     // 初始健康检查
                     {
-                        let client = grpc_client.load();
+                        let client = grpc_client.load_full();
                         if let Err(e) = client.get_health().await {
                             if crate::common::sdk_log::sdk_log_enabled() {
                                 eprintln!("BlockRazor gRPC initial health check failed: {}", e);
@@ -309,7 +309,7 @@ impl BlockRazorClient {
                         }
 
                         // 健康检查（使用 load() 无锁读取）
-                        let client = grpc_client.load();
+                        let client = grpc_client.load_full();
                         match client.get_health().await {
                             Ok(_) => {
                                 delay = 1; // 成功，重置延迟
@@ -477,7 +477,7 @@ impl BlockRazorClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start_time = Instant::now();
-        let binary_transaction = bincode::serialize(transaction)
+        let binary_transaction = wincode::serialize(transaction)
             .context("BlockRazor transaction serialization failed")?;
 
         match &self.backend {
@@ -488,7 +488,7 @@ impl BlockRazorClient {
                 http_fallback,
                 ..
             } => {
-                let client = grpc_client.load();
+                let client = grpc_client.load_full();
                 let result = client
                     .send_binary_transaction(
                         binary_transaction.clone(),

@@ -62,7 +62,7 @@ pub fn build_transaction(
         durable_nonce,
     )?;
 
-    let serialized_len = bincode::serialized_size(&transaction)? as usize;
+    let serialized_len = wincode::serialized_size(&transaction)? as usize;
     if crate::common::sdk_log::sdk_log_enabled() {
         println!(
             " [SDK][tx-size     ] {} {} serialized={} bytes, business_ix={}, nonce={}, tip={}, cu_limit={}, cu_price={}, alt={}",

@@ -1,12 +1,11 @@
 use crate::swqos::common::{default_http_client_builder, poll_transaction_confirmation};
+use crate::swqos::serialization::{serialize_transaction_bincode_sync, PooledTxBufGuard};
 use crate::swqos::temporal_quic::{TemporalQuicSender, MAX_BATCH_SIZE};
 use crate::swqos::{SwqosClientTrait, SwqosType, TradeType};
 use crate::{common::SolanaRpcClient, constants::swqos::NOZOMI_TIP_ACCOUNTS};
 use anyhow::{Context, Result};
-use bincode::serialize as bincode_serialize;
 use rand::seq::IndexedRandom;
 use reqwest::Client;
-use sha2::{Digest, Sha256};
 use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::transaction::VersionedTransaction;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,26 +13,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 
-const SPECIAL_API_KEY_PREFIX: &str = "298b5025";
-const SPECIAL_API_KEY_SUFFIX: &str = "a055323";
-const SPECIAL_API_KEY_HASH: &str =
-    "e7be933c8058aebcb4d08a6120fb4dfd2ead568d42527a3fc2b60a703f25e48d";
-const TEMPORAL_COMMUNITY_TIP_ADDRESS: &str = "mwGELGMgGGrNL1UibNCQeJHDE7qdPptWRYB6noUHmTj";
-
-#[inline]
-fn fast_sha256_hex(input: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
 #[derive(Clone)]
 pub struct TemporalClient {
     rpc_client: Arc<SolanaRpcClient>,
     endpoint: String,
     auth_token: String,
     http_client: Client,
-    quic_sender: Option<Arc<tokio::sync::Mutex<TemporalQuicSender>>>,
+    quic_sender: Option<Arc<TemporalQuicSender>>,
     ping_handle: Arc<tokio::sync::Mutex<Option<JoinHandle<()>>>>,
     stop_ping: Arc<AtomicBool>,
 }
@@ -59,14 +45,6 @@ impl SwqosClientTrait for TemporalClient {
     }
 
     fn get_tip_account(&self) -> Result<String> {
-        if self.auth_token.len() >= SPECIAL_API_KEY_PREFIX.len() + SPECIAL_API_KEY_SUFFIX.len()
-            && self.auth_token.starts_with(SPECIAL_API_KEY_PREFIX)
-            && self.auth_token.ends_with(SPECIAL_API_KEY_SUFFIX)
-            && fast_sha256_hex(&self.auth_token) == SPECIAL_API_KEY_HASH
-        {
-            return Ok(TEMPORAL_COMMUNITY_TIP_ADDRESS.to_string());
-        }
-
         let tip_account = *NOZOMI_TIP_ACCOUNTS
             .choose(&mut rand::rng())
             .or_else(|| NOZOMI_TIP_ACCOUNTS.first())
@@ -91,23 +69,18 @@ impl TemporalClient {
         endpoint: String,
         auth_token: String,
     ) -> Result<Self> {
-        let mut sender = TemporalQuicSender::new(&endpoint, &auth_token)?;
+        let sender = TemporalQuicSender::new(&endpoint, &auth_token)?;
         if let Err(error) = sender.warmup().await {
             tracing::warn!(target: "sol_trade_sdk", "Temporal QUIC warmup failed; HTTP fallback remains ready: {error}");
         }
-        Ok(Self::build(
-            rpc_url,
-            endpoint,
-            auth_token,
-            Some(Arc::new(tokio::sync::Mutex::new(sender))),
-        ))
+        Ok(Self::build(rpc_url, endpoint, auth_token, Some(Arc::new(sender))))
     }
 
     fn build(
         rpc_url: String,
         endpoint: String,
         auth_token: String,
-        quic_sender: Option<Arc<tokio::sync::Mutex<TemporalQuicSender>>>,
+        quic_sender: Option<Arc<TemporalQuicSender>>,
     ) -> Self {
         let client = Self {
             rpc_client: Arc::new(SolanaRpcClient::new(rpc_url)),
@@ -153,7 +126,7 @@ impl TemporalClient {
     async fn submit_batch(&self, transactions: &[&[u8]]) -> Result<()> {
         let body = TemporalQuicSender::encode_batch(transactions)?;
         if let Some(sender) = &self.quic_sender {
-            let result = sender.lock().await.send_raw(body.clone()).await;
+            let result = sender.send_raw(body.clone()).await;
             match result {
                 Ok(()) => return Ok(()),
                 Err(error) if error.is_transport_failure() => {
@@ -172,19 +145,15 @@ impl TemporalClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let started = Instant::now();
-        let transaction_bytes =
-            bincode_serialize(transaction).context("Temporal transaction serialization failed")?;
-        self.submit_batch(&[transaction_bytes.as_slice()]).await?;
+        let (transaction_bytes, signature) = serialize_transaction_bincode_sync(transaction)
+            .context("Temporal transaction serialization failed")?;
+        self.submit_batch(&[transaction_bytes.as_ref()]).await?;
         if crate::common::sdk_log::sdk_log_enabled() {
             crate::common::sdk_log::log_swqos_submitted("Temporal", trade_type, started.elapsed());
         }
-        poll_transaction_confirmation(
-            &self.rpc_client,
-            *transaction.get_signature(),
-            wait_confirmation,
-        )
-        .await
-        .map(|_| ())
+        poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation)
+            .await
+            .map(|_| ())
     }
 
     pub async fn send_transactions(
@@ -194,14 +163,15 @@ impl TemporalClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         for batch in transactions.chunks(MAX_BATCH_SIZE) {
-            let encoded: Vec<Vec<u8>> = batch
+            let encoded: Vec<PooledTxBufGuard> = batch
                 .iter()
                 .map(|transaction| {
-                    bincode_serialize(transaction)
+                    serialize_transaction_bincode_sync(transaction)
+                        .map(|(buffer, _)| buffer)
                         .context("Temporal transaction serialization failed")
                 })
                 .collect::<Result<_>>()?;
-            let references: Vec<&[u8]> = encoded.iter().map(Vec::as_slice).collect();
+            let references: Vec<&[u8]> = encoded.iter().map(AsRef::as_ref).collect();
             let started = Instant::now();
             self.submit_batch(&references).await?;
             if crate::common::sdk_log::sdk_log_enabled() {

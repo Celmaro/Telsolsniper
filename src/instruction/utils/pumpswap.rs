@@ -495,13 +495,19 @@ pub async fn warm_pumpswap_global_config(rpc: Option<&Arc<SolanaRpcClient>>) {
 fn cached_global_config() -> Option<GlobalConfig> {
     let guard = GLOBAL_CONFIG_CACHE.read();
     let cached = guard.as_ref()?;
-    (cached.fetched_at.elapsed() <= PUMPSWAP_GLOBAL_CONFIG_TTL).then(|| cached.config.clone())
+    let config =
+        (cached.fetched_at.elapsed() <= PUMPSWAP_GLOBAL_CONFIG_TTL).then(|| cached.config.clone());
+    drop(guard);
+    config
 }
 
 fn cached_fee_config() -> Option<PumpSwapFeeConfig> {
     let guard = FEE_CONFIG_CACHE.read();
     let cached = guard.as_ref()?;
-    (cached.fetched_at.elapsed() <= PUMPSWAP_FEE_CONFIG_TTL).then(|| cached.config.clone())
+    let config =
+        (cached.fetched_at.elapsed() <= PUMPSWAP_FEE_CONFIG_TTL).then(|| cached.config.clone());
+    drop(guard);
+    config
 }
 
 pub async fn fetch_fee_config(rpc: &SolanaRpcClient) -> Option<PumpSwapFeeConfig> {
@@ -817,10 +823,10 @@ async fn get_program_accounts_known_sizes(
     let program_id = accounts::AMM_PROGRAM;
     #[allow(deprecated)]
     let (legacy_result, current_result, padded_result, extended_result) = tokio::join!(
-        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_LEGACY)),
-        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_CURRENT)),
-        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_PADDED)),
-        rpc.get_program_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_EXTENDED)),
+        rpc.get_program_ui_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_LEGACY)),
+        rpc.get_program_ui_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_CURRENT)),
+        rpc.get_program_ui_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_PADDED)),
+        rpc.get_program_ui_accounts_with_config(&program_id, make_config(POOL_DATA_LEN_EXTENDED)),
     );
     let results = [legacy_result, current_result, padded_result, extended_result];
     let mut all = Vec::new();
@@ -831,7 +837,13 @@ async fn get_program_accounts_known_sizes(
             .zip(results)
     {
         match result {
-            Ok(accounts) => all.extend(accounts),
+            Ok(accounts) => {
+                for (pubkey, account) in accounts {
+                    if let Some(account) = account.to_account() {
+                        all.push((pubkey, account));
+                    }
+                }
+            }
             Err(error) => errors.push(format!("dataSize={size}: {error}")),
         }
     }
@@ -846,8 +858,21 @@ fn decode_pool_accounts(
 ) -> Vec<(Pubkey, Pool)> {
     accounts
         .into_iter()
-        .filter_map(|(addr, acc)| decode_pool_account(&acc).ok().map(|pool| (addr, pool)))
+        .filter_map(|(address, account)| {
+            decode_pool_account(&account).ok().map(|pool| (address, pool))
+        })
         .collect()
+}
+
+fn select_pool_by_lp_supply(pools: Vec<(Pubkey, Pool)>) -> Option<(Pubkey, Pool)> {
+    let mut pools = pools.into_iter();
+    let mut best = pools.next()?;
+    for candidate in pools {
+        if candidate.1.lp_supply > best.1.lp_supply {
+            best = candidate;
+        }
+    }
+    Some(best)
 }
 
 pub async fn find_by_base_mint(
@@ -859,12 +884,12 @@ pub async fn find_by_base_mint(
     if accounts.is_empty() {
         return Err(anyhow!("No pool found for mint {}", base_mint));
     }
-    let mut pools = decode_pool_accounts(accounts);
+    let pools = decode_pool_accounts(accounts);
     if pools.is_empty() {
         return Err(anyhow!("No valid pool decoded for mint {}", base_mint));
     }
-    pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
-    Ok((pools[0].0, pools[0].1.clone()))
+    select_pool_by_lp_supply(pools)
+        .ok_or_else(|| anyhow!("No valid pool decoded for mint {}", base_mint))
 }
 
 pub async fn find_by_quote_mint(
@@ -876,12 +901,12 @@ pub async fn find_by_quote_mint(
     if accounts.is_empty() {
         return Err(anyhow!("No pool found for mint {}", quote_mint));
     }
-    let mut pools = decode_pool_accounts(accounts);
+    let pools = decode_pool_accounts(accounts);
     if pools.is_empty() {
         return Err(anyhow!("No valid pool decoded for quote_mint {}", quote_mint));
     }
-    pools.sort_by(|a, b| b.1.lp_supply.cmp(&a.1.lp_supply));
-    Ok((pools[0].0, pools[0].1.clone()))
+    select_pool_by_lp_supply(pools)
+        .ok_or_else(|| anyhow!("No valid pool decoded for quote_mint {}", quote_mint))
 }
 
 /// 按 mint 查找 PumpSwap 池（本函数仅用于 PumpSwap，其他 DEX 勿用）。
@@ -1197,6 +1222,32 @@ mod tests {
         assert_eq!(POOL_DATA_LEN_CURRENT, 261);
         assert_eq!(POOL_DATA_LEN_PADDED, 300);
         assert_eq!(POOL_DATA_LEN_EXTENDED, 643);
+    }
+
+    #[test]
+    fn pool_selection_prefers_highest_lp_supply() {
+        let low_address = Pubkey::new_unique();
+        let high_address = Pubkey::new_unique();
+        let low = Pool { lp_supply: 10, ..Pool::default() };
+        let high = Pool { lp_supply: 20, ..Pool::default() };
+
+        let (selected_address, selected_pool) =
+            select_pool_by_lp_supply(vec![(low_address, low), (high_address, high)]).unwrap();
+        assert_eq!(selected_address, high_address);
+        assert_eq!(selected_pool.lp_supply, 20);
+    }
+
+    #[test]
+    fn decode_pool_accounts_skips_partial_decode_failures() {
+        let valid_address = Pubkey::new_unique();
+        let invalid_address = Pubkey::new_unique();
+        let valid = pool_account(0);
+        let mut invalid = valid.clone();
+        invalid.owner = Pubkey::new_unique();
+
+        let pools = decode_pool_accounts(vec![(valid_address, valid), (invalid_address, invalid)]);
+        assert_eq!(pools.len(), 1);
+        assert_eq!(pools[0].0, valid_address);
     }
 
     #[test]

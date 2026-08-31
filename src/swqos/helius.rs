@@ -15,7 +15,7 @@ use rand::seq::IndexedRandom;
 use reqwest::Client;
 use serde_json::json;
 use solana_sdk::transaction::VersionedTransaction;
-use solana_transaction_status::UiTransactionEncoding;
+use solana_transaction_status_client_types::UiTransactionEncoding;
 use std::sync::Arc;
 use std::time::Instant;
 

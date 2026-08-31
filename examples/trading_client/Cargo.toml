@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 sol-trade-sdk = { path = "../.." }
-solana-sdk = "3.0.0"
-solana-commitment-config = { version = "3.0.0", features = ["serde"] }
+solana-sdk = { workspace = true }
+solana-commitment-config = { workspace = true }
 tokio = { version = "1", features = ["full"] }

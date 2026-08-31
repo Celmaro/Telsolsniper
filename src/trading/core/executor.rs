@@ -266,7 +266,7 @@ async fn simulate_transaction(
     use crate::trading::common::build_transaction;
     use solana_client::rpc_config::RpcSimulateTransactionConfig;
     use solana_commitment_config::CommitmentLevel;
-    use solana_transaction_status::UiTransactionEncoding;
+    use solana_transaction_status_client_types::UiTransactionEncoding;
 
     let rpc = rpc.ok_or_else(|| anyhow::anyhow!("RPC client is required for simulation"))?;
 

@@ -116,6 +116,13 @@ pub const fn calculate_with_slippage_sell(amount: u64, basis_points: u64) -> u64
     amount - (amount as u128 * bps as u128 / 10_000) as u64
 }
 
+/// Calculate a protocol min-out using `floor(amount * (1 - slippage))`.
+#[inline(always)]
+pub const fn calculate_min_amount_out(amount: u64, basis_points: u64) -> u64 {
+    let bps = clamp_slippage_basis_points(basis_points);
+    (amount as u128 * (10_000 - bps) as u128 / 10_000) as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +145,14 @@ mod tests {
         assert_eq!(calculate_with_slippage_sell(u64::MAX, 100), 18_262_276_632_972_456_099);
         assert_eq!(calculate_with_slippage_sell(10_000, u64::MAX), 1);
         assert_eq!(calculate_with_slippage_sell(1, u64::MAX), 1);
+    }
+
+    #[test]
+    fn min_amount_out_uses_protocol_floor_rounding() {
+        assert_eq!(calculate_min_amount_out(101, 100), 99);
+        assert_eq!(calculate_min_amount_out(10_000, u64::MAX), 1);
+        assert_eq!(calculate_min_amount_out(1, u64::MAX), 0);
+        assert_eq!(calculate_min_amount_out(u64::MAX, 0), u64::MAX);
     }
 
     #[test]

@@ -8,7 +8,6 @@ use quinn::{
 use rand::seq::IndexedRandom as _;
 use rcgen::{CertificateParams, KeyPair as RcgenKeyPair};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::signer::Signer;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
 use std::time::Instant;
@@ -21,6 +20,7 @@ use tokio::sync::Mutex;
 
 use crate::common::SolanaRpcClient;
 use crate::swqos::common::poll_transaction_confirmation;
+use crate::swqos::serialization::serialize_transaction_bincode_sync;
 use crate::swqos::SwqosClientTrait;
 use crate::{
     constants::swqos::SOYAS_TIP_ACCOUNTS,
@@ -145,14 +145,18 @@ impl SoyasClient {
         })
     }
 
-    async fn reconnect(&self) -> anyhow::Result<()> {
-        let _guard = self.reconnect.try_lock()?;
+    async fn reconnect_if_stale(&self, stale: &Arc<Connection>) -> anyhow::Result<Arc<Connection>> {
+        let _guard = self.reconnect.lock().await;
+        let current = self.connection.load_full();
+        if !Arc::ptr_eq(&current, stale) && current.close_reason().is_none() {
+            return Ok(current);
+        }
         let connection = self
             .endpoint
             .connect_with(self.client_config.clone(), self.addr, SOYAS_SERVER)?
             .await?;
         self.connection.store(Arc::new(connection));
-        Ok(())
+        Ok(self.connection.load_full())
     }
 
     async fn try_send_bytes(connection: &Connection, payload: &[u8]) -> anyhow::Result<()> {
@@ -172,8 +176,7 @@ impl SwqosClientTrait for SoyasClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start_time = Instant::now();
-        let signature = transaction.get_signature();
-        let serialized_tx = bincode::serialize(transaction)?;
+        let (serialized_tx, signature) = serialize_transaction_bincode_sync(transaction)?;
         let connection = self.connection.load_full();
         if Self::try_send_bytes(&connection, &serialized_tx).await.is_err() {
             if crate::common::sdk_log::sdk_log_enabled() {
@@ -184,8 +187,7 @@ impl SwqosClientTrait for SoyasClient {
                     "reconnecting",
                 );
             }
-            self.reconnect().await?;
-            let connection = self.connection.load_full();
+            let connection = self.reconnect_if_stale(&connection).await?;
             if let Err(e) = Self::try_send_bytes(&connection, &serialized_tx).await {
                 if crate::common::sdk_log::sdk_log_enabled() {
                     crate::common::sdk_log::log_swqos_submission_failed(
@@ -201,8 +203,9 @@ impl SwqosClientTrait for SoyasClient {
         if crate::common::sdk_log::sdk_log_enabled() {
             crate::common::sdk_log::log_swqos_submitted("Soyas", trade_type, start_time.elapsed());
         }
+        drop(serialized_tx);
         let start_time = Instant::now();
-        match poll_transaction_confirmation(&self.rpc_client, *signature, wait_confirmation).await {
+        match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
                 if crate::common::sdk_log::sdk_log_enabled() {

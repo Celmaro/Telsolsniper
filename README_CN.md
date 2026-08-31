@@ -88,9 +88,9 @@
 
 ## 🔖 当前版本
 
-**Rust crate:** `sol-trade-sdk = "5.0.1"`
+**Rust crate:** `sol-trade-sdk = "5.0.2"`
 
-本版本同步交易 SDK 使用的最新 Meteora、Raydium 和 Orca 官方程序 IDL。带明确版本号的历史 IDL 继续作为兼容快照保留；Raydium AMM V4 不是 Anchor 程序，因此继续以官方源码定义的指令布局为准。
+本版本将 SDK 与流式数据集成全面升级到 Solana 4，启用与原有线格式兼容的 `wincode` 交易序列化，增强 QUIC 连接复用与断线恢复，并降低交易确认轮询压力。同时保留 PumpSwap 回退兼容性，恢复 Raydium 符合协议的最小输出金额取整逻辑。
 
 ## ✨ 项目特性
 
@@ -134,14 +134,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.2" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "5.0.1"
+sol-trade-sdk = "5.0.2"
 ```
 
 ## 🛠️ 使用示例

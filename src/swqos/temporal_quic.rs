@@ -1,5 +1,6 @@
 //! Auditable in-tree adaptation of Temporal's official `nozomi-quic-client`.
 
+use arc_swap::ArcSwapOption;
 use bytes::Bytes;
 use h3::client::SendRequest;
 use h3_quinn::OpenStreams;
@@ -13,6 +14,7 @@ pub const MAX_BATCH_SIZE: usize = 16;
 pub const MIN_TX_SIZE: usize = 66;
 pub const MAX_TX_SIZE: usize = 1232;
 const MAX_BATCH_BODY_SIZE: usize = MAX_BATCH_SIZE * (MAX_TX_SIZE + 2);
+const RECONNECT_COOLDOWN: Duration = Duration::from_millis(500);
 
 #[derive(Debug)]
 pub enum TemporalQuicError {
@@ -48,13 +50,19 @@ type Result<T> = std::result::Result<T, TemporalQuicError>;
 
 struct CachedConnection {
     send_request: SendRequest<OpenStreams, Bytes>,
-    _driver: JoinHandle<()>,
+    driver: JoinHandle<()>,
+}
+
+impl Drop for CachedConnection {
+    fn drop(&mut self) {
+        self.driver.abort();
+    }
 }
 
 pub struct TemporalQuicSender {
     endpoint: quinn::Endpoint,
-    connection: Option<CachedConnection>,
-    cached_addr: Option<SocketAddr>,
+    connection: ArcSwapOption<CachedConnection>,
+    next_reconnect_at: tokio::sync::Mutex<Option<tokio::time::Instant>>,
     host: String,
     port: u16,
     batch_uri: http::Uri,
@@ -107,8 +115,8 @@ impl TemporalQuicSender {
 
         Ok(Self {
             endpoint: quic_endpoint,
-            connection: None,
-            cached_addr: None,
+            connection: ArcSwapOption::empty(),
+            next_reconnect_at: tokio::sync::Mutex::new(None),
             host,
             port,
             batch_uri,
@@ -116,9 +124,8 @@ impl TemporalQuicSender {
         })
     }
 
-    pub async fn warmup(&mut self) -> Result<()> {
-        self.resolve_dns().await?;
-        self.connect().await
+    pub async fn warmup(&self) -> Result<()> {
+        self.reconnect_if_stale(None).await
     }
 
     pub fn encode_batch(transactions: &[&[u8]]) -> Result<Bytes> {
@@ -152,25 +159,37 @@ impl TemporalQuicSender {
         Ok(Bytes::from(body))
     }
 
-    pub async fn send_raw(&mut self, body: Bytes) -> Result<()> {
-        match self.try_send_with_timeout(body.clone()).await {
+    pub async fn send_raw(&self, body: Bytes) -> Result<()> {
+        let connection = match self.connection.load_full() {
+            Some(connection) => connection,
+            None => {
+                self.reconnect_if_stale(None).await?;
+                self.connection.load_full().ok_or(TemporalQuicError::NotConnected)?
+            }
+        };
+        match self.try_send_with_timeout(&connection, body.clone()).await {
             Ok(()) => Ok(()),
             Err(error) if error.is_transport_failure() => {
-                self.invalidate();
-                self.connect().await?;
-                self.try_send_with_timeout(body).await
+                self.reconnect_if_stale(Some(&connection)).await?;
+                let connection =
+                    self.connection.load_full().ok_or(TemporalQuicError::NotConnected)?;
+                self.try_send_with_timeout(&connection, body).await
             }
             Err(error) => Err(error),
         }
     }
 
-    async fn try_send_with_timeout(&mut self, body: Bytes) -> Result<()> {
-        tokio::time::timeout(Duration::from_secs(3), self.try_send(body))
+    async fn try_send_with_timeout(
+        &self,
+        connection: &CachedConnection,
+        body: Bytes,
+    ) -> Result<()> {
+        tokio::time::timeout(Duration::from_secs(3), self.try_send(connection, body))
             .await
             .map_err(|_| TemporalQuicError::Request("request timed out".into()))?
     }
 
-    async fn resolve_dns(&mut self) -> Result<SocketAddr> {
+    async fn resolve_dns(&self) -> Result<SocketAddr> {
         let address = format!("{}:{}", self.host, self.port);
         let resolved = tokio::net::lookup_host(&address)
             .await
@@ -178,16 +197,12 @@ impl TemporalQuicSender {
                 TemporalQuicError::Connection(format!("DNS lookup {address}: {error}"))
             })?
             .next()
-            .ok_or_else(|| TemporalQuicError::Connection(format!("no addresses for {address}")))?;
-        self.cached_addr = Some(resolved);
-        Ok(resolved)
+            .ok_or_else(|| TemporalQuicError::Connection(format!("no addresses for {address}")));
+        resolved
     }
 
-    async fn connect(&mut self) -> Result<()> {
-        let address = match self.cached_addr {
-            Some(address) => address,
-            None => self.resolve_dns().await?,
-        };
+    async fn connect(&self) -> Result<Arc<CachedConnection>> {
+        let address = self.resolve_dns().await?;
         let quic_connection = self
             .endpoint
             .connect(address, &self.host)
@@ -201,17 +216,38 @@ impl TemporalQuicSender {
         let driver_handle = tokio::spawn(async move {
             let _ = std::future::poll_fn(|context| driver.poll_close(context)).await;
         });
-        self.connection = Some(CachedConnection { send_request, _driver: driver_handle });
-        Ok(())
+        Ok(Arc::new(CachedConnection { send_request, driver: driver_handle }))
     }
 
-    fn invalidate(&mut self) {
-        self.connection = None;
-        self.cached_addr = None;
+    async fn reconnect_if_stale(&self, stale: Option<&Arc<CachedConnection>>) -> Result<()> {
+        let mut next_reconnect_at = self.next_reconnect_at.lock().await;
+        if let Some(current) = self.connection.load_full() {
+            match stale {
+                Some(stale) if Arc::ptr_eq(&current, stale) => {}
+                _ => return Ok(()),
+            }
+        }
+        let now = tokio::time::Instant::now();
+        if next_reconnect_at.is_some_and(|deadline| now < deadline) {
+            return Err(TemporalQuicError::Connection("reconnect cooling down".into()));
+        }
+
+        match self.connect().await {
+            Ok(connection) => {
+                self.connection.store(Some(connection));
+                *next_reconnect_at = None;
+                Ok(())
+            }
+            Err(error) => {
+                self.connection.store(None);
+                *next_reconnect_at = Some(now + RECONNECT_COOLDOWN);
+                Err(error)
+            }
+        }
     }
 
-    async fn try_send(&mut self, body: Bytes) -> Result<()> {
-        let sender = self.connection.as_mut().ok_or(TemporalQuicError::NotConnected)?;
+    async fn try_send(&self, connection: &CachedConnection, body: Bytes) -> Result<()> {
+        let mut sender = connection.send_request.clone();
         let mut headers = self.static_headers.clone();
         headers.insert(http::header::CONTENT_LENGTH, HeaderValue::from(body.len() as u64));
         let (mut parts, _) = http::Request::new(()).into_parts();
@@ -220,7 +256,6 @@ impl TemporalQuicSender {
         parts.headers = headers;
         let request = http::Request::from_parts(parts, ());
         let mut stream = sender
-            .send_request
             .send_request(request)
             .await
             .map_err(|error| TemporalQuicError::Request(format!("send headers: {error}")))?;

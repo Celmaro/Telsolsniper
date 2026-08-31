@@ -6,7 +6,6 @@ use quinn::{
     TransportConfig,
 };
 use rand::seq::IndexedRandom as _;
-use solana_client::rpc_client::SerializableTransaction;
 use solana_sdk::signer::Signer;
 use solana_sdk::{signature::Keypair, transaction::VersionedTransaction};
 use solana_tls_utils::{new_dummy_x509_certificate, SkipServerVerification};
@@ -21,6 +20,7 @@ use tokio::time::timeout;
 
 use crate::common::SolanaRpcClient;
 use crate::swqos::common::poll_transaction_confirmation;
+use crate::swqos::serialization::serialize_transaction_bincode_sync;
 use crate::swqos::SwqosClientTrait;
 use crate::{
     constants::swqos::SOLAMI_TIP_ACCOUNTS,
@@ -139,8 +139,7 @@ impl SwqosClientTrait for SolamiClient {
         wait_confirmation: bool,
     ) -> Result<()> {
         let start_time = Instant::now();
-        let signature = transaction.get_signature();
-        let serialized_tx = bincode::serialize(transaction)?;
+        let (serialized_tx, signature) = serialize_transaction_bincode_sync(transaction)?;
         let connection = self.ensure_connected().await?;
         let mut send_result =
             timeout(SEND_TIMEOUT, Self::try_send_bytes(&connection, &serialized_tx)).await;
@@ -186,8 +185,9 @@ impl SwqosClientTrait for SolamiClient {
         if crate::common::sdk_log::sdk_log_enabled() {
             crate::common::sdk_log::log_swqos_submitted("Solami", trade_type, start_time.elapsed());
         }
+        drop(serialized_tx);
         let start_time = Instant::now();
-        match poll_transaction_confirmation(&self.rpc_client, *signature, wait_confirmation).await {
+        match poll_transaction_confirmation(&self.rpc_client, signature, wait_confirmation).await {
             Ok(_) => (),
             Err(e) => {
                 if crate::common::sdk_log::sdk_log_enabled() {

@@ -88,9 +88,9 @@ This SDK is available in multiple languages:
 
 ## 🔖 Current Release
 
-**Rust crate:** `sol-trade-sdk = "5.0.1"`
+**Rust crate:** `sol-trade-sdk = "5.0.2"`
 
-This release synchronizes the current official Meteora, Raydium, and Orca program IDLs used by the trading SDK. Explicitly versioned historical IDLs remain available as compatibility snapshots, and Raydium AMM V4 continues to use its source-defined instruction layout because it is not an Anchor program.
+This release upgrades the SDK and streaming integrations to Solana 4, enables wire-compatible `wincode` transaction serialization, improves QUIC connection reuse and recovery, and reduces confirmation polling pressure. It also preserves PumpSwap fallback compatibility and restores protocol-correct Raydium min-out rounding.
 
 ## ✨ Features
 
@@ -134,14 +134,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.1" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.2" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "5.0.1"
+sol-trade-sdk = "5.0.2"
 ```
 
 ## 🛠️ Usage Examples

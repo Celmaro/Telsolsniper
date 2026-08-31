@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde_json::json;
 use std::{sync::Arc, time::Instant};
 
-use solana_transaction_status::UiTransactionEncoding;
+use solana_transaction_status_client_types::UiTransactionEncoding;
 
 use crate::swqos::SwqosClientTrait;
 use crate::swqos::{SwqosType, TradeType};
