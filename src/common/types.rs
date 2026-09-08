@@ -76,6 +76,16 @@ impl PartialEq for InfrastructureConfig {
 
 impl Eq for InfrastructureConfig {}
 
+/// Solana transaction message version used for newly built trades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TradeTransactionVersion {
+    /// Use the V0-compatible mode: Legacy without ALTs, V0 when ALTs are supplied.
+    #[default]
+    V0,
+    /// Build a V1 message with inline transaction configuration. V1 does not support ALTs.
+    V1,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SwqosSubmitTiming {
     pub swqos_type: SwqosType,
@@ -88,6 +98,8 @@ pub struct TradeConfig {
     pub rpc_url: String,
     pub swqos_configs: Vec<SwqosConfig>,
     pub commitment: CommitmentConfig,
+    /// Transaction construction mode. V0 (default) preserves Legacy messages when no ALT is used.
+    pub transaction_version: TradeTransactionVersion,
     /// Whether to create WSOL ATA on startup (default: true)
     /// If true, SDK will check WSOL ATA on initialization and create if not exists
     pub create_wsol_ata_on_startup: bool,
@@ -115,10 +127,12 @@ impl TradeConfig {
     /// - `.check_min_tip(bool)`               — filter SWQOS below min tip (default: false)
     /// - `.swqos_cores_from_end(bool)`        — bind SWQOS to last N cores (default: false)
     /// - `.mev_protection(bool)`              — MEV protection for Astralane/BlockRazor/Glaive (default: false)
+    /// - `.transaction_version(version)`      — use V0-compatible mode (default) or V1
     ///
     /// # Example
     /// ```rust,ignore
     /// let config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+    ///     .transaction_version(TradeTransactionVersion::V1)
     ///     .mev_protection(true)
     ///     .check_min_tip(true)
     ///     .log_enabled(false)
@@ -151,6 +165,7 @@ pub struct TradeConfigBuilder {
     rpc_url: String,
     swqos_configs: Vec<SwqosConfig>,
     commitment: CommitmentConfig,
+    transaction_version: TradeTransactionVersion,
     create_wsol_ata_on_startup: bool,
     use_seed_optimize: bool,
     log_enabled: bool,
@@ -165,6 +180,7 @@ impl TradeConfigBuilder {
             rpc_url,
             swqos_configs,
             commitment,
+            transaction_version: TradeTransactionVersion::default(),
             create_wsol_ata_on_startup: true,
             use_seed_optimize: true,
             log_enabled: true,
@@ -183,6 +199,12 @@ impl TradeConfigBuilder {
     /// Enable seed optimization for all ATA operations. Default: `true`.
     pub fn use_seed_optimize(mut self, v: bool) -> Self {
         self.use_seed_optimize = v;
+        self
+    }
+
+    /// Select the Solana transaction construction mode. Default: [`TradeTransactionVersion::V0`].
+    pub fn transaction_version(mut self, version: TradeTransactionVersion) -> Self {
+        self.transaction_version = version;
         self
     }
 
@@ -223,6 +245,7 @@ impl TradeConfigBuilder {
             rpc_url: self.rpc_url,
             swqos_configs: self.swqos_configs,
             commitment: self.commitment,
+            transaction_version: self.transaction_version,
             create_wsol_ata_on_startup: self.create_wsol_ata_on_startup,
             use_seed_optimize: self.use_seed_optimize,
             log_enabled: self.log_enabled,
@@ -235,3 +258,30 @@ impl TradeConfigBuilder {
 
 pub type SolanaRpcClient = solana_client::nonblocking::rpc_client::RpcClient;
 pub type AnyResult<T> = anyhow::Result<T>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trade_config_defaults_to_v0() {
+        let config = TradeConfig::new(
+            "http://localhost:8899".to_owned(),
+            Vec::new(),
+            CommitmentConfig::processed(),
+        );
+        assert_eq!(config.transaction_version, TradeTransactionVersion::V0);
+    }
+
+    #[test]
+    fn trade_config_builder_selects_v1() {
+        let config = TradeConfig::builder(
+            "http://localhost:8899".to_owned(),
+            Vec::new(),
+            CommitmentConfig::processed(),
+        )
+        .transaction_version(TradeTransactionVersion::V1)
+        .build();
+        assert_eq!(config.transaction_version, TradeTransactionVersion::V1);
+    }
+}

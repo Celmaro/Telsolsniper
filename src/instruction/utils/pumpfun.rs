@@ -190,6 +190,7 @@ pub const BUY_EXACT_QUOTE_IN_V2_DISCRIMINATOR: [u8; 8] = [194, 171, 28, 70, 104,
 pub const EXTEND_ACCOUNT_DISCRIMINATOR: [u8; 8] = [234, 102, 194, 203, 150, 72, 62, 229];
 
 pub const SHARING_CONFIG_ACCOUNT_DISCRIMINATOR: [u8; 8] = [216, 74, 9, 0, 56, 140, 93, 75];
+pub const GLOBAL_ACCOUNT_DISCRIMINATOR: [u8; 8] = [167, 232, 232, 177, 200, 108, 114, 127];
 
 pub(crate) const SHARING_CONFIG_STATUS_ACTIVE: u8 = 1;
 
@@ -473,6 +474,37 @@ pub fn get_buy_price(
 // --- RPC -------------------------------------------------------------
 
 #[inline]
+pub(crate) fn decode_global_fee_recipient(data: &[u8]) -> Result<Pubkey, anyhow::Error> {
+    const FEE_RECIPIENT_OFFSET: usize = 8 + 1 + 32;
+    const FEE_RECIPIENT_END: usize = FEE_RECIPIENT_OFFSET + 32;
+
+    if data.len() < FEE_RECIPIENT_END {
+        return Err(anyhow!(
+            "PumpFun Global account is too short: expected at least {FEE_RECIPIENT_END} bytes, got {}",
+            data.len()
+        ));
+    }
+    if data[..8] != GLOBAL_ACCOUNT_DISCRIMINATOR {
+        return Err(anyhow!("Invalid PumpFun Global account discriminator"));
+    }
+
+    Ok(Pubkey::new_from_array(
+        data[FEE_RECIPIENT_OFFSET..FEE_RECIPIENT_END]
+            .try_into()
+            .map_err(|_| anyhow!("PumpFun Global fee recipient slice"))?,
+    ))
+}
+
+#[inline]
+pub async fn fetch_global_fee_recipient(rpc: &SolanaRpcClient) -> Result<Pubkey, anyhow::Error> {
+    let account = rpc.get_account(&global_constants::GLOBAL_ACCOUNT).await?;
+    if account.owner != accounts::PUMPFUN {
+        return Err(anyhow!("PumpFun Global account has unexpected owner {}", account.owner));
+    }
+    decode_global_fee_recipient(&account.data)
+}
+
+#[inline]
 pub async fn fetch_fee_sharing_creator_vault_if_active(
     rpc: &SolanaRpcClient,
     mint: &Pubkey,
@@ -544,6 +576,27 @@ mod tests {
         assert_eq!(BUY_V2_DISCRIMINATOR.len(), 8);
         assert_eq!(SELL_V2_DISCRIMINATOR.len(), 8);
         assert_eq!(BUY_EXACT_QUOTE_IN_V2_DISCRIMINATOR.len(), 8);
+        assert_eq!(GLOBAL_ACCOUNT_DISCRIMINATOR.len(), 8);
+    }
+
+    #[test]
+    fn decodes_global_fee_recipient_from_account_prefix() {
+        let expected = Pubkey::new_unique();
+        let mut data = vec![0_u8; 73];
+        data[..8].copy_from_slice(&GLOBAL_ACCOUNT_DISCRIMINATOR);
+        data[8] = 1;
+        data[41..73].copy_from_slice(expected.as_ref());
+
+        assert_eq!(decode_global_fee_recipient(&data).unwrap(), expected);
+    }
+
+    #[test]
+    fn rejects_invalid_global_account_data() {
+        assert!(decode_global_fee_recipient(&[0_u8; 72]).is_err());
+
+        let mut data = vec![0_u8; 73];
+        data[8] = 1;
+        assert!(decode_global_fee_recipient(&data).is_err());
     }
 
     #[test]

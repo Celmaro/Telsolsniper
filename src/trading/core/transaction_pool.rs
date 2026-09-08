@@ -8,8 +8,6 @@
 
 /// 预分配指令容量（单笔交易常见指令数）
 const TX_BUILDER_INSTRUCTION_CAP: usize = 32;
-/// 预分配地址查找表数量
-const TX_BUILDER_LOOKUP_TABLE_CAP: usize = 8;
 /// 对象池最大容量
 const TX_BUILDER_POOL_CAP: usize = 1000;
 /// 多路提交并发数（与 async_executor SWQOS_DEDICATED_DEFAULT_THREADS 一致，保证不串行）
@@ -17,6 +15,7 @@ const PARALLEL_SENDER_COUNT: usize = 18;
 /// 启动时预填充数量，必须 >= PARALLEL_SENDER_COUNT，否则 18 路并发 build 会触发分配或争抢
 const TX_BUILDER_POOL_PREFILL: usize = 64;
 
+use crate::common::TradeTransactionVersion;
 use anyhow::Result;
 use crossbeam_queue::ArrayQueue;
 use once_cell::sync::Lazy;
@@ -24,7 +23,7 @@ use solana_message::AddressLookupTableAccount;
 use solana_sdk::{
     hash::Hash,
     instruction::Instruction,
-    message::{v0, Message, VersionedMessage},
+    message::{v0, v1, Message, VersionedMessage},
     pubkey::Pubkey,
 };
 use std::sync::Arc;
@@ -32,48 +31,37 @@ use std::sync::Arc;
 pub struct PreallocatedTxBuilder {
     /// 预分配的指令容器
     instructions: Vec<Instruction>,
-    /// 预分配的地址查找表
-    lookup_tables: Vec<v0::MessageAddressTableLookup>,
 }
 
 impl PreallocatedTxBuilder {
     fn new() -> Self {
-        Self {
-            instructions: Vec::with_capacity(TX_BUILDER_INSTRUCTION_CAP),
-            lookup_tables: Vec::with_capacity(TX_BUILDER_LOOKUP_TABLE_CAP),
-        }
+        Self { instructions: Vec::with_capacity(TX_BUILDER_INSTRUCTION_CAP) }
     }
 
     /// 重置构建器 (清空但保留容量)
     #[inline(always)]
     fn reset(&mut self) {
         self.instructions.clear();
-        self.lookup_tables.clear();
     }
 
     /// 🚀 零分配构建交易
     ///
-    /// # 交易版本自动选择
+    /// # 交易版本选择
     ///
-    /// - **有地址查找表** (`lookup_tables` 非空): 使用 `VersionedMessage::V0`
-    ///   - 支持地址查找表压缩
-    ///   - 减少交易大小
-    ///   - 需要 RPC 支持 V0
-    ///
-    /// - **无地址查找表** (`lookup_table = None`): 使用 `VersionedMessage::Legacy`
-    ///   - 兼容所有 RPC 节点
-    ///   - 无需地址查找表支持
-    ///   - 适用于简单交易
+    /// - `V0` 无地址查找表时构造 Legacy，有地址查找表时构造 V0，保持原有兼容行为。
+    /// - `V1` 构造 `VersionedMessage::V1`，并拒绝地址查找表。
     ///
     /// # 示例
     ///
     /// ```rust,ignore
-    /// // 无查找表 -> Legacy 消息
-    /// let msg = builder.build_zero_alloc(&payer, &ixs, &[], blockhash);
-    /// assert!(matches!(msg, VersionedMessage::Legacy(_)));
-    ///
-    /// // 有查找表 -> V0 消息
-    /// let msg = builder.build_zero_alloc(&payer, &ixs, &[lookup_table], blockhash);
+    /// let msg = builder.build_zero_alloc(
+    ///     &payer,
+    ///     &ixs,
+    ///     &[lookup_table],
+    ///     blockhash,
+    ///     TradeTransactionVersion::V0,
+    ///     v1::TransactionConfig::empty(),
+    /// );
     /// assert!(matches!(msg, VersionedMessage::V0(_)));
     /// ```
     #[inline(always)]
@@ -83,23 +71,43 @@ impl PreallocatedTxBuilder {
         instructions: &[Instruction],
         address_lookup_table_accounts: &[AddressLookupTableAccount],
         recent_blockhash: Hash,
+        transaction_version: TradeTransactionVersion,
+        v1_config: v1::TransactionConfig,
     ) -> Result<VersionedMessage> {
         self.reset();
         self.instructions.extend_from_slice(instructions);
 
-        if !address_lookup_table_accounts.is_empty() {
-            let message = v0::Message::try_compile(
-                payer,
-                &self.instructions,
-                address_lookup_table_accounts,
-                recent_blockhash,
-            )?;
-            Ok(VersionedMessage::V0(message))
-        } else {
-            // ✅ 没有查找表，使用 Legacy 消息（兼容所有 RPC）
-            let message =
-                Message::new_with_blockhash(&self.instructions, Some(payer), &recent_blockhash);
-            Ok(VersionedMessage::Legacy(message))
+        match transaction_version {
+            TradeTransactionVersion::V0 => {
+                if address_lookup_table_accounts.is_empty() {
+                    let message = Message::new_with_blockhash(
+                        &self.instructions,
+                        Some(payer),
+                        &recent_blockhash,
+                    );
+                    Ok(VersionedMessage::Legacy(message))
+                } else {
+                    let message = v0::Message::try_compile(
+                        payer,
+                        &self.instructions,
+                        address_lookup_table_accounts,
+                        recent_blockhash,
+                    )?;
+                    Ok(VersionedMessage::V0(message))
+                }
+            }
+            TradeTransactionVersion::V1 => {
+                if !address_lookup_table_accounts.is_empty() {
+                    anyhow::bail!("V1 transactions do not support address lookup tables");
+                }
+                let message = v1::Message::try_compile_with_config(
+                    payer,
+                    &self.instructions,
+                    recent_blockhash,
+                    v1_config,
+                )?;
+                Ok(VersionedMessage::V1(message))
+            }
         }
     }
 }
@@ -117,7 +125,7 @@ static TX_BUILDER_POOL: Lazy<Arc<ArrayQueue<PreallocatedTxBuilder>>> = Lazy::new
 /// 🚀 从池中获取构建器
 #[inline(always)]
 pub fn acquire_builder() -> PreallocatedTxBuilder {
-    TX_BUILDER_POOL.pop().unwrap_or_else(|| PreallocatedTxBuilder::new())
+    TX_BUILDER_POOL.pop().unwrap_or_else(PreallocatedTxBuilder::new)
 }
 
 /// 🚀 归还构建器到池

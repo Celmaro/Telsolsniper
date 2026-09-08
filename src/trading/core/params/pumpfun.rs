@@ -289,9 +289,18 @@ impl PumpFunParams {
         rpc: &SolanaRpcClient,
         mint: &Pubkey,
     ) -> Result<Self, anyhow::Error> {
-        let account =
-            crate::instruction::utils::pumpfun::fetch_bonding_curve_account(rpc, mint).await?;
-        let mint_account = rpc.get_account(&mint).await?;
+        let (account, mint_account, fee_sharing_creator_vault_if_active, fee_recipient) = tokio::join!(
+            crate::instruction::utils::pumpfun::fetch_bonding_curve_account(rpc, mint),
+            rpc.get_account(mint),
+            crate::instruction::utils::pumpfun::fetch_fee_sharing_creator_vault_if_active(
+                rpc, mint
+            ),
+            crate::instruction::utils::pumpfun::fetch_global_fee_recipient(rpc),
+        );
+        let account = account?;
+        let mint_account = mint_account?;
+        let fee_sharing_creator_vault_if_active = fee_sharing_creator_vault_if_active?;
+        let fee_recipient = fee_recipient?;
         let bonding_curve = BondingCurveAccount {
             discriminator: 0,
             account: account.1,
@@ -311,11 +320,6 @@ impl PumpFunParams {
             mint,
             &mint_account.owner,
         );
-        let fee_sharing_creator_vault_if_active =
-            crate::instruction::utils::pumpfun::fetch_fee_sharing_creator_vault_if_active(
-                rpc, mint,
-            )
-            .await?;
         let creator_vault =
             crate::instruction::utils::pumpfun::resolve_creator_vault_for_ix_with_fee_sharing(
                 &bonding_curve.creator,
@@ -336,7 +340,7 @@ impl PumpFunParams {
             fee_sharing_creator_vault_if_active,
             close_token_account_when_sell: None,
             token_program: mint_account.owner,
-            fee_recipient: Pubkey::default(),
+            fee_recipient,
             quote_mint: Self::quote_mint_for_rpc_return(quote_mint),
         })
     }

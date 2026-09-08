@@ -88,9 +88,9 @@ This SDK is available in multiple languages:
 
 ## 🔖 Current Release
 
-**Rust crate:** `sol-trade-sdk = "5.0.2"`
+**Rust crate:** `sol-trade-sdk = "5.0.3"`
 
-This release upgrades the SDK and streaming integrations to Solana 4, enables wire-compatible `wincode` transaction serialization, improves QUIC connection reuse and recovery, and reduces confirmation polling pressure. It also preserves PumpSwap fallback compatibility and restores protocol-correct Raydium min-out rounding.
+This release adds explicit Solana V1 transaction construction while preserving the existing V0-compatible default. V1 embeds compute-unit and priority-fee configuration directly in the message, omits ComputeBudget instructions and address lookup tables, and supports the 4096-byte transaction limit. Priority fees retain the existing micro-lamports-per-CU API and are converted to total lamports with ceiling division.
 
 ## ✨ Features
 
@@ -134,14 +134,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.2" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.3" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "5.0.2"
+sol-trade-sdk = "5.0.3"
 ```
 
 ## 🛠️ Usage Examples
@@ -188,6 +188,7 @@ let swqos_configs: Vec<SwqosConfig> = vec![
 ];
 // Create TradeConfig instance
 let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+    // .transaction_version(TradeTransactionVersion::V1) // default: V0-compatible mode
     // .create_wsol_ata_on_startup(true)  // default: true  - check & create WSOL ATA on init
     // .use_seed_optimize(true)            // default: true  - seed optimization for ATA ops
     // .log_enabled(true)                  // default: true  - SDK timing / SWQOS logs
@@ -200,6 +201,16 @@ let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
 let client = TradingClient::new(Arc::new(payer), trade_config).await;
 ```
 
+`TradeTransactionVersion::V0` is the default and preserves the existing behavior: transactions
+without address lookup tables use Legacy messages, while transactions with lookup tables use V0.
+Select `TradeTransactionVersion::V1` explicitly to build V1 messages. V1 embeds the compute-unit
+limit and total priority fee in its transaction config, does not include ComputeBudget
+instructions, does not support address lookup tables, and allows transactions up to 4096 bytes.
+The existing `cu_price` setting remains micro-lamports per compute unit and is converted to total
+lamports with ceiling division. Only enable V1 on a cluster and submission provider that supports
+it; individual providers may impose a smaller transport limit, and Mainnet V1 activation may lag
+Devnet/Testnet.
+
 **Method 2: Shared infrastructure (multiple wallets)**
 
 For multi-wallet scenarios, create the infrastructure once and share it across wallets.
@@ -211,7 +222,8 @@ let infra_config = InfrastructureConfig::new(rpc_url, swqos_configs, commitment)
 let infrastructure = Arc::new(TradingInfrastructure::new(infra_config).await);
 
 // Create multiple clients sharing the same infrastructure (fast)
-let client1 = TradingClient::from_infrastructure(Arc::new(payer1), infrastructure.clone(), true);
+let client1 = TradingClient::from_infrastructure(Arc::new(payer1), infrastructure.clone(), true)
+    .with_transaction_version(TradeTransactionVersion::V1);
 let client2 = TradingClient::from_infrastructure(Arc::new(payer2), infrastructure.clone(), true);
 ```
 

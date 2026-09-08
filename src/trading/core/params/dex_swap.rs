@@ -1,5 +1,5 @@
 use crate::common::nonce_cache::DurableNonceInfo;
-use crate::common::{GasFeeStrategy, SolanaRpcClient};
+use crate::common::{GasFeeStrategy, SolanaRpcClient, TradeTransactionVersion};
 use crate::swqos::{SwqosClient, TradeType};
 use crate::trading::MiddlewareManager;
 use core_affinity::CoreId;
@@ -102,6 +102,8 @@ pub struct SwapParams {
     pub effective_core_ids: Arc<Vec<CoreId>>,
     /// Whether to check minimum tip per SWQOS (from TradeConfig.check_min_tip). When false, skip filter for lower latency.
     pub check_min_tip: bool,
+    /// Solana transaction construction mode selected by `TradeConfig`.
+    pub transaction_version: TradeTransactionVersion,
     /// Optional event receive time in microseconds (same scale as sol-parser-sdk clock::now_micros). Used as timing start when log_enabled.
     pub grpc_recv_us: Option<i64>,
     /// Use exact quote-input buy instructions (legacy PumpFun uses SOL quote; V2/PumpSwap use generic quote).

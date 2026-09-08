@@ -18,7 +18,7 @@ use crate::{
     perf::syscall_bypass::SystemCallBypassManager,
     swqos::common::poll_any_transaction_confirmation,
     trading::core::{
-        async_executor::execute_parallel,
+        async_executor::execute_parallel_with_version,
         execution::{InstructionProcessor, Prefetch},
         traits::TradeExecutor,
     },
@@ -112,6 +112,7 @@ impl TradeExecutor for GenericTradeExecutor {
                 is_buy,
                 if is_buy { true } else { params.with_tip },
                 params.gas_fee_strategy,
+                params.transaction_version,
             )
             .await;
             let send_elapsed = send_start.map(|s| s.elapsed()).unwrap_or(Duration::ZERO);
@@ -163,7 +164,7 @@ impl TradeExecutor for GenericTradeExecutor {
         // returned signature when the caller opts in.
         let wait_for_all_submits = params.wait_for_all_submits;
         let sender_config = params.sender_concurrency_config();
-        let result = execute_parallel(
+        let result = execute_parallel_with_version(
             params.swqos_clients.as_slice(),
             params.payer,
             final_instructions,
@@ -180,6 +181,7 @@ impl TradeExecutor for GenericTradeExecutor {
             params.use_dedicated_sender_threads,
             sender_config,
             params.check_min_tip,
+            params.transaction_version,
         )
         .await;
 
@@ -262,8 +264,9 @@ async fn simulate_transaction(
     is_buy: bool,
     with_tip: bool,
     gas_fee_strategy: GasFeeStrategy,
+    transaction_version: crate::common::TradeTransactionVersion,
 ) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
-    use crate::trading::common::build_transaction;
+    use crate::trading::common::build_transaction_with_version;
     use solana_client::rpc_config::RpcSimulateTransactionConfig;
     use solana_commitment_config::CommitmentLevel;
     use solana_transaction_status_client_types::UiTransactionEncoding;
@@ -284,10 +287,11 @@ async fn simulate_transaction(
     let unit_limit = default_config.2.cu_limit;
     let unit_price = default_config.2.cu_price;
 
-    let transaction = build_transaction(
+    let transaction = build_transaction_with_version(
         &payer,
         unit_limit,
         unit_price,
+        transaction_version,
         &instructions,
         address_lookup_table_accounts.as_slice(),
         recent_blockhash,

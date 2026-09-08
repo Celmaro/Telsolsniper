@@ -88,9 +88,9 @@
 
 ## 🔖 当前版本
 
-**Rust crate:** `sol-trade-sdk = "5.0.2"`
+**Rust crate:** `sol-trade-sdk = "5.0.3"`
 
-本版本将 SDK 与流式数据集成全面升级到 Solana 4，启用与原有线格式兼容的 `wincode` 交易序列化，增强 QUIC 连接复用与断线恢复，并降低交易确认轮询压力。同时保留 PumpSwap 回退兼容性，恢复 Raydium 符合协议的最小输出金额取整逻辑。
+本版本新增显式 Solana V1 交易构建能力，同时保留现有 V0 兼容模式作为默认行为。V1 将计算单元和优先费配置直接写入消息，不包含 ComputeBudget 指令或地址查找表，并支持 4096 字节交易上限。优先费 API 继续使用 micro-lamports/CU，SDK 会通过向上取整换算为总 lamports。
 
 ## ✨ 项目特性
 
@@ -134,14 +134,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.2" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.3" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "5.0.2"
+sol-trade-sdk = "5.0.3"
 ```
 
 ## 🛠️ 使用示例
@@ -187,6 +187,7 @@ let swqos_configs: Vec<SwqosConfig> = vec![
 ];
 // 创建 TradeConfig 实例
 let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
+    // .transaction_version(TradeTransactionVersion::V1) // 默认：V0 兼容模式
     // .create_wsol_ata_on_startup(true)  // 默认: true  - 初始化时检查并创建 WSOL ATA
     // .use_seed_optimize(true)            // 默认: true  - ATA 操作启用 seed 优化
     // .log_enabled(true)                  // 默认: true  - SDK 计时 / SWQOS 日志
@@ -199,6 +200,14 @@ let trade_config = TradeConfig::builder(rpc_url, swqos_configs, commitment)
 let client = TradingClient::new(Arc::new(payer), trade_config).await;
 ```
 
+`TradeTransactionVersion::V0` 是默认值，并保持原有行为：没有地址查找表时使用 Legacy
+消息，传入地址查找表时使用 V0。只有显式选择 `TradeTransactionVersion::V1` 才会构造
+V1 消息。V1 将计算单元上限和总优先费写入交易配置，不再添加 ComputeBudget 指令，
+不支持地址查找表，交易大小上限为 4096 字节。现有 `cu_price` 的单位仍是
+micro-lamports/CU，SDK 会向上取整换算成总 lamports。请仅在目标集群和提交服务均支持
+V1 时启用；部分提交服务可能采用更小的传输上限，Mainnet 的 V1 激活时间也可能晚于
+Devnet/Testnet。
+
 **方式二：共享基础设施（多钱包）**
 
 多钱包场景下可先创建一份基础设施，再复用到多个钱包。参见 [示例：共享基础设施](examples/shared_infrastructure/src/main.rs)。
@@ -209,7 +218,8 @@ let infra_config = InfrastructureConfig::new(rpc_url, swqos_configs, commitment)
 let infrastructure = Arc::new(TradingInfrastructure::new(infra_config).await);
 
 // 基于同一基础设施创建多个客户端（开销小）
-let client1 = TradingClient::from_infrastructure(Arc::new(payer1), infrastructure.clone(), true);
+let client1 = TradingClient::from_infrastructure(Arc::new(payer1), infrastructure.clone(), true)
+    .with_transaction_version(TradeTransactionVersion::V1);
 let client2 = TradingClient::from_infrastructure(Arc::new(payer2), infrastructure.clone(), true);
 ```
 

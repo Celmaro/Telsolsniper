@@ -4,7 +4,7 @@ use crate::common::nonce_cache::DurableNonceInfo;
 use crate::common::sdk_log;
 use crate::common::GasFeeStrategy;
 use crate::common::SolanaRpcClient;
-use crate::common::{InfrastructureConfig, TradeConfig};
+use crate::common::{InfrastructureConfig, TradeConfig, TradeTransactionVersion};
 #[cfg(feature = "perf-trace")]
 use crate::constants::trade::trade::DEFAULT_SLIPPAGE;
 use crate::constants::SOL_TOKEN_ACCOUNT;
@@ -757,6 +757,8 @@ pub struct TradingClient {
     pub log_enabled: bool,
     /// Whether to check minimum tip per SWQOS (from TradeConfig.check_min_tip). Default false for lower latency.
     pub check_min_tip: bool,
+    /// Solana transaction construction mode selected in `TradeConfig`.
+    pub transaction_version: TradeTransactionVersion,
 }
 
 static INSTANCE: Mutex<Option<Arc<TradingClient>>> = Mutex::new(None);
@@ -778,6 +780,7 @@ impl Clone for TradingClient {
             effective_core_ids: self.effective_core_ids.clone(),
             log_enabled: self.log_enabled,
             check_min_tip: self.check_min_tip,
+            transaction_version: self.transaction_version,
         }
     }
 }
@@ -1019,6 +1022,7 @@ impl TradingClient {
             effective_core_ids,
             log_enabled: true,
             check_min_tip: false,
+            transaction_version: TradeTransactionVersion::V0,
         }
     }
 
@@ -1066,6 +1070,7 @@ impl TradingClient {
             effective_core_ids,
             log_enabled: true,
             check_min_tip: false,
+            transaction_version: TradeTransactionVersion::V0,
         }
     }
 
@@ -1245,6 +1250,7 @@ impl TradingClient {
             effective_core_ids: infrastructure.effective_core_ids.clone(),
             log_enabled: trade_config.log_enabled,
             check_min_tip: trade_config.check_min_tip,
+            transaction_version: trade_config.transaction_version,
         };
 
         let mut current = INSTANCE.lock();
@@ -1275,6 +1281,13 @@ impl TradingClient {
     /// local cached state and refresh network-backed data outside the hot path.
     pub fn with_risk_gate(mut self, risk_gate: Arc<dyn TradeRiskGate>) -> Self {
         self.risk_gate = Some(risk_gate);
+        self
+    }
+
+    /// Select the transaction message version for a client created from shared infrastructure.
+    /// `V0` preserves the existing behavior: Legacy without ALTs and V0 with ALTs.
+    pub fn with_transaction_version(mut self, version: TradeTransactionVersion) -> Self {
+        self.transaction_version = version;
         self
     }
 
@@ -1451,6 +1464,7 @@ impl TradingClient {
             max_sender_concurrency: self.max_sender_concurrency,
             effective_core_ids: self.effective_core_ids.clone(),
             check_min_tip: self.check_min_tip,
+            transaction_version: self.transaction_version,
             grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: params.use_exact_sol_amount,
         };
@@ -1585,6 +1599,7 @@ impl TradingClient {
             max_sender_concurrency: self.max_sender_concurrency,
             effective_core_ids: self.effective_core_ids.clone(),
             check_min_tip: self.check_min_tip,
+            transaction_version: self.transaction_version,
             grpc_recv_us: params.grpc_recv_us,
             use_exact_sol_amount: None,
         };

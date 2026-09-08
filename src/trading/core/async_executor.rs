@@ -35,7 +35,7 @@ use crate::{
     common::{nonce_cache::DurableNonceInfo, GasFeeStrategy, SwqosSubmitTiming},
     swqos::{SwqosClient, SwqosType, TradeType},
     trading::core::params::SenderConcurrencyConfig,
-    trading::{common::build_transaction, MiddlewareManager},
+    trading::{common::build_transaction_with_version, MiddlewareManager},
 };
 
 /// 与 transaction_pool::PARALLEL_SENDER_COUNT 一致，保证多路 build 不串行
@@ -58,6 +58,7 @@ struct SwqosSharedContext {
     wait_transaction_confirmed: bool,
     with_tip: bool,
     collector: Arc<ResultCollector>,
+    transaction_version: crate::common::TradeTransactionVersion,
 }
 
 /// One SWQOS submit task; only per-task data + one Arc to shared (reduces hot-path clones).
@@ -84,10 +85,11 @@ async fn run_one_swqos_job(job: SwqosJob) {
 
     let tip_amount = if s.with_tip { job.tip } else { 0.0 };
 
-    let transaction = match build_transaction(
+    let transaction = match build_transaction_with_version(
         &s.payer,
         job.unit_limit,
         job.unit_price,
+        s.transaction_version,
         s.instructions.as_ref(),
         s.address_lookup_table_accounts.as_slice(),
         s.recent_blockhash,
@@ -646,6 +648,7 @@ fn select_swqos_task_configs(
 /// Execute trade on multiple SWQOS clients in parallel; returns success flag, all signatures, and last error.
 ///
 /// `sender_config` merges sender_thread_cores, effective_core_ids, max_sender_concurrency (precomputed at SDK init; no get_core_ids on hot path).
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_parallel(
     swqos_clients: &[Arc<SwqosClient>],
     payer: Arc<Keypair>,
@@ -663,6 +666,49 @@ pub async fn execute_parallel(
     use_dedicated_sender_threads: bool,
     sender_config: SenderConcurrencyConfig,
     check_min_tip: bool,
+) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
+    execute_parallel_with_version(
+        swqos_clients,
+        payer,
+        instructions,
+        address_lookup_table_accounts,
+        recent_blockhash,
+        durable_nonce,
+        middleware_manager,
+        protocol_name,
+        is_buy,
+        wait_transaction_confirmed,
+        wait_for_all_submits,
+        with_tip,
+        gas_fee_strategy,
+        use_dedicated_sender_threads,
+        sender_config,
+        check_min_tip,
+        crate::common::TradeTransactionVersion::V0,
+    )
+    .await
+}
+
+/// Execute a trade batch using an explicitly selected transaction message version.
+#[allow(clippy::too_many_arguments)]
+pub async fn execute_parallel_with_version(
+    swqos_clients: &[Arc<SwqosClient>],
+    payer: Arc<Keypair>,
+    instructions: Vec<Instruction>,
+    address_lookup_table_accounts: Vec<AddressLookupTableAccount>,
+    recent_blockhash: Option<Hash>,
+    durable_nonce: Option<DurableNonceInfo>,
+    middleware_manager: Option<Arc<MiddlewareManager>>,
+    protocol_name: &'static str,
+    is_buy: bool,
+    wait_transaction_confirmed: bool,
+    wait_for_all_submits: bool,
+    with_tip: bool,
+    gas_fee_strategy: GasFeeStrategy,
+    use_dedicated_sender_threads: bool,
+    sender_config: SenderConcurrencyConfig,
+    check_min_tip: bool,
+    transaction_version: crate::common::TradeTransactionVersion,
 ) -> Result<(bool, Vec<Signature>, Option<anyhow::Error>, Vec<SwqosSubmitTiming>)> {
     if swqos_clients.is_empty() {
         return Err(anyhow!("swqos_clients is empty"));
@@ -717,6 +763,7 @@ pub async fn execute_parallel(
         wait_transaction_confirmed,
         with_tip,
         collector: collector.clone(),
+        transaction_version,
     });
 
     let (queue, notify) = if use_dedicated_sender_threads {

@@ -164,7 +164,7 @@ pub async fn poll_any_transaction_confirmation(
                 &landed,
                 RpcTransactionConfig {
                     encoding: Some(UiTransactionEncoding::JsonParsed),
-                    max_supported_transaction_version: Some(0),
+                    max_supported_transaction_version: Some(1),
                     commitment: Some(solana_commitment_config::CommitmentConfig::confirmed()),
                 },
             )
