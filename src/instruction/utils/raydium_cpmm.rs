@@ -1,6 +1,9 @@
 use crate::{
     common::SolanaRpcClient,
-    instruction::utils::raydium_cpmm_types::{pool_state_decode, PoolState},
+    instruction::utils::raydium_cpmm_types::{
+        amm_config_decode, pool_state_decode, AmmConfig, PoolState, AMM_CONFIG_DISCRIMINATOR,
+        AMM_CONFIG_SIZE, POOL_STATE_DISCRIMINATOR, POOL_STATE_SIZE,
+    },
     trading::core::params::RaydiumCpmmParams,
 };
 use anyhow::anyhow;
@@ -43,9 +46,43 @@ pub async fn fetch_pool_state(
     if account.owner != accounts::RAYDIUM_CPMM {
         return Err(anyhow!("Account is not owned by Raydium Cpmm program"));
     }
+    let expected_len = 8 + POOL_STATE_SIZE;
+    if account.data.len() < expected_len {
+        return Err(anyhow!(
+            "Raydium CPMM pool account is too short: expected at least {}, got {}",
+            expected_len,
+            account.data.len()
+        ));
+    }
+    if account.data[..8] != POOL_STATE_DISCRIMINATOR {
+        return Err(anyhow!("Account discriminator is not Raydium CPMM PoolState"));
+    }
     let pool_state = pool_state_decode(&account.data[8..])
         .ok_or_else(|| anyhow!("Failed to decode pool state"))?;
     Ok(pool_state)
+}
+
+pub async fn fetch_amm_config(
+    rpc: &SolanaRpcClient,
+    config_address: &Pubkey,
+) -> Result<AmmConfig, anyhow::Error> {
+    let account = rpc.get_account(config_address).await?;
+    if account.owner != accounts::RAYDIUM_CPMM {
+        return Err(anyhow!("Account is not owned by Raydium CPMM program"));
+    }
+    let expected_len = 8 + AMM_CONFIG_SIZE;
+    if account.data.len() < expected_len {
+        return Err(anyhow!(
+            "Raydium CPMM config account is too short: expected at least {}, got {}",
+            expected_len,
+            account.data.len()
+        ));
+    }
+    if account.data[..8] != AMM_CONFIG_DISCRIMINATOR {
+        return Err(anyhow!("Account discriminator is not Raydium CPMM AmmConfig"));
+    }
+    amm_config_decode(&account.data[8..])
+        .ok_or_else(|| anyhow!("Failed to decode Raydium CPMM config"))
 }
 
 pub fn get_pool_pda(amm_config: &Pubkey, mint1: &Pubkey, mint2: &Pubkey) -> Option<Pubkey> {
@@ -80,10 +117,21 @@ pub async fn get_pool_token_balances(
     token0_mint: &Pubkey,
     token1_mint: &Pubkey,
 ) -> Result<(u64, u64), anyhow::Error> {
-    let token0_vault = get_vault_pda(pool_state, token0_mint).unwrap();
-    let token0_balance = rpc.get_token_account_balance(&token0_vault).await?;
-    let token1_vault = get_vault_pda(pool_state, token1_mint).unwrap();
-    let token1_balance = rpc.get_token_account_balance(&token1_vault).await?;
+    let token0_vault = get_vault_pda(pool_state, token0_mint)
+        .ok_or_else(|| anyhow!("Failed to derive Raydium CPMM token0 vault"))?;
+    let token1_vault = get_vault_pda(pool_state, token1_mint)
+        .ok_or_else(|| anyhow!("Failed to derive Raydium CPMM token1 vault"))?;
+    get_pool_token_balances_from_vaults(rpc, &token0_vault, &token1_vault).await
+}
+
+/// Reads pool balances from the vault addresses stored in PoolState.
+pub async fn get_pool_token_balances_from_vaults(
+    rpc: &SolanaRpcClient,
+    token0_vault: &Pubkey,
+    token1_vault: &Pubkey,
+) -> Result<(u64, u64), anyhow::Error> {
+    let token0_balance = rpc.get_token_account_balance(token0_vault).await?;
+    let token1_balance = rpc.get_token_account_balance(token1_vault).await?;
 
     // Parse balance string to u64
     let token0_amount = token0_balance
@@ -132,14 +180,15 @@ pub fn get_vault_account(
     pool_state: &Pubkey,
     token_mint: &Pubkey,
     protocol_params: &RaydiumCpmmParams,
-) -> Pubkey {
+) -> Result<Pubkey, anyhow::Error> {
     if protocol_params.base_mint == *token_mint && protocol_params.base_vault != Pubkey::default() {
-        protocol_params.base_vault
+        Ok(protocol_params.base_vault)
     } else if protocol_params.quote_mint == *token_mint
         && protocol_params.quote_vault != Pubkey::default()
     {
-        protocol_params.quote_vault
+        Ok(protocol_params.quote_vault)
     } else {
-        get_vault_pda(pool_state, token_mint).unwrap()
+        get_vault_pda(pool_state, token_mint)
+            .ok_or_else(|| anyhow!("Failed to derive Raydium CPMM vault"))
     }
 }

@@ -3,6 +3,7 @@ use crate::instruction::utils::raydium_cpmm::accounts::{
 };
 
 use super::common::calculate_min_amount_out;
+use crate::trading::core::params::RaydiumCpmmParams;
 
 /// Computes trading fee using ceiling division.
 ///
@@ -110,13 +111,20 @@ fn swap_base_input(
     is_creator_fee_on_input: bool,
 ) -> SwapResult {
     let mut creator_fee = 0u64;
-
-    let trade_fee = compute_trading_fee(input_amount, trade_fee_rate);
+    let trade_fee: u64;
 
     let input_amount_less_fees = if is_creator_fee_on_input {
-        creator_fee = compute_creator_fee_new(input_amount, creator_fee_rate);
-        input_amount.saturating_sub(trade_fee).saturating_sub(creator_fee)
+        let total_fee_rate = trade_fee_rate.saturating_add(creator_fee_rate);
+        let total_fee = compute_trading_fee(input_amount, total_fee_rate);
+        creator_fee = if total_fee_rate == 0 {
+            0
+        } else {
+            ((total_fee as u128) * (creator_fee_rate as u128) / (total_fee_rate as u128)) as u64
+        };
+        trade_fee = total_fee.saturating_sub(creator_fee);
+        input_amount.saturating_sub(total_fee)
     } else {
+        trade_fee = compute_trading_fee(input_amount, trade_fee_rate);
         input_amount.saturating_sub(trade_fee)
     };
 
@@ -196,6 +204,73 @@ pub fn compute_swap_amount(
     }
 }
 
+/// Computes an exact-input quote using the current on-chain CPMM config,
+/// accrued-fee-adjusted reserves, creator fee mode, and Token-2022 fees.
+pub fn compute_swap_amount_for_pool(
+    protocol_params: &RaydiumCpmmParams,
+    is_base_in: bool,
+    amount_in: u64,
+    slippage_basis_points: u64,
+) -> Result<ComputeSwapParams, anyhow::Error> {
+    let creator_fee_rate =
+        if protocol_params.enable_creator_fee { protocol_params.creator_fee_rate } else { 0 };
+    let total_input_fee_rate = protocol_params
+        .trade_fee_rate
+        .checked_add(creator_fee_rate)
+        .ok_or_else(|| anyhow::anyhow!("Raydium CPMM fee rate overflow"))?;
+    if protocol_params.trade_fee_rate > FEE_RATE_DENOMINATOR_VALUE as u64
+        || creator_fee_rate > FEE_RATE_DENOMINATOR_VALUE as u64
+        || total_input_fee_rate > FEE_RATE_DENOMINATOR_VALUE as u64
+        || protocol_params.protocol_fee_rate > FEE_RATE_DENOMINATOR_VALUE as u64
+        || protocol_params.fund_fee_rate > FEE_RATE_DENOMINATOR_VALUE as u64
+    {
+        return Err(anyhow::anyhow!("Invalid Raydium CPMM fee configuration"));
+    }
+    let (input_reserve, output_reserve, input_transfer_fee, output_transfer_fee) = if is_base_in {
+        (
+            protocol_params.base_reserve,
+            protocol_params.quote_reserve,
+            protocol_params.base_transfer_fee,
+            protocol_params.quote_transfer_fee,
+        )
+    } else {
+        (
+            protocol_params.quote_reserve,
+            protocol_params.base_reserve,
+            protocol_params.quote_transfer_fee,
+            protocol_params.base_transfer_fee,
+        )
+    };
+    let is_creator_fee_on_input = match protocol_params.creator_fee_on {
+        0 => true,
+        1 => is_base_in,
+        2 => !is_base_in,
+        value => return Err(anyhow::anyhow!("Invalid Raydium CPMM creator fee mode: {}", value)),
+    };
+    let actual_amount_in = amount_in.saturating_sub(input_transfer_fee.calculate(amount_in));
+    let swap_result = swap_base_input(
+        actual_amount_in,
+        input_reserve,
+        output_reserve,
+        protocol_params.trade_fee_rate,
+        creator_fee_rate,
+        protocol_params.protocol_fee_rate,
+        protocol_params.fund_fee_rate,
+        is_creator_fee_on_input,
+    );
+    let received_amount = swap_result
+        .output_amount
+        .saturating_sub(output_transfer_fee.calculate(swap_result.output_amount));
+
+    Ok(ComputeSwapParams {
+        all_trade: actual_amount_in > 0,
+        amount_in,
+        amount_out: received_amount,
+        min_amount_out: calculate_min_amount_out(received_amount, slippage_basis_points),
+        fee: swap_result.trade_fee,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +304,16 @@ mod tests {
             excessive.min_amount_out,
             calculate_min_amount_out(excessive.amount_out, MAX_SLIPPAGE_BASIS_POINTS)
         );
+    }
+
+    #[test]
+    fn creator_fee_on_input_matches_official_combined_fee_rounding() {
+        let result = swap_base_input(101, 1_000_000, 2_000_000, 2_500, 10_000, 0, 0, true);
+
+        // ceil(101 * 12_500 / 1_000_000) is 2. Splitting that combined fee
+        // yields creator=1 and trade=1; separately ceiling each fee would charge 3.
+        assert_eq!(result.creator_fee, 1);
+        assert_eq!(result.trade_fee, 1);
+        assert_eq!(result.new_input_vault_amount, 1_000_099);
     }
 }

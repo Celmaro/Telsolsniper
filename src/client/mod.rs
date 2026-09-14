@@ -16,7 +16,6 @@ use crate::swqos::SwqosClient;
 use crate::swqos::SwqosConfig;
 use crate::swqos::SwqosType;
 use crate::swqos::TradeType;
-use crate::trading::core::params::BonkParams;
 use crate::trading::core::params::DexParamEnum;
 use crate::trading::core::params::MeteoraDammV2Params;
 use crate::trading::core::params::PumpFunParams;
@@ -43,7 +42,11 @@ fn validate_protocol_params(dex_type: DexType, params: &DexParamEnum) -> bool {
     match dex_type {
         DexType::PumpFun => params.as_any().downcast_ref::<PumpFunParams>().is_some(),
         DexType::PumpSwap => params.as_any().downcast_ref::<PumpSwapParams>().is_some(),
-        DexType::Bonk => params.as_any().downcast_ref::<BonkParams>().is_some(),
+        DexType::LaunchLab => matches!(params, DexParamEnum::LaunchLab(_)),
+        DexType::Bonk => matches!(params, DexParamEnum::Bonk(_)),
+        DexType::StonkFun => {
+            matches!(params, DexParamEnum::StonkFun(_) | DexParamEnum::StonkFunSwap(_))
+        }
         DexType::RaydiumCpmm => params.as_any().downcast_ref::<RaydiumCpmmParams>().is_some(),
         DexType::RaydiumAmmV4 => params.as_any().downcast_ref::<RaydiumAmmV4Params>().is_some(),
         DexType::MeteoraDammV2 => params.as_any().downcast_ref::<MeteoraDammV2Params>().is_some(),
@@ -84,12 +87,26 @@ pub async fn find_pool_by_mint(
 }
 
 /// Type of the token to buy
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TradeTokenType {
     SOL,
     WSOL,
     USD1,
     USDC,
+    /// Any SPL Token or Token-2022 mint, including a StonkFun quote token.
+    Token(Pubkey),
+}
+
+impl TradeTokenType {
+    fn mint(self) -> Pubkey {
+        match self {
+            Self::SOL => SOL_TOKEN_ACCOUNT,
+            Self::WSOL => WSOL_TOKEN_ACCOUNT,
+            Self::USD1 => USD1_TOKEN_ACCOUNT,
+            Self::USDC => USDC_TOKEN_ACCOUNT,
+            Self::Token(mint) => mint,
+        }
+    }
 }
 
 /// Account lifecycle policy for high-level trade requests.
@@ -181,7 +198,8 @@ pub enum SellAmount {
 pub struct SimpleBuyParams {
     /// DEX/protocol to route through, such as `DexType::PumpFun`.
     pub dex_type: DexType,
-    /// Quote token used to pay for the buy: `SOL`, `WSOL`, `USDC`, or `USD1`.
+    /// Quote token used to pay for the buy. Use [`TradeTokenType::Token`] for an
+    /// arbitrary SPL Token or Token-2022 quote mint.
     ///
     /// For PumpFun SOL-paired coins, use `TradeTokenType::SOL` for the normal
     /// fast path even when parser data reports WSOL as the quote sentinel. The
@@ -232,7 +250,8 @@ pub struct SimpleBuyParams {
 pub struct SimpleSellParams {
     /// DEX/protocol to route through, such as `DexType::PumpFun`.
     pub dex_type: DexType,
-    /// Quote token to receive from the sell: `SOL`, `WSOL`, `USDC`, or `USD1`.
+    /// Quote token to receive from the sell. Use [`TradeTokenType::Token`] for
+    /// an arbitrary SPL Token or Token-2022 quote mint.
     pub receive_as: TradeTokenType,
     /// Mint address of the token being sold.
     pub mint: Pubkey,
@@ -1406,11 +1425,6 @@ impl TradingClient {
                 DEFAULT_SLIPPAGE
             );
         }
-        if params.input_token_type == TradeTokenType::USD1 && params.dex_type != DexType::Bonk {
-            return Err(anyhow::anyhow!(
-                " Current version only supports USD1 trading on Bonk protocols"
-            ));
-        }
         if !validate_protocol_params(params.dex_type, &params.extension_params) {
             return Err(anyhow::anyhow!(
                 "Invalid protocol params for Trade (dex={:?})",
@@ -1421,15 +1435,7 @@ impl TradingClient {
             risk_gate.check_buy(&params)?;
         }
         let protocol_params = params.extension_params;
-        let input_token_mint = if params.input_token_type == TradeTokenType::SOL {
-            SOL_TOKEN_ACCOUNT
-        } else if params.input_token_type == TradeTokenType::WSOL {
-            WSOL_TOKEN_ACCOUNT
-        } else if params.input_token_type == TradeTokenType::USDC {
-            USDC_TOKEN_ACCOUNT
-        } else {
-            USD1_TOKEN_ACCOUNT
-        };
+        let input_token_mint = params.input_token_type.mint();
         let executor = TradeFactory::create_executor(params.dex_type);
         let buy_params = SwapParams {
             rpc: Some(self.infrastructure.rpc.clone()),
@@ -1544,11 +1550,6 @@ impl TradingClient {
                 "Must provide either recent_blockhash or durable_nonce for sell (required for transaction validity)"
             ));
         }
-        if params.output_token_type == TradeTokenType::USD1 && params.dex_type != DexType::Bonk {
-            return Err(anyhow::anyhow!(
-                " Current version only supports USD1 trading on Bonk protocols"
-            ));
-        }
         let protocol_params = params.extension_params;
         if !validate_protocol_params(params.dex_type, &protocol_params) {
             return Err(anyhow::anyhow!(
@@ -1557,15 +1558,7 @@ impl TradingClient {
             ));
         }
         let executor = TradeFactory::create_executor(params.dex_type);
-        let output_token_mint = if params.output_token_type == TradeTokenType::SOL {
-            SOL_TOKEN_ACCOUNT
-        } else if params.output_token_type == TradeTokenType::WSOL {
-            WSOL_TOKEN_ACCOUNT
-        } else if params.output_token_type == TradeTokenType::USDC {
-            USDC_TOKEN_ACCOUNT
-        } else {
-            USD1_TOKEN_ACCOUNT
-        };
+        let output_token_mint = params.output_token_type.mint();
         let sell_params = SwapParams {
             rpc: Some(self.infrastructure.rpc.clone()),
             payer: self.payer.clone(),

@@ -1,6 +1,8 @@
 use crate::{
     common::SolanaRpcClient,
-    instruction::utils::bonk_types::{pool_state_decode, PoolState},
+    instruction::utils::bonk_types::{
+        pool_state_decode, PoolState, POOL_STATE_DISCRIMINATOR, POOL_STATE_SIZE,
+    },
     utils::calc::common::clamp_slippage_basis_points_u128,
 };
 use anyhow::anyhow;
@@ -21,6 +23,10 @@ pub mod accounts {
     pub const USD1_GLOBAL_CONFIG: Pubkey = pubkey!("EPiZbnrThjyLnoQ6QQzkxeFqyL5uyg9RzNHHAudUPxBz");
     pub const EVENT_AUTHORITY: Pubkey = pubkey!("2DPAtwB8L12vrMRExbLuyGnC7n2J5LNoZQSejeQGpwkr");
     pub const BONK: Pubkey = pubkey!("LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj");
+    pub const STONKFUN_STANDARD_PLATFORM_CONFIG: Pubkey =
+        pubkey!("4E876qZTE9FJMrBzgVtBrSrzz2TLivB5Y5QXPjB4gZL7");
+    pub const STONKFUN_REWARD_PLATFORM_CONFIG: Pubkey =
+        pubkey!("6BwHHDg3u1854jC8PDLXvR4spTcLNaoBxLJNGC4nTESt");
 
     pub const PLATFORM_FEE_RATE: u128 = 100; // 1%
     pub const PROTOCOL_FEE_RATE: u128 = 25; // 0.25%
@@ -61,6 +67,53 @@ pub const BUY_EXECT_IN_DISCRIMINATOR: [u8; 8] = [250, 234, 13, 123, 213, 156, 19
 pub const BUY_EXECT_OUT_DISCRIMINATOR: [u8; 8] = [24, 211, 116, 40, 105, 3, 153, 56];
 pub const SELL_EXECT_IN_DISCRIMINATOR: [u8; 8] = [149, 39, 222, 155, 211, 124, 152, 26];
 pub const SELL_EXECT_OUT_DISCRIMINATOR: [u8; 8] = [95, 200, 71, 34, 8, 9, 11, 166];
+const GLOBAL_CONFIG_DISCRIMINATOR: [u8; 8] = [149, 8, 156, 202, 160, 252, 176, 217];
+const PLATFORM_CONFIG_DISCRIMINATOR: [u8; 8] = [160, 78, 128, 0, 248, 83, 230, 160];
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LaunchLabFeeConfig {
+    pub curve_type: u8,
+    pub trade_fee_rate: u64,
+    pub platform_fee_rate: u64,
+    pub creator_fee_rate: u64,
+}
+
+fn read_config_u64(data: &[u8], offset: usize, label: &str) -> Result<u64, anyhow::Error> {
+    let bytes = data
+        .get(offset..offset + 8)
+        .ok_or_else(|| anyhow!("LaunchLab {} account is too short", label))?;
+    let mut value = [0u8; 8];
+    value.copy_from_slice(bytes);
+    Ok(u64::from_le_bytes(value))
+}
+
+pub async fn fetch_fee_config(
+    rpc: &SolanaRpcClient,
+    global_config: &Pubkey,
+    platform_config: &Pubkey,
+) -> Result<LaunchLabFeeConfig, anyhow::Error> {
+    let global = rpc.get_account(global_config).await?;
+    let platform = rpc.get_account(platform_config).await?;
+    if global.owner != accounts::BONK || platform.owner != accounts::BONK {
+        return Err(anyhow!("LaunchLab config account has an unexpected owner"));
+    }
+    if global.data.get(..8) != Some(GLOBAL_CONFIG_DISCRIMINATOR.as_slice()) {
+        return Err(anyhow!("Account discriminator is not LaunchLab GlobalConfig"));
+    }
+    if platform.data.get(..8) != Some(PLATFORM_CONFIG_DISCRIMINATOR.as_slice()) {
+        return Err(anyhow!("Account discriminator is not LaunchLab PlatformConfig"));
+    }
+
+    Ok(LaunchLabFeeConfig {
+        curve_type: *global
+            .data
+            .get(16)
+            .ok_or_else(|| anyhow!("LaunchLab GlobalConfig account is too short"))?,
+        trade_fee_rate: read_config_u64(&global.data, 27, "GlobalConfig")?,
+        platform_fee_rate: read_config_u64(&platform.data, 104, "PlatformConfig")?,
+        creator_fee_rate: read_config_u64(&platform.data, 720, "PlatformConfig")?,
+    })
+}
 
 pub async fn fetch_pool_state(
     rpc: &SolanaRpcClient,
@@ -68,7 +121,17 @@ pub async fn fetch_pool_state(
 ) -> Result<PoolState, anyhow::Error> {
     let account = rpc.get_account(pool_address).await?;
     if account.owner != accounts::BONK {
-        return Err(anyhow!("Account is not owned by Bonk program"));
+        return Err(anyhow!("Account is not owned by the LaunchLab program"));
+    }
+    let expected_len = 8 + POOL_STATE_SIZE;
+    if account.data.len() < expected_len {
+        return Err(anyhow!(
+            "LaunchLab pool account is too short: expected at least {expected_len} bytes, got {}",
+            account.data.len()
+        ));
+    }
+    if account.data[..8] != POOL_STATE_DISCRIMINATOR {
+        return Err(anyhow!("Account discriminator is not LaunchLab PoolState"));
     }
     let pool_state = pool_state_decode(&account.data[8..])
         .ok_or_else(|| anyhow!("Failed to decode pool state"))?;
@@ -185,15 +248,31 @@ pub fn get_vault_pda(pool_state: &Pubkey, mint: &Pubkey) -> Option<Pubkey> {
 }
 
 pub fn get_platform_associated_account(platform_config: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] =
-        &[platform_config.as_ref(), crate::constants::WSOL_TOKEN_ACCOUNT.as_ref()];
+    get_platform_associated_account_for_quote(
+        platform_config,
+        &crate::constants::WSOL_TOKEN_ACCOUNT,
+    )
+}
+
+pub fn get_platform_associated_account_for_quote(
+    platform_config: &Pubkey,
+    quote_mint: &Pubkey,
+) -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[platform_config.as_ref(), quote_mint.as_ref()];
     let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
 }
 
 pub fn get_creator_associated_account(creator: &Pubkey) -> Option<Pubkey> {
-    let seeds: &[&[u8]; 2] = &[creator.as_ref(), crate::constants::WSOL_TOKEN_ACCOUNT.as_ref()];
+    get_creator_associated_account_for_quote(creator, &crate::constants::WSOL_TOKEN_ACCOUNT)
+}
+
+pub fn get_creator_associated_account_for_quote(
+    creator: &Pubkey,
+    quote_mint: &Pubkey,
+) -> Option<Pubkey> {
+    let seeds: &[&[u8]; 2] = &[creator.as_ref(), quote_mint.as_ref()];
     let program_id: &Pubkey = &accounts::BONK;
     let pda: Option<(Pubkey, u8)> = Pubkey::try_find_program_address(seeds, program_id);
     pda.map(|pubkey| pubkey.0)
@@ -203,9 +282,29 @@ pub fn get_creator_associated_account(creator: &Pubkey) -> Option<Pubkey> {
 mod tests {
     use super::*;
     use crate::utils::calc::common::MAX_SLIPPAGE_BASIS_POINTS;
+    use solana_sdk::pubkey;
 
     const VIRTUAL_BASE: u128 = 1_073_025_605_596_382;
     const VIRTUAL_QUOTE: u128 = 30_000_852_951;
+
+    #[test]
+    fn stonkfun_reward_quote_accounts_match_mainnet() {
+        let quote_mint = pubkey!("CARDSccUMFKoPRZxt5vt3ksUbxEFEcnZ3H2pd3dKxYjp");
+        let creator = pubkey!("DwhaceCnV6R2U6e5FfCcrDiYXtZr7s7KjUzV3swWazm6");
+
+        assert_eq!(
+            get_platform_associated_account_for_quote(
+                &accounts::STONKFUN_REWARD_PLATFORM_CONFIG,
+                &quote_mint,
+            )
+            .unwrap(),
+            pubkey!("hD6YgNjkVtaw5snL74P1VmUrQtGUoGAkgwHgtsWsj1H")
+        );
+        assert_eq!(
+            get_creator_associated_account_for_quote(&creator, &quote_mint).unwrap(),
+            pubkey!("GZrRchHGgeZXRjv2wEfCyUHfiChc8NNjxwJJijokWBnp")
+        );
+    }
 
     #[test]
     fn get_amount_in_at_10000_bps_does_not_divide_by_zero() {

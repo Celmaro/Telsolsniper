@@ -4,7 +4,7 @@
 </div>
 
 <p align="center">
-    <strong>一个面向低延迟 Solana DEX 交易机器人的高性能 Rust SDK。该 SDK 以速度和效率为核心设计，支持与 PumpFun、Pump AMM（PumpSwap）、Bonk、Meteora DAMM v2、Raydium AMM v4 以及 Raydium CPMM 进行无缝、高吞吐量的交互，适用于对延迟高度敏感的交易策略。</strong>
+    <strong>一个面向低延迟 Solana DEX 交易机器人的高性能 Rust SDK。该 SDK 以速度和效率为核心设计，支持与 PumpFun、Pump AMM（PumpSwap）、Bonk、StonkFun、Meteora DAMM v2、Raydium AMM v4 以及 Raydium CPMM 进行无缝、高吞吐量的交互，适用于对延迟高度敏感的交易策略。</strong>
 </p>
 
 <p align="center">
@@ -81,32 +81,40 @@
 
 | 方向 | 覆盖范围 |
 |------|----------|
-| DEX 协议 | PumpFun、PumpSwap、Bonk、Meteora DAMM v2、Raydium AMM v4、Raydium CPMM |
+| DEX 协议 | PumpFun、PumpSwap、LaunchLab、Bonk、StonkFun、Meteora DAMM v2、Raydium AMM v4、Raydium CPMM |
 | 提交通道 | 默认 Solana RPC，以及 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、FlashBlock、BlockRazor、Node1、Astralane、Glaive、SpeedLanding 等 SWQoS 服务 |
 | 交易流程 | 买入/卖出、精确输入/输出、跟单交易、狙击交易、地址查找表、durable nonce、中间件、共享基础设施 |
 | 热路径设计 | 调用方传入 recent blockhash 或 durable nonce；交易执行阶段不再查询 RPC 获取 blockhash、账户或余额 |
 
 ## 🔖 当前版本
 
-**Rust crate:** `sol-trade-sdk = "5.0.3"`
+**Rust crate:** `sol-trade-sdk = "5.0.4"`
 
-本版本新增显式 Solana V1 交易构建能力，同时保留现有 V0 兼容模式作为默认行为。V1 将计算单元和优先费配置直接写入消息，不包含 ComputeBudget 指令或地址查找表，并支持 4096 字节交易上限。优先费 API 继续使用 micro-lamports/CU，SDK 会通过向上取整换算为总 lamports。
+本版本新增共享程序的一等交易入口：`DexType::LaunchLab`、`DexParamEnum::LaunchLab` 与 `LaunchLabParams`，并通过 `DexType::StonkFun`、`DexParamEnum::StonkFun` 与 `StonkFunParams` 提供平台专用命名。同一个 `DexType::StonkFun` 搭配 `DexParamEnum::StonkFunSwap` / `StonkFunSwapParams` 时会路由毕业后的外盘：从主网状态解析任意交易对、SPL Token/Token-2022 混合 token program、当前 AmmConfig、creator fee、transfer fee、vault 余额与两个 swap 方向。曲线买入在毕业边界还会按官方 LaunchLab SDK 反算并缩小实际输入。旧 Bonk 与 `RaydiumCpmm` 名称继续兼容，可用于直接访问底层协议。
+
+以下真实主网回归测试分别使用当前 StonkFun reward 内盘和毕业后的 KNOTS/STONK CPMM 池，仅解析和构造交易，不会提交交易：
+
+```bash
+RUN_MAINNET_TESTS=1 cargo test --lib current_stonkfun_reward_pool_decodes_and_builds_both_trade_directions -- --nocapture
+RUN_MAINNET_TESTS=1 cargo test --lib current_stonkfun_graduated_pool_decodes_and_builds_both_swap_directions -- --nocapture
+```
 
 ## ✨ 项目特性
 
 1. **PumpFun 交易**: SDK 侧统一为 `buy`、`sell`、`buy_exact_quote_in` 流程，native SOL 优先走 V1，USDC/非 SOL quote 或显式 WSOL 结算才走 V2
 2. **PumpSwap 交易**: 支持 PumpSwap 池的交易操作
-3. **Bonk 交易**: 支持 Bonk 的交易操作
-4. **Raydium CPMM 交易**: 支持 Raydium CPMM (Concentrated Pool Market Maker) 的交易操作
-5. **Raydium AMM V4 交易**: 支持 Raydium AMM V4 (Automated Market Maker) 的交易操作
-6. **Meteora DAMM V2 交易**: 支持 Meteora DAMM V2 (Dynamic AMM) 的交易操作
-7. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、FlashBlock、BlockRazor、Node1、Astralane、Glaive、SpeedLanding、LunarLander 等服务
-8. **并发交易**: 所有已配置的 SWQoS 通道和默认 RPC 通道都会发出提交；首个成功只影响返回，较慢通道会继续提交
-9. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
-10. **中间件系统**: 支持自定义指令中间件，可在交易执行前对指令进行修改、添加或移除
-11. **[买入前风险门](docs/PRE_BUY_RISK_GATE_CN.md)**: 在交易构建和提交前，通过本地缓存执行 mint authority、freeze authority、持仓聚类、白名单或黑名单判断
-12. **共享基础设施**: 多钱包可共享同一套 RPC 与 SWQoS 客户端，降低资源占用
-13. **热路径 RPC 边界**: 交易执行使用调用方传入的 blockhash 或 durable nonce，不在热路径查询 blockhash、账户或余额
+3. **LaunchLab 交易**: 提供一等通用 LaunchLab 路由，并保留 Bonk 兼容名称
+4. **StonkFun 交易**: 基于 LaunchLab 提供独立 StonkFun 路由，并通过 CPMM 支持毕业后的外盘 swap，支持任意 quote mint 与 Token-2022
+5. **Raydium CPMM 交易**: 支持 Raydium CPMM (Concentrated Pool Market Maker) 的交易操作
+6. **Raydium AMM V4 交易**: 支持 Raydium AMM V4 (Automated Market Maker) 的交易操作
+7. **Meteora DAMM V2 交易**: 支持 Meteora DAMM V2 (Dynamic AMM) 的交易操作
+8. **多种 MEV 保护**: 支持 Jito、Nextblock、ZeroSlot、Temporal、Bloxroute、FlashBlock、BlockRazor、Node1、Astralane、Glaive、SpeedLanding、LunarLander 等服务
+9. **并发交易**: 所有已配置的 SWQoS 通道和默认 RPC 通道都会发出提交；首个成功只影响返回，较慢通道会继续提交
+10. **统一交易接口**: 使用统一的交易协议枚举进行交易操作
+11. **中间件系统**: 支持自定义指令中间件，可在交易执行前对指令进行修改、添加或移除
+12. **[买入前风险门](docs/PRE_BUY_RISK_GATE_CN.md)**: 在交易构建和提交前，通过本地缓存执行 mint authority、freeze authority、持仓聚类、白名单或黑名单判断
+13. **共享基础设施**: 多钱包可共享同一套 RPC 与 SWQoS 客户端，降低资源占用
+14. **热路径 RPC 边界**: 交易执行使用调用方传入的 blockhash 或 durable nonce，不在热路径查询 blockhash、账户或余额
 
 ## 📚 使用文档
 
@@ -134,14 +142,14 @@ git clone https://github.com/0xfnzero/sol-trade-sdk
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.4" }
 ```
 
 ### 使用 crates.io
 
 ```toml
 # 添加到您的 Cargo.toml
-sol-trade-sdk = "5.0.3"
+sol-trade-sdk = "5.0.4"
 ```
 
 ## 🛠️ 使用示例

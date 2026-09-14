@@ -4,7 +4,7 @@
 </div>
 
 <p align="center">
-    <strong>A high-performance Rust SDK for low-latency Solana DEX trading bots. Built for speed and efficiency, it enables seamless, high-throughput interaction with PumpFun, Pump AMM (PumpSwap), Bonk, Meteora DAMM v2, Raydium AMM v4, and Raydium CPMM for latency-critical trading strategies.</strong>
+    <strong>A high-performance Rust SDK for low-latency Solana DEX trading bots. Built for speed and efficiency, it enables seamless, high-throughput interaction with PumpFun, Pump AMM (PumpSwap), Bonk, StonkFun, Meteora DAMM v2, Raydium AMM v4, and Raydium CPMM for latency-critical trading strategies.</strong>
 </p>
 
 <p align="center">
@@ -81,32 +81,40 @@ This SDK is available in multiple languages:
 
 | Area | Coverage |
 |------|----------|
-| DEX protocols | PumpFun, PumpSwap, Bonk, Meteora DAMM v2, Raydium AMM v4, Raydium CPMM |
+| DEX protocols | PumpFun, PumpSwap, LaunchLab, Bonk, StonkFun, Meteora DAMM v2, Raydium AMM v4, Raydium CPMM |
 | Submit lanes | Default Solana RPC plus Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, FlashBlock, BlockRazor, Node1, Astralane, Glaive, SpeedLanding, and other SWQoS providers |
 | Trading workflows | Buy/sell, exact input/output, copy trading, sniper trading, address lookup tables, durable nonce, middleware, shared infrastructure |
 | Hot-path design | Caller supplies recent blockhash or durable nonce; trade execution avoids RPC reads for blockhash, account, or balance data |
 
 ## 🔖 Current Release
 
-**Rust crate:** `sol-trade-sdk = "5.0.3"`
+**Rust crate:** `sol-trade-sdk = "5.0.4"`
 
-This release adds explicit Solana V1 transaction construction while preserving the existing V0-compatible default. V1 embeds compute-unit and priority-fee configuration directly in the message, omits ComputeBudget instructions and address lookup tables, and supports the 4096-byte transaction limit. Priority fees retain the existing micro-lamports-per-CU API and are converted to total lamports with ceiling division.
+This release adds first-class shared-program trading through `DexType::LaunchLab`, `DexParamEnum::LaunchLab`, and `LaunchLabParams`, plus platform-specific StonkFun names through `DexType::StonkFun`, `DexParamEnum::StonkFun`, and `StonkFunParams`. It supports dynamic quote mints and token programs, reads current LaunchLab pool and fee configuration by RPC, and builds the current 18-account buy/sell instruction layout. The same `DexType::StonkFun` routes graduated pools when paired with `DexParamEnum::StonkFunSwap` / `StonkFunSwapParams`: arbitrary token pairs, mixed SPL Token/Token-2022 programs, current AmmConfig and creator fees, transfer fees, vault balances, and both swap directions are resolved from mainnet state. Buy quotes also reduce the submitted input at the curve graduation boundary, matching the official LaunchLab SDK. Existing Bonk and `RaydiumCpmm` names remain available for compatibility and direct underlying-protocol access.
+
+The gated mainnet regressions use a current StonkFun reward pool and the graduated KNOTS/STONK CPMM pool. Run them without submitting a transaction:
+
+```bash
+RUN_MAINNET_TESTS=1 cargo test --lib current_stonkfun_reward_pool_decodes_and_builds_both_trade_directions -- --nocapture
+RUN_MAINNET_TESTS=1 cargo test --lib current_stonkfun_graduated_pool_decodes_and_builds_both_swap_directions -- --nocapture
+```
 
 ## ✨ Features
 
 1. **PumpFun Trading**: Unified SDK-side `buy`, `sell`, and `buy_exact_quote_in` flow, preferring V1 for native SOL and selecting V2 for USDC/non-native quote mints or explicit WSOL settlement
 2. **PumpSwap Trading**: Support for PumpSwap pool trading operations
-3. **Bonk Trading**: Support for Bonk trading operations
-4. **Raydium CPMM Trading**: Support for Raydium CPMM (Concentrated Pool Market Maker) trading operations
-5. **Raydium AMM V4 Trading**: Support for Raydium AMM V4 (Automated Market Maker) trading operations
-6. **Meteora DAMM V2 Trading**: Support for Meteora DAMM V2 (Dynamic AMM) trading operations
-7. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, FlashBlock, BlockRazor, Node1, Astralane, Glaive, LunarLander and other services
-8. **Concurrent Trading**: Submit through every configured SWQoS provider plus the default RPC lane; the first accepted result can return early while slower routes continue submitting
-9. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
-10. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
-11. **[Pre-Buy Risk Gate](docs/PRE_BUY_RISK_GATE.md)**: Optional zero-allocation hot-path hook for cached mint authority, freeze authority, holder-cluster, allowlist, or blocklist checks before buy submission
-12. **Shared Infrastructure**: Share expensive RPC and SWQoS clients across multiple wallets for reduced resource usage
-13. **Hot-Path RPC Boundary**: Trade execution uses caller-supplied blockhash or durable nonce and never queries RPC for blockhash, account, or balance data
+3. **LaunchLab Trading**: First-class generic LaunchLab routing with Bonk compatibility names
+4. **StonkFun Trading**: First-class StonkFun routing over LaunchLab, plus graduated-pool swaps through CPMM, with arbitrary quote mints and Token-2022 support
+5. **Raydium CPMM Trading**: Support for Raydium CPMM (Concentrated Pool Market Maker) trading operations
+6. **Raydium AMM V4 Trading**: Support for Raydium AMM V4 (Automated Market Maker) trading operations
+7. **Meteora DAMM V2 Trading**: Support for Meteora DAMM V2 (Dynamic AMM) trading operations
+8. **Multiple MEV Protection**: Support for Jito, Nextblock, ZeroSlot, Temporal, Bloxroute, FlashBlock, BlockRazor, Node1, Astralane, Glaive, LunarLander and other services
+9. **Concurrent Trading**: Submit through every configured SWQoS provider plus the default RPC lane; the first accepted result can return early while slower routes continue submitting
+10. **Unified Trading Interface**: Use unified trading protocol enums for trading operations
+11. **Middleware System**: Support for custom instruction middleware to modify, add, or remove instructions before transaction execution
+12. **[Pre-Buy Risk Gate](docs/PRE_BUY_RISK_GATE.md)**: Optional zero-allocation hot-path hook for cached mint authority, freeze authority, holder-cluster, allowlist, or blocklist checks before buy submission
+13. **Shared Infrastructure**: Share expensive RPC and SWQoS clients across multiple wallets for reduced resource usage
+14. **Hot-Path RPC Boundary**: Trade execution uses caller-supplied blockhash or durable nonce and never queries RPC for blockhash, account, or balance data
 
 ## 📚 Documentation Guides
 
@@ -134,14 +142,14 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.3" }
+sol-trade-sdk = { path = "./sol-trade-sdk", version = "5.0.4" }
 ```
 
 ### Use crates.io
 
 ```toml
 # Add to your Cargo.toml
-sol-trade-sdk = "5.0.3"
+sol-trade-sdk = "5.0.4"
 ```
 
 ## 🛠️ Usage Examples

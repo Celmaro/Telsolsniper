@@ -28,7 +28,11 @@ pub struct SenderConcurrencyConfig {
 pub enum DexParamEnum {
     PumpFun(PumpFunParams),
     PumpSwap(PumpSwapParams),
+    LaunchLab(BonkParams),
     Bonk(BonkParams),
+    StonkFun(BonkParams),
+    /// Graduated StonkFun pool parameters backed by the external CPMM venue.
+    StonkFunSwap(RaydiumCpmmParams),
     RaydiumCpmm(RaydiumCpmmParams),
     RaydiumAmmV4(RaydiumAmmV4Params),
     MeteoraDammV2(MeteoraDammV2Params),
@@ -41,7 +45,10 @@ impl DexParamEnum {
         match self {
             DexParamEnum::PumpFun(p) => p,
             DexParamEnum::PumpSwap(p) => p,
+            DexParamEnum::LaunchLab(p) => p,
             DexParamEnum::Bonk(p) => p,
+            DexParamEnum::StonkFun(p) => p,
+            DexParamEnum::StonkFunSwap(p) => p,
             DexParamEnum::RaydiumCpmm(p) => p,
             DexParamEnum::RaydiumAmmV4(p) => p,
             DexParamEnum::MeteoraDammV2(p) => p,

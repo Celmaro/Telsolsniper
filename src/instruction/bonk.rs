@@ -14,9 +14,7 @@ use crate::{
         params::{BonkParams, SwapParams},
         traits::InstructionBuilder,
     },
-    utils::calc::bonk::{
-        get_buy_token_amount_from_sol_amount, get_sell_sol_amount_from_token_amount,
-    },
+    utils::calc::bonk::{get_buy_quote, get_sell_min_amount_out},
 };
 use anyhow::{anyhow, Result};
 use solana_sdk::{
@@ -25,8 +23,34 @@ use solana_sdk::{
     signer::Signer,
 };
 
-/// Instruction builder for Bonk protocol
+/// Instruction builder for LaunchLab platforms, including Bonk and StonkFun.
 pub struct BonkInstructionBuilder;
+
+fn launchlab_account_context(params: &BonkParams) -> Result<(Pubkey, Pubkey, Pubkey)> {
+    if params.global_config == Pubkey::default()
+        || params.platform_config == Pubkey::default()
+        || params.platform_associated_account == Pubkey::default()
+        || params.creator_associated_account == Pubkey::default()
+        || params.mint_token_program == Pubkey::default()
+    {
+        return Err(anyhow!("Incomplete LaunchLab account context"));
+    }
+
+    let quote_mint = if params.quote_mint != Pubkey::default() {
+        params.quote_mint
+    } else if params.global_config == accounts::USD1_GLOBAL_CONFIG {
+        crate::constants::USD1_TOKEN_ACCOUNT
+    } else {
+        crate::constants::WSOL_TOKEN_ACCOUNT
+    };
+    let quote_token_program = if params.quote_token_program == Pubkey::default() {
+        crate::constants::TOKEN_PROGRAM
+    } else {
+        params.quote_token_program
+    };
+
+    Ok((params.global_config, quote_mint, quote_token_program))
+}
 
 #[async_trait::async_trait]
 impl InstructionBuilder for BonkInstructionBuilder {
@@ -41,52 +65,33 @@ impl InstructionBuilder for BonkInstructionBuilder {
             .protocol_params
             .as_any()
             .downcast_ref::<BonkParams>()
-            .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
+            .ok_or_else(|| anyhow!("Invalid protocol params for LaunchLab"))?;
 
-        let usd1_pool = protocol_params.global_config == accounts::USD1_GLOBAL_CONFIG;
-
+        let (global_config, quote_mint, quote_token_program) =
+            launchlab_account_context(protocol_params)?;
         let pool_state = if protocol_params.pool_state == Pubkey::default() {
-            if usd1_pool {
-                get_pool_pda(&params.output_mint, &crate::constants::USD1_TOKEN_ACCOUNT).unwrap()
-            } else {
-                get_pool_pda(&params.output_mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
-            }
+            get_pool_pda(&params.output_mint, &quote_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab pool address"))?
         } else {
             protocol_params.pool_state
-        };
-
-        let global_config = if usd1_pool {
-            accounts::USD1_GLOBAL_CONFIG_META
-        } else {
-            accounts::GLOBAL_CONFIG_META
-        };
-
-        let quote_mint = if usd1_pool {
-            crate::constants::USD1_TOKEN_ACCOUNT
-        } else {
-            crate::constants::WSOL_TOKEN_ACCOUNT
-        };
-        let quote_token_mint = if usd1_pool {
-            crate::constants::USD1_TOKEN_ACCOUNT_META
-        } else {
-            crate::constants::WSOL_TOKEN_ACCOUNT_META
         };
 
         // ========================================
         // Trade calculation and account address preparation
         // ========================================
-        let amount_in: u64 = params.input_amount.unwrap_or(0);
+        let requested_amount_in: u64 = params.input_amount.unwrap_or(0);
         let share_fee_rate: u64 = 0;
-        let minimum_amount_out: u64 = match params.fixed_output_amount {
-            Some(fixed_amount) => fixed_amount,
-            None => get_buy_token_amount_from_sol_amount(
-                amount_in,
-                protocol_params.virtual_base,
-                protocol_params.virtual_quote,
-                protocol_params.real_base,
-                protocol_params.real_quote,
-                params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
-            ),
+        let (amount_in, minimum_amount_out): (u64, u64) = match params.fixed_output_amount {
+            Some(fixed_amount) => (requested_amount_in, fixed_amount),
+            None => {
+                let quote = get_buy_quote(
+                    requested_amount_in,
+                    protocol_params,
+                    share_fee_rate,
+                    params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
+                )?;
+                (quote.amount_in, quote.minimum_amount_out)
+            }
         };
 
         let user_base_token_account =
@@ -100,17 +105,19 @@ impl InstructionBuilder for BonkInstructionBuilder {
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &quote_mint,
-                &crate::constants::TOKEN_PROGRAM,
+                &quote_token_program,
                 params.open_seed_optimize,
             );
 
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
-            get_vault_pda(&pool_state, &params.output_mint).unwrap()
+            get_vault_pda(&pool_state, &params.output_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab base vault"))?
         } else {
             protocol_params.base_vault
         };
         let quote_vault_account = if protocol_params.quote_vault == Pubkey::default() {
-            get_vault_pda(&pool_state, &quote_mint).unwrap()
+            get_vault_pda(&pool_state, &quote_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab quote vault"))?
         } else {
             protocol_params.quote_vault
         };
@@ -125,7 +132,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 &mut instructions,
                 &params.payer.pubkey(),
                 &quote_mint,
-                &crate::constants::TOKEN_PROGRAM,
+                &quote_token_program,
                 amount_in,
                 params.open_seed_optimize,
             );
@@ -155,10 +162,10 @@ impl InstructionBuilder for BonkInstructionBuilder {
         }
         data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
-        let accounts: [AccountMeta; 15] = [
+        let accounts: [AccountMeta; 18] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
-            global_config,                                 // Global Config (readonly)
+            AccountMeta::new_readonly(global_config, false), // Global Config (readonly)
             AccountMeta::new_readonly(protocol_params.platform_config, false), // Platform Config (readonly)
             AccountMeta::new(pool_state, false),                               // Pool State
             AccountMeta::new(user_base_token_account, false),                  // User Base Token
@@ -166,11 +173,14 @@ impl InstructionBuilder for BonkInstructionBuilder {
             AccountMeta::new(base_vault_account, false),                       // Base Vault
             AccountMeta::new(quote_vault_account, false),                      // Quote Vault
             AccountMeta::new_readonly(params.output_mint, false), // Base Token Mint (readonly)
-            quote_token_mint,                                     // Quote Token Mint (readonly)
+            AccountMeta::new_readonly(quote_mint, false),         // Quote Token Mint (readonly)
             AccountMeta::new_readonly(protocol_params.mint_token_program, false), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META, // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META,       // Event Authority (readonly)
-            accounts::BONK_META,                  // Program (readonly)
+            AccountMeta::new_readonly(quote_token_program, false), // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,                        // Event Authority (readonly)
+            accounts::BONK_META,                                   // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META,
+            AccountMeta::new(protocol_params.platform_associated_account, false),
+            AccountMeta::new(protocol_params.creator_associated_account, false),
         ];
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
@@ -195,35 +205,15 @@ impl InstructionBuilder for BonkInstructionBuilder {
             .protocol_params
             .as_any()
             .downcast_ref::<BonkParams>()
-            .ok_or_else(|| anyhow!("Invalid protocol params for Bonk"))?;
+            .ok_or_else(|| anyhow!("Invalid protocol params for LaunchLab"))?;
 
-        let usd1_pool = protocol_params.global_config == accounts::USD1_GLOBAL_CONFIG;
-
+        let (global_config, quote_mint, quote_token_program) =
+            launchlab_account_context(protocol_params)?;
         let pool_state = if protocol_params.pool_state == Pubkey::default() {
-            if usd1_pool {
-                get_pool_pda(&params.input_mint, &crate::constants::USD1_TOKEN_ACCOUNT).unwrap()
-            } else {
-                get_pool_pda(&params.input_mint, &crate::constants::WSOL_TOKEN_ACCOUNT).unwrap()
-            }
+            get_pool_pda(&params.input_mint, &quote_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab pool address"))?
         } else {
             protocol_params.pool_state
-        };
-
-        let global_config = if usd1_pool {
-            accounts::USD1_GLOBAL_CONFIG_META
-        } else {
-            accounts::GLOBAL_CONFIG_META
-        };
-
-        let quote_mint = if usd1_pool {
-            crate::constants::USD1_TOKEN_ACCOUNT
-        } else {
-            crate::constants::WSOL_TOKEN_ACCOUNT
-        };
-        let quote_token_mint = if usd1_pool {
-            crate::constants::USD1_TOKEN_ACCOUNT_META
-        } else {
-            crate::constants::WSOL_TOKEN_ACCOUNT_META
         };
 
         // ========================================
@@ -232,14 +222,12 @@ impl InstructionBuilder for BonkInstructionBuilder {
         let share_fee_rate: u64 = 0;
         let minimum_amount_out: u64 = match params.fixed_output_amount {
             Some(fixed_amount) => fixed_amount,
-            None => get_sell_sol_amount_from_token_amount(
+            None => get_sell_min_amount_out(
                 amount,
-                protocol_params.virtual_base,
-                protocol_params.virtual_quote,
-                protocol_params.real_base,
-                protocol_params.real_quote,
+                protocol_params,
+                share_fee_rate,
                 params.slippage_basis_points.unwrap_or(DEFAULT_SLIPPAGE) as u128,
-            ),
+            )?,
         };
 
         let user_base_token_account =
@@ -253,17 +241,19 @@ impl InstructionBuilder for BonkInstructionBuilder {
             crate::common::fast_fn::get_associated_token_address_with_program_id_fast_use_seed(
                 &params.payer.pubkey(),
                 &quote_mint,
-                &crate::constants::TOKEN_PROGRAM,
+                &quote_token_program,
                 params.open_seed_optimize,
             );
 
         let base_vault_account = if protocol_params.base_vault == Pubkey::default() {
-            get_vault_pda(&pool_state, &params.input_mint).unwrap()
+            get_vault_pda(&pool_state, &params.input_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab base vault"))?
         } else {
             protocol_params.base_vault
         };
         let quote_vault_account = if protocol_params.quote_vault == Pubkey::default() {
-            get_vault_pda(&pool_state, &quote_mint).unwrap()
+            get_vault_pda(&pool_state, &quote_mint)
+                .ok_or_else(|| anyhow!("Failed to derive LaunchLab quote vault"))?
         } else {
             protocol_params.quote_vault
         };
@@ -278,7 +268,7 @@ impl InstructionBuilder for BonkInstructionBuilder {
                 &mut instructions,
                 &params.payer.pubkey(),
                 &quote_mint,
-                &crate::constants::TOKEN_PROGRAM,
+                &quote_token_program,
                 params.open_seed_optimize,
             );
         }
@@ -295,10 +285,10 @@ impl InstructionBuilder for BonkInstructionBuilder {
         }
         data[24..32].copy_from_slice(&share_fee_rate.to_le_bytes());
 
-        let accounts: [AccountMeta; 15] = [
+        let accounts: [AccountMeta; 18] = [
             AccountMeta::new(params.payer.pubkey(), true), // Payer (signer)
             accounts::AUTHORITY_META,                      // Authority (readonly)
-            global_config,                                 // Global Config (readonly)
+            AccountMeta::new_readonly(global_config, false), // Global Config (readonly)
             AccountMeta::new_readonly(protocol_params.platform_config, false), // Platform Config (readonly)
             AccountMeta::new(pool_state, false),                               // Pool State
             AccountMeta::new(user_base_token_account, false),                  // User Base Token
@@ -306,11 +296,14 @@ impl InstructionBuilder for BonkInstructionBuilder {
             AccountMeta::new(base_vault_account, false),                       // Base Vault
             AccountMeta::new(quote_vault_account, false),                      // Quote Vault
             AccountMeta::new_readonly(params.input_mint, false), // Base Token Mint (readonly)
-            quote_token_mint,                                    // Quote Token Mint (readonly)
+            AccountMeta::new_readonly(quote_mint, false),        // Quote Token Mint (readonly)
             AccountMeta::new_readonly(protocol_params.mint_token_program, false), // Base Token Program (readonly)
-            crate::constants::TOKEN_PROGRAM_META, // Quote Token Program (readonly)
-            accounts::EVENT_AUTHORITY_META,       // Event Authority (readonly)
-            accounts::BONK_META,                  // Program (readonly)
+            AccountMeta::new_readonly(quote_token_program, false), // Quote Token Program (readonly)
+            accounts::EVENT_AUTHORITY_META,                        // Event Authority (readonly)
+            accounts::BONK_META,                                   // Program (readonly)
+            crate::constants::SYSTEM_PROGRAM_META,
+            AccountMeta::new(protocol_params.platform_associated_account, false),
+            AccountMeta::new(protocol_params.creator_associated_account, false),
         ];
 
         instructions.push(Instruction::new_with_bytes(accounts::BONK, &data, accounts.to_vec()));
@@ -402,8 +395,11 @@ mod tests {
             .unwrap();
         let ix = instructions.last().unwrap();
 
-        assert_eq!(ix.accounts.len(), 15);
+        assert_eq!(ix.accounts.len(), 18);
         assert_eq!(ix.accounts[14].pubkey, accounts::BONK);
+        assert_eq!(ix.accounts[15].pubkey, crate::constants::SYSTEM_PROGRAM);
+        assert_eq!(ix.accounts[16].pubkey, pk(9));
+        assert_eq!(ix.accounts[17].pubkey, pk(10));
         assert_eq!(&ix.data[..8], BUY_EXECT_OUT_DISCRIMINATOR);
         assert_eq!(u64::from_le_bytes(ix.data[8..16].try_into().unwrap()), 42);
         assert_eq!(u64::from_le_bytes(ix.data[16..24].try_into().unwrap()), 100_000);
@@ -417,8 +413,9 @@ mod tests {
             .unwrap();
         let ix = instructions.last().unwrap();
 
-        assert_eq!(ix.accounts.len(), 15);
+        assert_eq!(ix.accounts.len(), 18);
         assert_eq!(ix.accounts[14].pubkey, accounts::BONK);
+        assert_eq!(ix.accounts[15].pubkey, crate::constants::SYSTEM_PROGRAM);
         assert_eq!(&ix.data[..8], SELL_EXECT_OUT_DISCRIMINATOR);
         assert_eq!(u64::from_le_bytes(ix.data[8..16].try_into().unwrap()), 42);
         assert_eq!(u64::from_le_bytes(ix.data[16..24].try_into().unwrap()), 100_000);
@@ -438,5 +435,103 @@ mod tests {
 
         assert_eq!(create_ix.program_id, crate::constants::ASSOCIATED_TOKEN_PROGRAM_ID);
         assert_eq!(create_ix.accounts[3].pubkey, crate::constants::USD1_TOKEN_ACCOUNT);
+    }
+
+    #[tokio::test]
+    async fn stonkfun_buy_uses_dynamic_quote_and_current_remaining_accounts() {
+        let mut params = swap_params(TradeType::Buy);
+        let quote_mint = pk(20);
+        let global_config = pk(21);
+        if let DexParamEnum::Bonk(protocol_params) = params.protocol_params {
+            params.protocol_params = DexParamEnum::StonkFun(BonkParams {
+                quote_mint,
+                quote_token_program: crate::constants::TOKEN_PROGRAM_2022,
+                global_config,
+                platform_config: accounts::STONKFUN_REWARD_PLATFORM_CONFIG,
+                ..protocol_params
+            });
+        }
+
+        let instructions = BonkInstructionBuilder.build_buy_instructions(&params).await.unwrap();
+        let ix = instructions.last().unwrap();
+
+        assert_eq!(ix.accounts.len(), 18);
+        assert_eq!(ix.accounts[2].pubkey, global_config);
+        assert_eq!(ix.accounts[3].pubkey, accounts::STONKFUN_REWARD_PLATFORM_CONFIG);
+        assert_eq!(ix.accounts[10].pubkey, quote_mint);
+        assert_eq!(ix.accounts[12].pubkey, crate::constants::TOKEN_PROGRAM_2022);
+        assert_eq!(ix.accounts[15].pubkey, crate::constants::SYSTEM_PROGRAM);
+        assert!(ix.accounts[16].is_writable);
+        assert!(ix.accounts[17].is_writable);
+    }
+
+    #[tokio::test]
+    async fn current_stonkfun_reward_pool_decodes_and_builds_both_trade_directions() {
+        if std::env::var("RUN_MAINNET_TESTS").as_deref() != Ok("1") {
+            return;
+        }
+
+        let rpc_url = std::env::var("SOLANA_RPC_URL")
+            .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_owned());
+        let rpc = crate::common::SolanaRpcClient::new(rpc_url);
+        let pool = solana_sdk::pubkey!("84XZdJNyBVVBqGe3BHY8n6x1jbcnxNWA5x4GetwQsjgp");
+        let base_mint = solana_sdk::pubkey!("BJ56gcrMNKDzVwjQXKToya9cAcMZvN9pz6ZzUejxQary");
+        let quote_mint = solana_sdk::pubkey!("CARDSccUMFKoPRZxt5vt3ksUbxEFEcnZ3H2pd3dKxYjp");
+        let protocol_params =
+            crate::trading::core::params::StonkFunParams::from_pool_by_rpc(&rpc, &pool)
+                .await
+                .expect("decode current StonkFun reward pool");
+
+        assert_eq!(protocol_params.pool_state, pool);
+        assert_eq!(protocol_params.quote_mint, quote_mint);
+        assert_eq!(
+            protocol_params.global_config,
+            solana_sdk::pubkey!("7em1KfyK7cGENxXhLXn17sRbUHB3WJY3rUqwcsxQFmy1")
+        );
+        assert_eq!(protocol_params.platform_config, accounts::STONKFUN_REWARD_PLATFORM_CONFIG);
+        assert_eq!(protocol_params.curve_type, 0);
+        assert_eq!(protocol_params.trade_fee_rate, 2_500);
+        assert_eq!(protocol_params.platform_fee_rate, 10_000);
+        assert_eq!(protocol_params.creator_fee_rate, 0);
+        assert_eq!(protocol_params.base_transfer_fee.basis_points, 300);
+        assert_eq!(protocol_params.quote_transfer_fee.basis_points, 0);
+        assert!(protocol_params.total_base_sell > protocol_params.real_base);
+        assert_eq!(get_pool_pda(&base_mint, &quote_mint), Some(protocol_params.pool_state));
+
+        let mut buy = swap_params(TradeType::Buy);
+        buy.input_mint = quote_mint;
+        buy.output_mint = base_mint;
+        buy.input_amount = Some(1_000_000);
+        buy.fixed_output_amount = None;
+        buy.protocol_params = DexParamEnum::StonkFun(protocol_params.clone());
+        let buy_ixs = BonkInstructionBuilder
+            .build_buy_instructions(&buy)
+            .await
+            .expect("build current StonkFun exact-input buy");
+        let buy_ix = buy_ixs.last().expect("StonkFun buy instruction");
+        assert_eq!(&buy_ix.data[..8], BUY_EXECT_IN_DISCRIMINATOR);
+        assert_eq!(buy_ix.accounts.len(), 18);
+        assert_eq!(buy_ix.accounts[4].pubkey, pool);
+        assert_eq!(buy_ix.accounts[9].pubkey, base_mint);
+        assert_eq!(buy_ix.accounts[10].pubkey, quote_mint);
+        assert!(u64::from_le_bytes(buy_ix.data[16..24].try_into().unwrap()) > 0);
+
+        let mut sell = swap_params(TradeType::Sell);
+        sell.input_mint = base_mint;
+        sell.output_mint = quote_mint;
+        sell.input_amount = Some(1_000_000);
+        sell.fixed_output_amount = None;
+        sell.protocol_params = DexParamEnum::StonkFun(protocol_params);
+        let sell_ixs = BonkInstructionBuilder
+            .build_sell_instructions(&sell)
+            .await
+            .expect("build current StonkFun exact-input sell");
+        let sell_ix = sell_ixs.last().expect("StonkFun sell instruction");
+        assert_eq!(&sell_ix.data[..8], SELL_EXECT_IN_DISCRIMINATOR);
+        assert_eq!(sell_ix.accounts.len(), 18);
+        assert_eq!(sell_ix.accounts[4].pubkey, pool);
+        assert_eq!(sell_ix.accounts[9].pubkey, base_mint);
+        assert_eq!(sell_ix.accounts[10].pubkey, quote_mint);
+        assert!(u64::from_le_bytes(sell_ix.data[16..24].try_into().unwrap()) > 0);
     }
 }

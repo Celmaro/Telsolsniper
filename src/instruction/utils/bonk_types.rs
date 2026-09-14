@@ -107,6 +107,8 @@ pub struct PoolState {
     pub creator: Pubkey,
     pub padding: [u64; 8],
 }
+/// Anchor account discriminator for `PoolState`.
+pub const POOL_STATE_DISCRIMINATOR: [u8; 8] = [247, 237, 227, 245, 215, 195, 222, 70];
 pub const POOL_STATE_SIZE: usize = 8 + 1 * 5 + 8 * 10 + 32 * 7 + 8 * 8 + 8 * 5;
 pub fn pool_state_decode(data: &[u8]) -> Option<PoolState> {
     if data.len() < POOL_STATE_SIZE {

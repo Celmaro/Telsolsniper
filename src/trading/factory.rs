@@ -13,7 +13,9 @@ use super::core::{executor::GenericTradeExecutor, traits::TradeExecutor};
 pub enum DexType {
     PumpFun,
     PumpSwap,
+    LaunchLab,
     Bonk,
+    StonkFun,
     RaydiumCpmm,
     RaydiumAmmV4,
     MeteoraDammV2,
@@ -28,7 +30,9 @@ impl TradeFactory {
         match dex_type {
             DexType::PumpFun => Self::pumpfun_executor(),
             DexType::PumpSwap => Self::pumpswap_executor(),
+            DexType::LaunchLab => Self::launchlab_executor(),
             DexType::Bonk => Self::bonk_executor(),
+            DexType::StonkFun => Self::stonkfun_executor(),
             DexType::RaydiumCpmm => Self::raydium_cpmm_executor(),
             DexType::RaydiumAmmV4 => Self::raydium_amm_v4_executor(),
             DexType::MeteoraDammV2 => Self::meteora_damm_v2_executor(),
@@ -62,6 +66,27 @@ impl TradeFactory {
             std::sync::LazyLock::new(|| {
                 let instruction_builder = Arc::new(BonkInstructionBuilder);
                 Arc::new(GenericTradeExecutor::new(instruction_builder, "Bonk"))
+            });
+        INSTANCE.clone()
+    }
+
+    #[inline]
+    fn launchlab_executor() -> Arc<dyn TradeExecutor> {
+        static INSTANCE: std::sync::LazyLock<Arc<dyn TradeExecutor>> =
+            std::sync::LazyLock::new(|| {
+                let instruction_builder = Arc::new(BonkInstructionBuilder);
+                Arc::new(GenericTradeExecutor::new(instruction_builder, "LaunchLab"))
+            });
+        INSTANCE.clone()
+    }
+
+    #[inline]
+    fn stonkfun_executor() -> Arc<dyn TradeExecutor> {
+        static INSTANCE: std::sync::LazyLock<Arc<dyn TradeExecutor>> =
+            std::sync::LazyLock::new(|| {
+                let instruction_builder =
+                    Arc::new(crate::instruction::stonkfun::StonkFunInstructionBuilder);
+                Arc::new(GenericTradeExecutor::new(instruction_builder, "StonkFun"))
             });
         INSTANCE.clone()
     }
