@@ -59,6 +59,7 @@ impl ShadowConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NewMintEvent {
     mint: String,
     source: String,
@@ -109,8 +110,8 @@ impl ShadowStore {
             .execute(
                 r#"INSERT OR IGNORE INTO shadow_trades
                    (mint, ticker, source, message_id, entry_time_unix_ms, entry_price_sol,
-                    entry_market_cap_sol, buy_sol_amount, token_amount, curve_complete)
-                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
+                    entry_market_cap_sol, buy_sol_amount, token_amount, curve_complete, peak_price_sol)
+                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?6)"#,
                 rusqlite::params![
                     trade.mint,
                     trade.ticker,
@@ -406,7 +407,7 @@ async fn run() -> Result<()> {
     let rpc = SolanaRpcClient::new_with_timeout_and_commitment(
         config.rpc_url.clone(),
         Duration::from_secs(10),
-        solana_sdk::commitment_config::CommitmentConfig::confirmed(),
+        solana_commitment_config::CommitmentConfig::confirmed(),
     );
 
     info!(
@@ -423,9 +424,29 @@ async fn run() -> Result<()> {
     let open = store.open_trades()?;
     info!(open_positions = open.len(), "resuming open shadow positions");
 
-    let stream = UnixStream::connect(&config.event_socket_path)
-        .await
-        .context("connect to event fanout socket (is telegram-signal-sniper running?)")?;
+    let stream = {
+        let mut last_error = None;
+        let mut stream = None;
+        for _ in 0..30 {
+            match UnixStream::connect(&config.event_socket_path).await {
+                Ok(s) => {
+                    stream = Some(s);
+                    break;
+                }
+                Err(error) => last_error = Some(error),
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+        match stream {
+            Some(s) => s,
+            None => {
+                return Err(anyhow::Error::from(last_error.unwrap_or_else(|| {
+                    std::io::Error::other("event socket connect failed")
+                })))
+                    .context("connect to event fanout socket (is telegram-signal-sniper running?)")
+            }
+        }
+    };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
 

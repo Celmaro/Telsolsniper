@@ -22,6 +22,7 @@ const MAX_LINE_BYTES: usize = 16 * 1024;
 #[derive(Debug, Clone)]
 struct Config {
     socket_path: String,
+    event_socket_path: String,
     database_path: String,
     allowed_channels: HashSet<String>,
 }
@@ -30,6 +31,8 @@ impl Config {
     fn from_env() -> Result<Self> {
         let socket_path =
             env::var("SIGNAL_SOCKET_PATH").unwrap_or_else(|_| "/tmp/telsolsniper.sock".into());
+        let event_socket_path = env::var("EVENT_SOCKET_PATH")
+            .unwrap_or_else(|_| "/tmp/telsolsniper-events.sock".into());
         let database_path =
             env::var("SIGNAL_DATABASE_PATH").unwrap_or_else(|_| "./data/signals.sqlite".into());
         let channels = env::var("ALLOWED_CHANNELS").unwrap_or_else(|_| {
@@ -47,6 +50,7 @@ impl Config {
 
         Ok(Self {
             socket_path,
+            event_socket_path,
             database_path,
             allowed_channels,
         })
@@ -63,6 +67,65 @@ struct TelegramSignal {
     message_text: String,
     telegram_date_unix_ms: Option<i64>,
     received_at_unix_ms: i64,
+}
+
+impl TelegramSignal {
+    fn event_envelope(&self) -> String {
+        serde_json::json!({
+            "type": "new_mint",
+            "source": self.source,
+            "messageId": self.message_id,
+            "mint": self.mint,
+            "ticker": self.ticker,
+            "receivedAtUnixMs": self.received_at_unix_ms,
+        })
+        .to_string()
+    }
+}
+
+/// Broadcasts `new_mint` events to every connected downstream consumer
+/// (shadow engine, future live engine). Slow consumers are dropped
+/// rather than blocking the intake hot path.
+#[derive(Default)]
+struct EventFanout {
+    senders: Mutex<Vec<tokio::sync::mpsc::UnboundedSender<String>>>,
+}
+
+impl EventFanout {
+    fn subscribe(&self) -> tokio::sync::mpsc::UnboundedReceiver<String> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.senders.lock().unwrap().push(tx);
+        rx
+    }
+
+    fn publish(&self, envelope: &str) {
+        let mut senders = self.senders.lock().unwrap();
+        senders.retain(|tx| tx.send(envelope.to_string()).is_ok());
+    }
+}
+
+async fn run_event_fanout(listener: UnixListener, fanout: Arc<EventFanout>) -> Result<()> {
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let mut rx = fanout.subscribe();
+                tokio::spawn(async move {
+                    use tokio::io::AsyncWriteExt;
+                    let mut writer = stream;
+                    while let Some(envelope) = rx.recv().await {
+                        if writer
+                            .write_all(format!("{envelope}\n").as_bytes())
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+            }
+            Err(error) => error!(%error, "failed to accept event fanout connection"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,6 +321,7 @@ async fn handle_connection(
     stream: UnixStream,
     store: Arc<SignalStore>,
     config: Arc<Config>,
+    fanout: Arc<EventFanout>,
 ) -> Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -296,8 +360,9 @@ async fn handle_connection(
                     message_id = signal.message_id,
                     mint = %signal.mint,
                     ticker = signal.ticker.as_deref().unwrap_or(""),
-                    "new Telegram mint recorded; live execution is intentionally disabled"
+                    "new Telegram mint recorded; broadcasting new_mint event"
                 );
+                fanout.publish(&signal.event_envelope());
             }
             Ok(IngestOutcome::DuplicateMint) => {
                 info!(
@@ -356,16 +421,22 @@ async fn main() -> Result<()> {
     let config = Arc::new(Config::from_env()?);
     let store = Arc::new(SignalStore::open(&config.database_path)?);
     prepare_socket(&config.socket_path)?;
+    prepare_socket(&config.event_socket_path)?;
     let listener = UnixListener::bind(&config.socket_path)
         .with_context(|| format!("bind Unix socket at {}", config.socket_path))?;
-    std::fs::set_permissions(
-        &config.socket_path,
-        std::fs::Permissions::from_mode(0o600),
-    )
-    .with_context(|| format!("restrict signal socket permissions at {}", config.socket_path))?;
+    let event_listener = UnixListener::bind(&config.event_socket_path)
+        .with_context(|| format!("bind event Unix socket at {}", config.event_socket_path))?;
+    for path in [&config.socket_path, &config.event_socket_path] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("restrict socket permissions at {path}"))?;
+    }
+
+    let fanout = Arc::new(EventFanout::default());
+    tokio::spawn(run_event_fanout(event_listener, Arc::clone(&fanout)));
 
     info!(
         socket = %config.socket_path,
+        event_socket = %config.event_socket_path,
         database = %config.database_path,
         allowed_channels = ?config.allowed_channels,
         "Telegram signal intake ready; observe-only mode"
@@ -376,8 +447,9 @@ async fn main() -> Result<()> {
             Ok((stream, _address)) => {
                 let store = Arc::clone(&store);
                 let config = Arc::clone(&config);
+                let fanout = Arc::clone(&fanout);
                 tokio::spawn(async move {
-                    if let Err(error) = handle_connection(stream, store, config).await {
+                    if let Err(error) = handle_connection(stream, store, config, fanout).await {
                         warn!(%error, "signal listener connection ended with an error");
                     }
                 });
@@ -395,6 +467,7 @@ mod tests {
     fn test_config() -> Config {
         Config {
             socket_path: "/tmp/telsolsniper-test.sock".into(),
+            event_socket_path: "/tmp/telsolsniper-test-events.sock".into(),
             database_path: ":memory:".into(),
             allowed_channels: ["soltrenchtrending", "solwhaletrending", "solearlytrending"]
                 .into_iter()
