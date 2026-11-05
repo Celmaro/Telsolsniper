@@ -29,7 +29,16 @@ use tracing::{error, info, warn};
 const TOKEN_DECIMALS: f64 = 1_000_000.0; // pump tokens: 6 dp
 const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct NewMintEvent {
     source: String,
     message_id: i64,
@@ -40,9 +49,14 @@ struct NewMintEvent {
 struct LiveConfig {
     event_socket_path: String,
     database_path: String,
+    rpc_url: String,
     private_key_env: String,
     buy_sol: f64,
     slippage_bps: u64,
+    /// Tip per transaction in SOL. At 0.001 SOL trades a 0.001 tip doubles
+    /// the cost — keep it tiny.
+    tip_sol: f64,
+    cu_price_micro_lamports: u32,
     tp1_multiple: f64,
     tp1_fraction: f64,
     tp2_multiple: f64,
@@ -51,6 +65,7 @@ struct LiveConfig {
     initial_stop_pct: f64,
     breakeven_after_tp1: bool,
     poll_interval_secs: u64,
+    failure_cooldown_secs: i64,
     max_open_positions: usize,
 }
 
@@ -61,9 +76,12 @@ impl LiveConfig {
         let cfg = Self {
             event_socket_path: f("EVENT_SOCKET_PATH", "/tmp/telsolsniper-events.sock"),
             database_path: f("LIVE_DATABASE_PATH", "./data/live.sqlite"),
+            rpc_url: f("RPC_URL", "https://api.mainnet-beta.solana.com"),
             private_key_env: f("PRIVATE_KEY_ENV", "PRIVATE_KEY"),
             buy_sol,
             slippage_bps: f("LIVE_SLIPPAGE_BPS", "1000").parse()?, // 10%: trench tokens move
+            tip_sol: f("LIVE_TIP_SOL", "0.00002").parse()?,
+            cu_price_micro_lamports: f("LIVE_CU_PRICE", "150000").parse()?,
             tp1_multiple: f("LIVE_TP1_X", "1.1").parse()?,
             tp1_fraction: f("LIVE_TP1_SELL_PCT", "40").parse()?,
             tp2_multiple: f("LIVE_TP2_X", "1.5").parse()?,
@@ -72,6 +90,7 @@ impl LiveConfig {
             initial_stop_pct: f("LIVE_STOP_LOSS_PCT", "35").parse()?,
             breakeven_after_tp1: f("LIVE_BREAKEVEN_AFTER_TP1", "true").eq_ignore_ascii_case("true"),
             poll_interval_secs: f("LIVE_POLL_SECS", "5").parse()?,
+            failure_cooldown_secs: f("LIVE_FAILURE_COOLDOWN_SECS", "60").parse()?,
             max_open_positions: f("LIVE_MAX_OPEN", "5").parse()?,
         };
         if cfg.tp2_multiple <= cfg.tp1_multiple || cfg.tp1_fraction + cfg.tp2_fraction >= 100.0 {
@@ -83,6 +102,10 @@ impl LiveConfig {
 
 struct LiveStore {
     connection: Connection,
+    /// Per-trade cooldown after a failed transaction: every retry costs
+    /// fees, so never hammer a failing sell on every poll tick.
+    cooldowns: std::sync::Mutex<std::collections::HashMap<i64, i64>>,
+    zero_reads: std::sync::Mutex<std::collections::HashMap<i64, u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +140,7 @@ impl LiveStore {
                 entry_price_sol REAL NOT NULL,
                 buy_sol_amount REAL NOT NULL,
                 token_amount REAL NOT NULL,
+                cost_lamports INTEGER NOT NULL DEFAULT 0,
                 entry_signature TEXT,
                 peak_price_sol REAL,
                 tp1_done INTEGER NOT NULL DEFAULT 0,
@@ -137,11 +161,33 @@ impl LiveStore {
                 price_sol REAL NOT NULL,
                 tokens_sold REAL NOT NULL,
                 proceeds_sol REAL NOT NULL,
+                proceeds_lamports INTEGER NOT NULL DEFAULT 0,
                 signature TEXT
             );
             "#,
         )?;
-        Ok(Self { connection })
+        // Migration: real-lamport accounting columns.
+        let cols: Vec<String> = {
+            let mut stmt = connection.prepare("PRAGMA table_info(live_trades)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        if !cols.iter().any(|c| c == "cost_lamports") {
+            connection.execute("ALTER TABLE live_trades ADD COLUMN cost_lamports INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        let fill_cols: Vec<String> = {
+            let mut stmt = connection.prepare("PRAGMA table_info(live_fills)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        if !fill_cols.iter().any(|c| c == "proceeds_lamports") {
+            connection.execute("ALTER TABLE live_fills ADD COLUMN proceeds_lamports INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        Ok(Self {
+            connection,
+            cooldowns: std::sync::Mutex::new(std::collections::HashMap::new()),
+            zero_reads: std::sync::Mutex::new(std::collections::HashMap::new()),
+        })
     }
 
     fn seen(&self, mint: &str) -> Result<bool> {
@@ -151,11 +197,11 @@ impl LiveStore {
             .is_ok())
     }
 
-    fn record_entry(&self, mint: &str, ticker: Option<&str>, source: &str, entry_price_sol: f64, buy_sol: f64, token_amount: f64, signature: &str) -> Result<i64> {
+    fn record_entry(&self, mint: &str, ticker: Option<&str>, source: &str, entry_price_sol: f64, buy_sol: f64, token_amount: f64, signature: &str, cost_lamports: i64) -> Result<i64> {
         self.connection.execute(
-            r#"INSERT INTO live_trades (mint, ticker, source, entry_time_unix_ms, entry_price_sol, buy_sol_amount, token_amount, entry_signature, peak_price_sol)
-               VALUES (?1, ?2, ?3, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?4, ?5, ?6, ?7, ?4)"#,
-            rusqlite::params![mint, ticker, source, entry_price_sol, buy_sol, token_amount, signature],
+            r#"INSERT INTO live_trades (mint, ticker, source, entry_time_unix_ms, entry_price_sol, buy_sol_amount, token_amount, cost_lamports, entry_signature, peak_price_sol)
+               VALUES (?1, ?2, ?3, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?4, ?5, ?6, ?8, ?7, ?4)"#,
+            rusqlite::params![mint, ticker, source, entry_price_sol, buy_sol, token_amount, signature, cost_lamports],
         )?;
         Ok(self.connection.last_insert_rowid())
     }
@@ -188,11 +234,12 @@ impl LiveStore {
         if t.remaining_tokens > 0.0 { t.remaining_tokens } else { t.token_amount }
     }
 
-    fn record_fill(&self, trade_id: i64, kind: &str, multiple: f64, price_sol: f64, tokens_sold: f64, proceeds_sol: f64, signature: Option<&str>) -> Result<()> {
+    fn record_fill(&self, trade_id: i64, kind: &str, multiple: f64, price_sol: f64, tokens_sold: f64, proceeds_lamports: i64, signature: Option<&str>) -> Result<()> {
+        let proceeds_sol = proceeds_lamports as f64 / LAMPORTS_PER_SOL;
         self.connection.execute(
-            r#"INSERT INTO live_fills (trade_id, fill_time_unix_ms, kind, multiple, price_sol, tokens_sold, proceeds_sol, signature)
-               VALUES (?1, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?2, ?3, ?4, ?5, ?6, ?7)"#,
-            rusqlite::params![trade_id, kind, multiple, price_sol, tokens_sold, proceeds_sol, signature],
+            r#"INSERT INTO live_fills (trade_id, fill_time_unix_ms, kind, multiple, price_sol, tokens_sold, proceeds_sol, proceeds_lamports, signature)
+               VALUES (?1, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), ?2, ?3, ?4, ?5, ?6, ?8, ?7)"#,
+            rusqlite::params![trade_id, kind, multiple, price_sol, tokens_sold, proceeds_sol, signature, proceeds_lamports],
         )?;
         Ok(())
     }
@@ -221,6 +268,47 @@ impl LiveStore {
         Ok(())
     }
 
+    /// Count a consecutive zero-balance read; returns the running count.
+    fn note_zero_read(&self, trade_id: i64) -> u8 {
+        let mut map = self.zero_reads.lock().unwrap();
+        let counter = map.entry(trade_id).or_insert(0);
+        *counter = counter.saturating_add(1);
+        *counter
+    }
+
+    fn clear_zero_reads(&self, trade_id: i64) {
+        self.zero_reads.lock().unwrap().remove(&trade_id);
+    }
+
+    /// True if this trade may attempt a transaction now (not cooling down).
+    fn can_attempt(&self, trade_id: i64) -> bool {
+        let map = self.cooldowns.lock().unwrap();
+        match map.get(&trade_id) {
+            Some(&until) => now_ms() >= until,
+            None => true,
+        }
+    }
+
+    /// Block retries for `secs` after a failure (fee protection).
+    fn mark_failure(&self, trade_id: i64, secs: i64) {
+        let mut map = self.cooldowns.lock().unwrap();
+        map.insert(trade_id, now_ms() + secs * 1000);
+    }
+
+    /// Net SOL PnL from the chain: real proceeds (fees/tips already netted)
+    /// minus the real cost of the buy transaction.
+    fn realized_pnl_sol(&self, trade_id: i64) -> Result<f64> {
+        let proceeds: i64 = self.connection.query_row(
+            "SELECT COALESCE(SUM(proceeds_lamports), 0) FROM live_fills WHERE trade_id = ?1",
+            [trade_id], |r| r.get(0),
+        )?;
+        let cost: i64 = self.connection.query_row(
+            "SELECT COALESCE(cost_lamports, 0) FROM live_trades WHERE id = ?1",
+            [trade_id], |r| r.get(0),
+        )?;
+        Ok((proceeds - cost) as f64 / LAMPORTS_PER_SOL)
+    }
+
     fn open_count(&self) -> Result<usize> {
         Ok(self.connection.query_row("SELECT COUNT(*) FROM live_trades WHERE exit_time_unix_ms IS NULL", [], |r| r.get(0))?)
     }
@@ -230,8 +318,7 @@ async fn build_client(config: &LiveConfig) -> Result<(Arc<SolanaTrade>, Pubkey)>
     let payer = sol_trade_sdk::common::keypair::load_keypair_from_env(&config.private_key_env)
         .context("PRIVATE_KEY (base58) env var required")?;
     let pubkey = payer.pubkey();
-    let rpc_url = std::env::var("RPC_URL")
-        .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+    let rpc_url = config.rpc_url.clone();
     let swqos_configs = vec![SwqosConfig::Default(rpc_url.clone())];
     let trade_config = TradeConfig::builder(rpc_url.clone(), swqos_configs, CommitmentConfig::processed())
         .create_wsol_ata_on_startup(true)
@@ -261,6 +348,108 @@ async fn fetch_venue_params(
     Ok((DexType::PumpSwap, DexParamEnum::PumpSwap(params), price))
 }
 
+/// Real SOL balance change for a confirmed signature (lamports), read
+/// straight from the chain. Accounting must never rely on modeled prices.
+async fn wallet_delta(rpc_url: &str, signature: &str, wallet: &Pubkey) -> Result<i64> {
+    #[derive(serde::Deserialize)]
+    struct Res {
+        result: Option<Tx>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Tx {
+        meta: Option<Meta>,
+        #[serde(rename = "transaction")]
+        transaction: Transaction,
+    }
+    #[derive(serde::Deserialize)]
+    struct Transaction {
+        message: Message,
+    }
+    #[derive(serde::Deserialize)]
+    struct Message {
+        #[serde(rename = "accountKeys")]
+        account_keys: Vec<Key>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Key {
+        Plain(String),
+        Rich { pubkey: String },
+    }
+    impl Key {
+        fn pk(&self) -> &str {
+            match self {
+                Key::Plain(s) => s,
+                Key::Rich { pubkey } => pubkey,
+            }
+        }
+    }
+    #[derive(serde::Deserialize)]
+    struct Meta {
+        #[serde(rename = "preBalances")]
+        pre_balances: Vec<u64>,
+        #[serde(rename = "postBalances")]
+        post_balances: Vec<u64>,
+    }
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "getTransaction",
+        "params": [signature, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]
+    });
+    let response: Res = reqwest::Client::new()
+        .post(rpc_url)
+        .json(&body)
+        .send()
+        .await?
+        .json()
+        .await?;
+    let tx = response.result.context("transaction not found")?;
+    let meta = tx.meta.context("transaction has no meta")?;
+    let target = wallet.to_string();
+    let index = tx
+        .transaction
+        .message
+        .account_keys
+        .iter()
+        .position(|k| k.pk() == target)
+        .context("wallet not in transaction account keys")?;
+    Ok(meta.post_balances[index] as i64 - meta.pre_balances[index] as i64)
+}
+
+/// Token balance of `wallet` for `mint`, read from chain (jsonParsed).
+async fn wallet_token_balance(rpc_url: &str, mint: &Pubkey, wallet: &Pubkey) -> Result<f64> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "getTokenAccountsByOwner",
+        "params": [wallet.to_string(), {"mint": mint.to_string()}, {"encoding": "jsonParsed"}]
+    });
+    let value: serde_json::Value = reqwest::Client::new()
+        .post(rpc_url)
+        .json(&body)
+        .send()
+        .await?
+        .json()
+        .await?;
+    let accounts = value["result"]["value"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut total = 0.0f64;
+    for account in accounts {
+        let info = &account["account"]["data"]["parsed"]["info"]["tokenAmount"];
+        // uiAmount is null for values that round to zero — prefer raw amount.
+        let amount = info["uiAmount"].as_f64().or_else(|| {
+            info["amount"]
+                .as_str()
+                .and_then(|raw| raw.parse::<f64>().ok())
+                .map(|raw| raw / TOKEN_DECIMALS)
+        });
+        if let Some(amount) = amount {
+            total += amount;
+        }
+    }
+    Ok(total)
+}
+
 async fn quote_pumpswap_price(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<f64> {
     let params = PumpSwapParams::from_mint_by_rpc(rpc, mint).await?;
     let base_reserve = params.pool_base_token_reserves;
@@ -268,16 +457,42 @@ async fn quote_pumpswap_price(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<f6
     Ok((quote_reserve as f64 / LAMPORTS_PER_SOL) / (base_reserve as f64 / TOKEN_DECIMALS))
 }
 
+/// Returns (effective price incl. all fees/rent, tokens received, signature, real cost in lamports).
+/// GasFeeStrategy::set_global_fee_strategy only configures the premium
+/// SWQOS transport tiers — it SKIPS SwqosType::Default. We run Default,
+/// so set it explicitly: low tip (0.00002 SOL) + reasonable CU price.
+fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
+    use sol_trade_sdk::swqos::{SwqosType, TradeType};
+    use sol_trade_sdk::common::GasFeeStrategyType;
+    let gas = GasFeeStrategy::new();
+    gas.set(
+        SwqosType::Default,
+        TradeType::Buy,
+        GasFeeStrategyType::Normal,
+        500_000,
+        config.cu_price_micro_lamports as u64,
+        config.tip_sol,
+    );
+    gas.set(
+        SwqosType::Default,
+        TradeType::Sell,
+        GasFeeStrategyType::Normal,
+        500_000,
+        config.cu_price_micro_lamports as u64,
+        config.tip_sol,
+    );
+    gas
+}
+
 async fn live_buy(
     client: &SolanaTrade,
     config: &LiveConfig,
     mint: Pubkey,
-) -> Result<(f64, f64, String)> {
+) -> Result<(f64, f64, String, i64)> {
     let (dex_type, extension_params, price_sol) = fetch_venue_params(client, &mint).await?;
     let lamports = (config.buy_sol * LAMPORTS_PER_SOL) as u64;
     let blockhash = client.infrastructure.rpc.get_latest_blockhash().await?;
-    let gas = GasFeeStrategy::new();
-    gas.set_global_fee_strategy(150_000, 150_000, 500_000, 500_000, 0.001, 0.001);
+    let gas = build_gas(config);
 
     let params = sol_trade_sdk::TradeBuyParams {
         dex_type,
@@ -307,10 +522,17 @@ async fn live_buy(
     let signature = signatures
         .first()
         .map(|s| s.to_string())
-        .unwrap_or_else(|| "unknown".into());
-    // Actual fill: assume we got close to expected; refine from balance delta.
-    let token_amount = config.buy_sol / price_sol * 0.97; // conservative fill estimate
-    Ok((price_sol, token_amount, signature))
+        .context("buy returned no signature")?;
+    // Real numbers from the chain: what we actually spent and received.
+    let wallet = client.payer.pubkey();
+    let rpc_url = config.rpc_url.as_str();
+    let cost_lamports = wallet_delta(rpc_url, &signature, &wallet).await.unwrap_or(0).abs();
+    let token_amount = wallet_token_balance(rpc_url, &mint, &wallet)
+        .await
+        .unwrap_or(config.buy_sol / price_sol * 0.97);
+    // entry_price stays the market (curve/pool) price so TP/SL multiples
+    // measure market movement; cost_lamports carries the all-in real cost.
+    Ok((price_sol, token_amount, signature, cost_lamports))
 }
 
 async fn live_sell(
@@ -318,12 +540,12 @@ async fn live_sell(
     config: &LiveConfig,
     mint: Pubkey,
     token_amount: f64,
-) -> Result<(f64, String)> {
+    close_ata: bool,
+) -> Result<(f64, String, i64)> {
     let (dex_type, extension_params, price_sol) = fetch_venue_params(client, &mint).await?;
     let raw_amount = (token_amount * TOKEN_DECIMALS) as u64;
     let blockhash = client.infrastructure.rpc.get_latest_blockhash().await?;
-    let gas = GasFeeStrategy::new();
-    gas.set_global_fee_strategy(150_000, 150_000, 500_000, 500_000, 0.001, 0.001);
+    let gas = build_gas(config);
 
     let params = sol_trade_sdk::TradeSellParams {
         dex_type,
@@ -337,8 +559,11 @@ async fn live_sell(
         wait_tx_confirmed: true,
         wait_for_all_submits: false,
         create_output_token_ata: false,
-        close_output_token_ata: true,
-        close_mint_token_ata: false,
+        // Never close the wSOL ATA: a residual balance makes close_account
+        // fail with "Non-native account can only be closed if its balance
+        // is zero". The token ATA close is where the rent is reclaimed.
+        close_output_token_ata: false,
+        close_mint_token_ata: close_ata,
         with_tip: false,
         durable_nonce: None,
         fixed_output_token_amount: None,
@@ -351,7 +576,11 @@ async fn live_sell(
         bail!("sell failed: {:?}", error);
     }
     let signature = signatures.first().map(|s| s.to_string()).unwrap_or_default();
-    Ok((price_sol, signature))
+    let wallet = client.payer.pubkey();
+    let proceeds_lamports = wallet_delta(&config.rpc_url, &signature, &wallet)
+        .await
+        .unwrap_or((token_amount * price_sol * LAMPORTS_PER_SOL) as i64);
+    Ok((price_sol, signature, proceeds_lamports))
 }
 
 async fn poll_live_position(
@@ -383,34 +612,66 @@ async fn poll_live_position(
     }
     let peak = trade.peak_price_sol.max(price);
     let multiple = price / trade.entry_price_sol;
-    let tokens_now = LiveStore::tokens_at_entry(&trade);
+    // Always sell against the real on-chain balance: partial sells round to
+    // integers and leave dust, and any dust breaks close_account.
+    let wallet = client.payer.pubkey();
+    let tokens_now = match wallet_token_balance(&config.rpc_url, &mint, &wallet).await {
+        Ok(balance) if balance > 0.0 => {
+            store.clear_zero_reads(trade.id);
+            balance
+        }
+        Ok(_) => {
+            // RPC indexing lags right after a buy: require 3 consecutive
+            // zero reads (>=15s) before declaring the position empty.
+            let zeros = store.note_zero_read(trade.id);
+            if zeros >= 3 {
+                warn!(mint = %trade.mint, "no tokens on chain after 3 reads; marking closed");
+                store.record_exit(trade.id, "empty", store.realized_pnl_sol(trade.id)?)?;
+            }
+            return Ok(());
+        }
+        Err(error) => {
+            warn!(mint = %trade.mint, %error, "balance read failed; using recorded size");
+            LiveStore::tokens_at_entry(&trade)
+        }
+    };
+
+    if !store.can_attempt(trade.id) {
+        return Ok(());
+    }
 
     // Ladder (same rules as shadow).
     if !trade.tp1_done && multiple >= config.tp1_multiple {
         let tokens = tokens_now * config.tp1_fraction / 100.0;
-        match live_sell(client, config, mint, tokens).await {
-            Ok((fill_price, sig)) => {
-                store.record_fill(trade.id, "tp1", fill_price / trade.entry_price_sol, fill_price, tokens, tokens * fill_price, Some(&sig))?;
-                let realized = trade.realized_pnl_sol + tokens * fill_price - config.buy_sol * (tokens / trade.token_amount);
+        match live_sell(client, config, mint, tokens, false).await {
+            Ok((fill_price, sig, proceeds_lamports)) => {
+                store.record_fill(trade.id, "tp1", fill_price / trade.entry_price_sol, fill_price, tokens, proceeds_lamports, Some(&sig))?;
+                let realized = store.realized_pnl_sol(trade.id)?;
                 let remaining = tokens_now - tokens;
                 store.update_stage(trade.id, "tp1", realized, remaining)?;
-                info!(mint = %trade.mint, sig = %sig, "LIVE tp1 filled");
+                info!(mint = %trade.mint, sig = %sig, proceeds_sol = %(proceeds_lamports as f64 / LAMPORTS_PER_SOL), "LIVE tp1 filled");
             }
-            Err(error) => error!(mint = %trade.mint, %error, "LIVE tp1 sell failed"),
+            Err(error) => {
+                store.mark_failure(trade.id, config.failure_cooldown_secs);
+                error!(mint = %trade.mint, %error, "LIVE tp1 sell failed");
+            }
         }
         return Ok(()); // one action per tick
     }
     if trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
         let tokens = tokens_now * config.tp2_fraction / 100.0;
-        match live_sell(client, config, mint, tokens).await {
-            Ok((fill_price, sig)) => {
-                store.record_fill(trade.id, "tp2", fill_price / trade.entry_price_sol, fill_price, tokens, tokens * fill_price, Some(&sig))?;
-                let realized = trade.realized_pnl_sol + tokens * fill_price - config.buy_sol * (tokens / trade.token_amount);
+        match live_sell(client, config, mint, tokens, false).await {
+            Ok((fill_price, sig, proceeds_lamports)) => {
+                store.record_fill(trade.id, "tp2", fill_price / trade.entry_price_sol, fill_price, tokens, proceeds_lamports, Some(&sig))?;
+                let realized = store.realized_pnl_sol(trade.id)?;
                 let remaining = tokens_now - tokens;
                 store.update_stage(trade.id, "tp2", realized, remaining)?;
-                info!(mint = %trade.mint, sig = %sig, "LIVE tp2 filled");
+                info!(mint = %trade.mint, sig = %sig, proceeds_sol = %(proceeds_lamports as f64 / LAMPORTS_PER_SOL), "LIVE tp2 filled");
             }
-            Err(error) => error!(mint = %trade.mint, %error, "LIVE tp2 sell failed"),
+            Err(error) => {
+                store.mark_failure(trade.id, config.failure_cooldown_secs);
+                error!(mint = %trade.mint, %error, "LIVE tp2 sell failed");
+            }
         }
         return Ok(());
     }
@@ -425,23 +686,53 @@ async fn poll_live_position(
     };
     if stop_hit && tokens_now > 1.0 {
         let kind = if trade.tp1_done { "moon_bag" } else { "stop" };
-        match live_sell(client, config, mint, tokens_now).await {
-            Ok((fill_price, sig)) => {
-                let proceeds = tokens_now * fill_price;
-                store.record_fill(trade.id, kind, fill_price / trade.entry_price_sol, fill_price, tokens_now, proceeds, Some(&sig))?;
-                let realized = trade.realized_pnl_sol + proceeds - config.buy_sol * (tokens_now / trade.token_amount);
+        match live_sell(client, config, mint, tokens_now, true).await {
+            Ok((fill_price, sig, proceeds_lamports)) => {
+                store.record_fill(trade.id, kind, fill_price / trade.entry_price_sol, fill_price, tokens_now, proceeds_lamports, Some(&sig))?;
+                let realized = store.realized_pnl_sol(trade.id)?;
                 store.update_stage(trade.id, kind, realized, 0.0)?;
                 store.record_exit(trade.id, kind, realized)?;
                 info!(mint = %trade.mint, pnl_sol = %realized, "LIVE exit");
             }
-            Err(error) => error!(mint = %trade.mint, %error, "LIVE stop sell failed"),
+            Err(error) => {
+                store.mark_failure(trade.id, config.failure_cooldown_secs);
+                error!(mint = %trade.mint, %error, "LIVE stop sell failed");
+            }
         }
     }
     Ok(())
 }
 
-async fn event_stream(config: &LiveConfig) -> Result<tokio::net::UnixStream> {
-    Ok(tokio::net::UnixStream::connect(&config.event_socket_path).await?)
+/// Persistent event reader: one long-lived socket connection, parsing
+/// every line as it arrives. Restarts the connection on failure.
+fn spawn_event_reader(
+    path: String,
+    tx: tokio::sync::mpsc::UnboundedSender<NewMintEvent>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        loop {
+            match tokio::net::UnixStream::connect(&path).await {
+                Ok(stream) => {
+                    info!(path = %path, "event stream connected");
+                    let mut lines = tokio::io::BufReader::new(stream).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        match serde_json::from_str::<NewMintEvent>(&line) {
+                            Ok(event) => {
+                                if tx.send(event).is_err() {
+                                    return; // receiver gone
+                                }
+                            }
+                            Err(error) => warn!(%error, "unparsable event"),
+                        }
+                    }
+                    warn!("event stream closed; reconnecting");
+                }
+                Err(error) => warn!(%error, "event socket unavailable"),
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    })
 }
 
 #[tokio::main]
@@ -469,49 +760,37 @@ async fn main() -> Result<()> {
         info!(mint = %trade.mint, "resuming live position");
     }
 
+    // Persistent reader task -> channel. Buying happens off the poll loop.
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<NewMintEvent>();
+    let _reader = spawn_event_reader(config.event_socket_path.clone(), event_tx);
+
     loop {
-        // Poll open positions.
-        for trade in store.open_trades()? {
-            if let Err(error) = poll_live_position(&client, &store, &config, trade).await {
-                warn!(%error, "poll error");
+        // 1. Buy on every freshly arrived signal (dedup handled by store).
+        while let Ok(event) = event_rx.try_recv() {
+            if store.seen(&event.mint)? {
+                continue;
+            }
+            if store.open_count()? >= config.max_open_positions {
+                warn!(mint = %event.mint, "max open positions reached; skipping signal");
+                continue;
+            }
+            let Ok(mint) = Pubkey::from_str(&event.mint) else {
+                warn!(mint = %event.mint, "invalid mint in signal");
+                continue;
+            };
+            match live_buy(&client, &config, mint).await {
+                Ok((price, tokens, sig, cost_lamports)) => {
+                    store.record_entry(&event.mint, event.ticker.as_deref(), &event.source, price, config.buy_sol, tokens, &sig, cost_lamports)?;
+                    info!(mint = %event.mint, sig = %sig, "LIVE entry");
+                }
+                Err(error) => error!(mint = %event.mint, %error, "LIVE buy failed"),
             }
         }
 
-        // Drain one event if a connection is possible.
-        match event_stream(&config).await {
-            Ok(stream) => {
-                let mut buf = Vec::new();
-                let mut stream = stream;
-                loop {
-                    // Read one JSON line per event.
-                    use tokio::io::AsyncReadExt;
-                    match stream.read_u8().await {
-                        Ok(b) => {
-                            buf.push(b);
-                            if b == b'\n' {
-                                break;
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-                if !buf.is_empty() {
-                    if let Ok(event) = serde_json::from_slice::<NewMintEvent>(&buf) {
-                        if !store.seen(&event.mint)? && store.open_count()? < config.max_open_positions {
-                            match live_buy(&client, &config, Pubkey::from_str(&event.mint)?).await {
-                                Ok((price, tokens, sig)) => {
-                                    store.record_entry(&event.mint, event.ticker.as_deref(), &event.source, price, config.buy_sol, tokens, &sig)?;
-                                    info!(mint = %event.mint, sig = %sig, "LIVE entry");
-                                }
-                                Err(error) => error!(mint = %event.mint, %error, "LIVE buy failed"),
-                            }
-                        }
-                    }
-                }
-            }
-            Err(error) => {
-                warn!(%error, "event socket unavailable; retrying");
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        // 2. Poll open positions (exit ladder).
+        for trade in store.open_trades()? {
+            if let Err(error) = poll_live_position(&client, &store, &config, trade).await {
+                warn!(%error, "poll error");
             }
         }
 
