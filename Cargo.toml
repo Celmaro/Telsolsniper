@@ -39,6 +39,8 @@ members = [
     "apps/telegram-signal-sniper",
     "apps/shadow-engine",
     "apps/live-engine",
+    "apps/venue-probe",
+    "apps/feed-monitor",
 ]
 [workspace.dependencies]
 sol-parser-sdk = { version = "=0.11.0" }

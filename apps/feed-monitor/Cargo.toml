@@ -1,0 +1,13 @@
+[package]
+name = "feed-monitor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.42.0", features = ["full"] }
+anyhow = "1.0.90"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json = "1.0.134"
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+rusqlite = { version = "0.37", features = ["bundled"] }

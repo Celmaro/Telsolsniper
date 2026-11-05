@@ -1,0 +1,14 @@
+[package]
+name = "venue-probe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sol-trade-sdk = { path = "../.." }
+solana-sdk = { workspace = true }
+tokio = { version = "1.42.0", features = ["full"] }
+anyhow = "1.0.90"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json = "1.0.134"
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
