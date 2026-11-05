@@ -4,6 +4,8 @@ export interface ListenerConfig {
   sessionFile: string;
   channels: string[];
   socketPath: string;
+  /** Max mints to act on from a single post (list posts announce several). */
+  maxMintsPerMessage: number;
 }
 
 function required(name: string): string {
@@ -35,6 +37,7 @@ export function loadConfig(): ListenerConfig {
     apiHash: required("TELEGRAM_API_HASH"),
     sessionFile: process.env.TELEGRAM_SESSION_FILE ?? "./data/telegram.session",
     channels: [...new Set(channels)],
-    socketPath: process.env.SIGNAL_SOCKET_PATH ?? "/tmp/telsolsniper.sock"
+    socketPath: process.env.SIGNAL_SOCKET_PATH ?? "/tmp/telsolsniper.sock",
+    maxMintsPerMessage: Number(process.env.SIGNAL_MAX_MINTS_PER_MESSAGE ?? "1")
   };
 }

@@ -11,6 +11,12 @@ interface TelegramMessageButton {
   url?: string;
 }
 
+/** Hidden links (MessageEntityTextUrl) carry the mint on real posts. */
+interface TelegramMessageEntity {
+  className?: string;
+  url?: string;
+}
+
 interface TelegramMessageUpdate {
   message?: {
     id?: number;
@@ -18,6 +24,7 @@ interface TelegramMessageUpdate {
     date?: number;
     /** Teleproto custom Message getter (already flattened into rows). */
     buttons?: TelegramMessageButton[][];
+    entities?: TelegramMessageEntity[];
     /** Raw TL reply markup, as delivered by the update pipeline. */
     replyMarkup?: {
       rows?: Array<{ buttons?: TelegramMessageButton[] }>;
@@ -26,6 +33,19 @@ interface TelegramMessageUpdate {
 }
 
 /** Inline-button URLs carry the mint on the real channel posts. */
+/**
+ * URLs hidden behind text (MessageEntityTextUrl). The trending channels use
+ * these for the actual token link: `…?start=tts_<mint>` — capture showed
+ * 82% of posts carry the mint this way, versus 70% in button URLs.
+ */
+function collectHiddenUrls(entities: TelegramMessageEntity[] | undefined): string[] {
+  const urls: string[] = [];
+  for (const entity of entities ?? []) {
+    if (entity?.url && typeof entity.url === "string") urls.push(entity.url);
+  }
+  return urls;
+}
+
 function collectButtonUrls(
   buttons: TelegramMessageButton[][] | undefined,
   replyMarkup: { rows?: Array<{ buttons?: TelegramMessageButton[] }> } | undefined
@@ -114,13 +134,28 @@ async function main(): Promise<void> {
         return;
       }
 
-      const signals = parseTelegramSignals(
+      const linkUrls = [
+        ...collectHiddenUrls(message.entities),
+        ...collectButtonUrls(message.buttons, message.replyMarkup)
+      ];
+
+      // A "Top N trending" post announces a leaderboard, not one token.
+      // Taking every mint would open N positions off a single post, so cap
+      // it (SIGNAL_MAX_MINTS_PER_MESSAGE, default 1 = the rank-#1 token).
+      const parseable = parseTelegramSignals(
         channel,
         message.id,
         message.message ?? "",
         message.date,
-        collectButtonUrls(message.buttons, message.replyMarkup)
+        linkUrls
       );
+      const maxMints = config.maxMintsPerMessage;
+      const signals = parseable.slice(0, maxMints);
+      if (parseable.length > maxMints) {
+        console.info(
+          `capped source=${channel} message=${message.id} announced=${parseable.length} taking=${maxMints}`
+        );
+      }
 
       for (const signal of signals) {
         void publisher.publish(signal).then(

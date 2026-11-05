@@ -9,7 +9,10 @@
   "scripts": {
     "dev": "node --env-file=.env --import tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/parser.test.ts"
+    "test": "tsx --test src/parser.test.ts",
+    "capture": "node --env-file=.env --import tsx scripts/capture-channels.mjs",
+    "analyze": "python3 scripts/analyze-captures.py",
+    "replay": "node --import tsx scripts/replay-parser.mjs"
   },
   "dependencies": {
     "bs58": "6.0.0",

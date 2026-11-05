@@ -170,3 +170,52 @@ test("every captured channel post produces at least one mint", () => {
 
   assert.deepEqual(misses, []);
 });
+
+test("hidden-link bot prefixes beyond tts_ resolve to the mint", () => {
+  // Captured on solearlytrending / solwhaletrending: ets_, wts_, ett_, ttt_
+  const mint = "9GNMJdW9U67eBFP6AhdzDLfMqATqwHA9zMJccuoCpump";
+  for (const prefix of ["tts", "ets", "wts", "ett", "ttt", "ttb", "fakevol", "ivb"]) {
+    const signals = parseTelegramSignals(
+      "solearlytrending",
+      500,
+      "🏆 Top Early Trending",
+      undefined,
+      [`https://telegram.me/soul_scanner_bot?start=${prefix}_${mint}-abc123`]
+    );
+    assert.equal(signals.length, 1, `prefix ${prefix} should resolve`);
+    assert.equal(signals[0].mint, mint);
+  }
+});
+
+test("bare ?start=<mint> deep links resolve", () => {
+  const mint = "7ymF66Z6VhgNiwadtVhjTtT6U7iQRpSxeiRrhfufhigh";
+  const signals = parseTelegramSignals(
+    "solearlytrending",
+    501,
+    "alert",
+    undefined,
+    [`https://t.me/soul_scanner_bot?start=${mint}`]
+  );
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0].mint, mint);
+});
+
+test("leaderboard post announces every mint in order", () => {
+  const first = "7ymF66Z6VhgNiwadtVhjTtT6U7iQRpSxeiRrhfufhigh";
+  const second = "Hbpjmu51QXzwojmtvnzzFtwpgYdP8SUwxTTDACGxpump";
+  const signals = parseTelegramSignals(
+    "solearlytrending",
+    502,
+    "🏆 Top Early Trending\n🥇 $HIGH • 50X\n🥈 $GEORGE • 15X",
+    undefined,
+    [
+      `https://telegram.me/soul_scanner_bot?start=ets_${first}-ref`,
+      `https://telegram.me/soul_scanner_bot?start=ets_${second}-ref`
+    ]
+  );
+  assert.deepEqual(
+    signals.map((signal) => signal.mint),
+    [first, second]
+  );
+  assert.equal(signals[0].ticker, "HIGH");
+});

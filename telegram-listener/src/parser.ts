@@ -24,8 +24,13 @@ const MINT_URL_PATTERNS: RegExp[] = [
   /solscan\.io\/token\/([1-9A-HJ-NP-Za-km-z]{32,44})/i,
   /pump\.fun\/coin\/([1-9A-HJ-NP-Za-km-z]{32,44})/i,
   /bags\.fm\/([1-9A-HJ-NP-Za-km-z]{32,44})/i,
-  // Telegram bot deep links: `?start=56_ttb_<mint>`, `fakevol_<mint>`, `tts_<mint>-<ref>`
-  /[?&]start=(?:[A-Za-z0-9]+_)*(?:ttb_|fakevol_|tts_)([1-9A-HJ-NP-Za-km-z]{32,44})/i,
+  // Telegram bot deep links. Captured prefixes on these channels:
+  // tts_, wts_, ets_, ett_, ttt_, wtt_, ivb_, ivf_, fakevol_, ttb_, 56_ttb_
+  // (every one is `<prefix>_<mint>`), so match any prefix rather than
+  // maintaining a list that silently misses new ones.
+  /[?&]start=(?:[A-Za-z0-9]+_)+([1-9A-HJ-NP-Za-km-z]{32,44})/i,
+  // Bare `?start=<mint>` and `<mint>-<refcode>` variants.
+  /[?&]start=([1-9A-HJ-NP-Za-km-z]{32,44})(?:[-_][A-Za-z0-9]*)?/i,
 ];
 
 function isSolanaPublicKey(candidate: string): boolean {
