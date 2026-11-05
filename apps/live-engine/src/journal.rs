@@ -54,12 +54,22 @@ pub fn init(connection: &Connection) -> Result<()> {
             error TEXT,
             created_ms INTEGER NOT NULL,
             updated_ms INTEGER NOT NULL,
+            submitted_ms INTEGER,
             reconciled_ms INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_journal_state ON order_journal(state);
         CREATE INDEX IF NOT EXISTS idx_journal_mint ON order_journal(mint);
         "#,
     )?;
+    // Column added after the first deploy: tolerate older databases.
+    let has_submitted: bool = connection
+        .prepare("PRAGMA table_info(order_journal)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(Result::ok)
+        .any(|name| name == "submitted_ms");
+    if !has_submitted {
+        connection.execute("ALTER TABLE order_journal ADD COLUMN submitted_ms INTEGER", [])?;
+    }
     Ok(())
 }
 
@@ -96,7 +106,7 @@ pub fn record_intent(
 
 pub fn mark_submitted(connection: &Connection, id: i64, signature: &str, now_ms: i64) -> Result<()> {
     connection.execute(
-        "UPDATE order_journal SET signature = ?2, state = ?3, updated_ms = ?4 WHERE id = ?1",
+        "UPDATE order_journal SET signature = ?2, state = ?3, updated_ms = ?4, submitted_ms = ?4 WHERE id = ?1",
         params![id, signature, STATE_SUBMITTED, now_ms],
     )?;
     Ok(())

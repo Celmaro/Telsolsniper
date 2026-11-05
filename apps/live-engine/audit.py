@@ -64,7 +64,7 @@ def main():
 
         rows = db.execute(
             """SELECT j.id, j.mint, j.side, j.kind, j.state, j.created_ms, j.updated_ms,
-                      j.lamports, j.error, t.entry_time_unix_ms
+                      j.submitted_ms, j.reconciled_ms, j.lamports, j.error, t.entry_time_unix_ms
                FROM order_journal j LEFT JOIN live_trades t ON t.mint = j.mint
                ORDER BY j.id"""
         ).fetchall()
@@ -80,9 +80,9 @@ def main():
 
         # submit latency: intent -> updated (submitted/confirmed)
         submit = [
-            r["updated_ms"] - r["created_ms"]
+            r["submitted_ms"] - r["created_ms"]
             for r in rows
-            if r["created_ms"] and r["updated_ms"] and r["state"] in ("submitted", "confirmed", "failed")
+            if r["created_ms"] and r["submitted_ms"]
         ]
         ok_submit = [s for s in submit if 0 <= s < 60_000]
         print(f"\nSUBMIT LATENCY (intent → single-node response)")
@@ -90,7 +90,11 @@ def main():
 
         # confirm latency proxy: created -> reconciled not stored separately;
         # use updated-created for confirmed rows as upper bound
-        confirmed = [r["updated_ms"] - r["created_ms"] for r in rows if r["state"] == "confirmed"]
+        confirmed = [
+            (r["reconciled_ms"] or r["updated_ms"]) - r["created_ms"]
+            for r in rows
+            if r["state"] == "confirmed"
+        ]
         print(f"CONFIRM BOUND (intent → reconciled, upper bound)")
         print(f"  {q(confirmed,' ms')}")
 

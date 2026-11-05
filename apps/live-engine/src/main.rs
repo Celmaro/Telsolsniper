@@ -743,7 +743,10 @@ async fn live_buy(
         // reconciler resolves the fill. Blocking here cost p50 1.1s / p95 9s.
         wait_tx_confirmed: false,
         wait_for_all_submits: false,
-        create_input_token_ata: false,
+        // PumpSwap quotes in WSOL: the pool pulls from the user's WSOL ATA,
+        // so the wrap instruction must be included or the SPL transfer fails
+        // with "insufficient funds" (custom 1). Pump.fun buys in native SOL.
+        create_input_token_ata: matches!(dex_type, DexType::PumpSwap),
         close_input_token_ata: false,
         create_mint_ata: true,
         durable_nonce: None,
@@ -822,7 +825,9 @@ async fn live_sell(
         recent_blockhash: Some(blockhash),
         extension_params,
         address_lookup_table_accounts: Vec::new(),
-        wait_tx_confirmed: true,
+        // Same rule as entries: return after submit, let the reconciler
+        // confirm. Blocking here cost 1-11s per exit.
+        wait_tx_confirmed: false,
         wait_for_all_submits: false,
         create_output_token_ata: false,
         // Never close the wSOL ATA: a residual balance makes close_account
@@ -860,21 +865,11 @@ async fn live_sell(
         .map(|s| s.to_string())
         .context("sell returned no signature")?;
     store.journal_submitted(journal_id, &signature)?;
-    let wallet = client.payer.pubkey();
-    let proceeds_lamports = match wallet_delta(&config.rpc_url, &signature, &wallet).await {
-        Ok(delta) => {
-            store.journal_confirmed(journal_id, delta.max(0), token_amount)?;
-            delta.max(0)
-        }
-        Err(error) => {
-            store.journal_unknown(
-                journal_id,
-                &format!("submitted but unverifiable: {}", redact::redact_error(&error.to_string(), &[])),
-            )?;
-            bail!("sell submitted as {signature} but not verifiable from chain");
-        }
-    };
-    Ok((price_sol, signature, proceeds_lamports))
+    // Non-blocking exit: the reconciler confirms the sell and writes the real
+    // proceeds into the journal, which is what realized_pnl_sol reads. Verifying
+    // inline cost 1-11s and wrongly marked fresh sells "unknown" when the node
+    // had not indexed them yet.
+    Ok((price_sol, signature, 0))
 }
 
 async fn poll_live_position(
