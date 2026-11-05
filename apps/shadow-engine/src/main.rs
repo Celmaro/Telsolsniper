@@ -39,9 +39,14 @@ struct ShadowConfig {
     database_path: String,
     rpc_urls: Vec<String>,
     buy_sol_amount: f64,
-    take_profit_x: f64,
-    stop_loss_pct: f64,
-    trailing_stop_pct: f64,
+    // Staged exit: TP1 / TP2 / moon bag
+    tp1_multiple: f64,
+    tp1_fraction: f64,
+    tp2_multiple: f64,
+    tp2_fraction: f64,
+    moon_trail_pct: f64,
+    initial_stop_pct: f64,
+    breakeven_after_tp1: bool,
     max_hold_secs: u64,
     poll_interval_secs: u64,
     max_open_positions: usize,
@@ -63,19 +68,40 @@ impl ShadowConfig {
         if rpc_urls.is_empty() {
             bail!("RPC_URLS must contain at least one endpoint");
         }
-        Ok(Self {
+        let cfg = Self {
             event_socket_path: f("EVENT_SOCKET_PATH", "/tmp/telsolsniper-events.sock"),
             database_path: f("SHADOW_DATABASE_PATH", "./data/shadow.sqlite"),
             rpc_urls,
             buy_sol_amount: f("SHADOW_BUY_SOL", "0.5").parse()?,
-            take_profit_x: f("SHADOW_TAKE_PROFIT_X", "2.0").parse()?,
-            stop_loss_pct: f("SHADOW_STOP_LOSS_PCT", "35").parse()?,
-            trailing_stop_pct: f("SHADOW_TRAILING_STOP_PCT", "25").parse()?,
-            max_hold_secs: f("SHADOW_MAX_HOLD_SECS", "3600").parse()?,
+            tp1_multiple: f("SHADOW_TP1_X", "1.1").parse()?,
+            tp1_fraction: f("SHADOW_TP1_SELL_PCT", "40").parse()?,
+            tp2_multiple: f("SHADOW_TP2_X", "1.5").parse()?,
+            tp2_fraction: f("SHADOW_TP2_SELL_PCT", "40").parse()?,
+            moon_trail_pct: f("SHADOW_MOON_TRAIL_PCT", "35").parse()?,
+            initial_stop_pct: f("SHADOW_STOP_LOSS_PCT", "35").parse()?,
+            breakeven_after_tp1: f("SHADOW_BREAKEVEN_AFTER_TP1", "true")
+                .eq_ignore_ascii_case("true"),
+            max_hold_secs: f("SHADOW_MAX_HOLD_SECS", "0").parse()?,
             poll_interval_secs: f("SHADOW_POLL_SECS", "5").parse()?,
             max_open_positions: f("SHADOW_MAX_OPEN", "20").parse()?,
             poll_concurrency: f("SHADOW_POLL_CONCURRENCY", "8").parse()?,
-        })
+        };
+        Self::validate(&cfg)?;
+        Ok(cfg)
+    }
+
+    /// Staged ladder must leave a moon bag and escalate.
+    fn validate(cfg: &Self) -> Result<()> {
+        if cfg.tp2_multiple <= cfg.tp1_multiple {
+            bail!("SHADOW_TP2_X must be greater than SHADOW_TP1_X");
+        }
+        if cfg.tp1_fraction <= 0.0 || cfg.tp1_fraction >= 100.0 {
+            bail!("SHADOW_TP1_SELL_PCT must be between 0 and 100");
+        }
+        if cfg.tp2_fraction <= 0.0 || cfg.tp1_fraction + cfg.tp2_fraction >= 100.0 {
+            bail!("SHADOW_TP1_SELL_PCT + SHADOW_TP2_SELL_PCT must be below 100 (leave a moon bag)");
+        }
+        Ok(())
     }
 }
 
@@ -118,10 +144,41 @@ impl ShadowStore {
                 pnl_sol REAL,
                 pnl_pct REAL,
                 peak_price_sol REAL,
+                tp1_done INTEGER NOT NULL DEFAULT 0,
+                tp2_done INTEGER NOT NULL DEFAULT 0,
+                realized_pnl_sol REAL NOT NULL DEFAULT 0,
+                remaining_tokens REAL NOT NULL DEFAULT 0,
                 UNIQUE (mint, entry_time_unix_ms)
+            );
+            CREATE TABLE IF NOT EXISTS shadow_fills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trade_id INTEGER NOT NULL REFERENCES shadow_trades(id),
+                fill_time_unix_ms INTEGER NOT NULL,
+                kind TEXT NOT NULL,             -- tp1 | tp2 | moon_bag | stop | graduated
+                multiple REAL NOT NULL,         -- price / entry_price at fill
+                price_sol REAL NOT NULL,
+                tokens_sold REAL NOT NULL,
+                proceeds_sol REAL NOT NULL
             );
             "#,
         )?;
+        // Migration: pre-staging databases lack the staged-exit columns.
+        let existing_columns: Vec<String> = {
+            let mut stmt =
+                connection.prepare("PRAGMA table_info(shadow_trades)")?;
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+        let alter = |col: &str, ddl: &str| -> Result<()> {
+            if !existing_columns.iter().any(|c| c == col) {
+                connection.execute(&format!("ALTER TABLE shadow_trades ADD COLUMN {ddl}"), [])?;
+            }
+            Ok(())
+        };
+        alter("tp1_done", "tp1_done INTEGER NOT NULL DEFAULT 0")?;
+        alter("tp2_done", "tp2_done INTEGER NOT NULL DEFAULT 0")?;
+        alter("realized_pnl_sol", "realized_pnl_sol REAL NOT NULL DEFAULT 0")?;
+        alter("remaining_tokens", "remaining_tokens REAL NOT NULL DEFAULT 0")?;
         Ok(Self { connection: Mutex::new(connection) })
     }
 
@@ -154,7 +211,7 @@ impl ShadowStore {
         let mut stmt = connection.prepare(
             r#"SELECT id, mint, ticker, source, message_id, entry_time_unix_ms, entry_price_sol,
                       entry_market_cap_sol, buy_sol_amount, token_amount, curve_complete,
-                      peak_price_sol
+                      peak_price_sol, tp1_done, tp2_done, realized_pnl_sol, remaining_tokens
                FROM shadow_trades WHERE exit_time_unix_ms IS NULL"#,
         )?;
         let rows = stmt.query_map([], |row| {
@@ -171,6 +228,10 @@ impl ShadowStore {
                 token_amount: row.get(9)?,
                 curve_complete: row.get::<_, i64>(10)? != 0,
                 peak_price_sol: row.get(11)?,
+                tp1_done: row.get::<_, i64>(12)? != 0,
+                tp2_done: row.get::<_, i64>(13)? != 0,
+                realized_pnl_sol: row.get(14)?,
+                remaining_tokens: row.get(15)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -205,6 +266,47 @@ impl ShadowStore {
         Ok(())
     }
 
+    fn record_fill(
+        &self,
+        trade_id: i64,
+        kind: &str,
+        multiple: f64,
+        price_sol: f64,
+        tokens_sold: f64,
+        proceeds_sol: f64,
+    ) -> Result<()> {
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            r#"INSERT INTO shadow_fills (trade_id, fill_time_unix_ms, kind, multiple, price_sol, tokens_sold, proceeds_sol)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+            rusqlite::params![trade_id, now_ms(), kind, multiple, price_sol, tokens_sold, proceeds_sol],
+        )?;
+        Ok(())
+    }
+
+    /// Persist a staged fill's effect. `kind` maps to tp1_done/tp2_done;
+    /// fractional positions stay open with remaining_tokens set.
+    fn update_stage(
+        &self,
+        id: i64,
+        kind: &str,
+        realized_pnl_sol: f64,
+        remaining_tokens: f64,
+        _fractional: bool,
+    ) -> Result<()> {
+        let connection = self.connection.lock().unwrap();
+        let tp1 = if kind == "tp1" { 1 } else { 0 };
+        let tp2 = if kind == "tp2" { 1 } else { 0 };
+        connection.execute(
+            r#"UPDATE shadow_trades
+               SET realized_pnl_sol = ?2, remaining_tokens = ?3,
+                   tp1_done = tp1_done | ?4, tp2_done = tp2_done | ?5
+               WHERE id = ?1"#,
+            rusqlite::params![id, realized_pnl_sol, remaining_tokens, tp1, tp2],
+        )?;
+        Ok(())
+    }
+
     fn open_count(&self) -> Result<usize> {
         let connection = self.connection.lock().unwrap();
         Ok(connection
@@ -226,6 +328,20 @@ struct ShadowTrade {
     token_amount: f64,
     curve_complete: bool,
     peak_price_sol: f64,
+    tp1_done: bool,
+    tp2_done: bool,
+    realized_pnl_sol: f64,
+    remaining_tokens: f64,
+}
+
+impl ShadowTrade {
+    fn tokens_at_entry(&self) -> f64 {
+        if self.remaining_tokens > 0.0 {
+            self.remaining_tokens
+        } else {
+            self.token_amount
+        }
+    }
 }
 
 fn now_ms() -> i64 {
@@ -410,6 +526,10 @@ async fn open_position(
         token_amount,
         curve_complete: curve.complete,
         peak_price_sol: curve.price_sol,
+        tp1_done: false,
+        tp2_done: false,
+        realized_pnl_sol: 0.0,
+        remaining_tokens: 0.0,
     };
     if store.record_entry(&trade)? {
         info!(
@@ -423,6 +543,7 @@ async fn open_position(
     Ok(())
 }
 
+#[derive(Debug, PartialEq)]
 enum ExitReason {
     TakeProfit,
     StopLoss,
@@ -443,31 +564,89 @@ impl ExitReason {
     }
 }
 
-fn evaluate_exit(
+/// One staged fill: partial sell executed against the current snapshot.
+fn record_fill(
+    store: &ShadowStore,
+    trade: &ShadowTrade,
+    kind: &str,
+    price_sol: f64,
+    tokens_sold: f64,
+) -> Result<()> {
+    let proceeds = tokens_sold * price_sol;
+    store.record_fill(
+        trade.id,
+        kind,
+        price_sol / trade.entry_price_sol,
+        price_sol,
+        tokens_sold,
+        proceeds,
+    )?;
+    info!(
+        mint = %trade.mint,
+        kind,
+        multiple = format!("{:.3}", price_sol / trade.entry_price_sol),
+        tokens_sold,
+        proceeds_sol = format!("{:.4}", proceeds),
+        "staged fill"
+    );
+    Ok(())
+}
+
+/// Staged exit evaluation. Returns (fills_to_execute, close_position).
+/// Rules, in priority order:
+///   1. stop loss -SHADOW_STOP_LOSS_PCT (only before TP1 fires)
+///   2. TP1 at SHADOW_TP1_X: sell TP1_SELL_PCT of the position
+///   3. TP2 at SHADOW_TP2_X: sell TP2_SELL_PCT of the position
+///   4. after TP1: breakeven stop — dump everything if price <= entry
+///   5. moon bag: trailing stop SHADOW_MOON_TRAIL_PCT off peak, on the remainder
+///   6. graduation: dump everything (curve complete)
+fn evaluate_staged_exits(
     trade: &ShadowTrade,
     curve: &CurveSnapshot,
     config: &ShadowConfig,
-) -> Option<ExitReason> {
-    if curve.complete {
-        return Some(ExitReason::Graduated);
-    }
+) -> (Vec<(&'static str, f64)>, Option<ExitReason>) {
     let multiple = curve.price_sol / trade.entry_price_sol;
-    if multiple >= config.take_profit_x {
-        return Some(ExitReason::TakeProfit);
+    let mut fills = Vec::new();
+
+    if curve.complete {
+        fills.push(("graduated", trade.tokens_at_entry()));
+        return (fills, Some(ExitReason::Graduated));
     }
-    if multiple <= 1.0 - config.stop_loss_pct / 100.0 {
-        return Some(ExitReason::StopLoss);
+
+    if !trade.tp1_done && multiple >= config.tp1_multiple {
+        let tokens = trade.tokens_at_entry() * config.tp1_fraction / 100.0;
+        fills.push(("tp1", tokens));
     }
-    let peak_multiple = trade.peak_price_sol / trade.entry_price_sol;
-    if peak_multiple >= config.take_profit_x
-        && curve.price_sol <= trade.peak_price_sol * (1.0 - config.trailing_stop_pct / 100.0)
-    {
-        return Some(ExitReason::TrailingStop);
+    if trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
+        let tokens = trade.tokens_at_entry() * config.tp2_fraction / 100.0;
+        fills.push(("tp2", tokens));
     }
-    if now_ms() - trade.entry_time_unix_ms >= (config.max_hold_secs as i64) * 1000 {
-        return Some(ExitReason::MaxHold);
+
+    // Stops are evaluated on what remains after any TPs queued this tick.
+    // Pre-TP1: hard stop. Post-TP1 (config.breakeven_after_tp1): breakeven
+    // dump. Moon bag stage (post-TP2): trailing stop off peak.
+    let stop_hit = if !trade.tp1_done {
+        multiple <= 1.0 - config.initial_stop_pct / 100.0
+    } else if !trade.tp2_done {
+        config.breakeven_after_tp1 && multiple <= 1.0
+    } else {
+        trade.peak_price_sol / trade.entry_price_sol >= config.tp2_multiple
+            && curve.price_sol
+                <= trade.peak_price_sol * (1.0 - config.moon_trail_pct / 100.0)
+    };
+
+    if stop_hit {
+        fills.push(("stop", trade.tokens_at_entry()));
+        return (fills, Some(ExitReason::StopLoss));
     }
-    None
+
+    let remaining_after_fills = trade.tokens_at_entry()
+        - fills.iter().map(|(_, t)| *t).sum::<f64>();
+    if remaining_after_fills <= 1.0 {
+        // Everything sold — position is fully closed.
+        return (fills, Some(ExitReason::TakeProfit));
+    }
+    (fills, None)
 }
 
 async fn poll_position(
@@ -496,17 +675,24 @@ async fn poll_position(
     }
     let peak = trade.peak_price_sol.max(curve.price_sol);
     let trade_for_eval = ShadowTrade { peak_price_sol: peak, ..trade.clone() };
-    if let Some(reason) = evaluate_exit(&trade_for_eval, &curve, config) {
-        // Value the exit with venue-aware math (fees on PumpSwap).
-        let exit_proceeds_sol = sell_tokens(&curve, trade.token_amount);
-        let exit_price = if trade.token_amount > 0.0 {
-            exit_proceeds_sol / trade.token_amount
-        } else {
-            curve.price_sol
-        };
-        let pnl_sol = exit_proceeds_sol - trade.buy_sol_amount;
-        let pnl_pct = (exit_price / trade.entry_price_sol - 1.0) * 100.0;
-        store.record_exit(trade.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
+    let (fills, close_reason) = evaluate_staged_exits(&trade_for_eval, &curve, config);
+
+    let mut realized = trade.realized_pnl_sol;
+    let mut remaining = trade.tokens_at_entry();
+    for (kind, tokens_sold) in &fills {
+        // Venue-aware valuation: PumpSwap sell math includes LP+protocol fees.
+        let proceeds = sell_tokens(&curve, *tokens_sold);
+        record_fill(store, &trade_for_eval, kind, curve.price_sol, *tokens_sold)?;
+        realized += proceeds - trade.buy_sol_amount * (tokens_sold / trade.token_amount);
+        remaining -= tokens_sold;
+        let fractional = remaining > 1.0 && close_reason.is_none();
+        store.update_stage(trade_for_eval.id, kind, realized, remaining, fractional)?;
+    }
+
+    if let Some(reason) = close_reason {
+        let pnl_sol = realized;
+        let pnl_pct = (realized / trade.buy_sol_amount) * 100.0;
+        store.record_exit(trade_for_eval.id, curve.price_sol, reason.as_str(), pnl_sol, pnl_pct)?;
         info!(
             mint = %trade.mint,
             ticker = trade.ticker.as_deref().unwrap_or(""),
@@ -568,8 +754,12 @@ async fn run() -> Result<()> {
         database = %config.database_path,
         rpc_endpoints = ?config.rpc_urls,
         buy_sol = config.buy_sol_amount,
-        tp_x = config.take_profit_x,
-        sl_pct = config.stop_loss_pct,
+        tp1_x = config.tp1_multiple,
+        tp1_sell_pct = config.tp1_fraction,
+        tp2_x = config.tp2_multiple,
+        tp2_sell_pct = config.tp2_fraction,
+        moon_trail_pct = config.moon_trail_pct,
+        sl_pct = config.initial_stop_pct,
         "shadow engine starting; NO transactions will be broadcast"
     );
 
@@ -642,4 +832,141 @@ async fn main() -> Result<()> {
         bail!(error);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn trade() -> ShadowTrade {
+        ShadowTrade {
+            id: 1,
+            mint: "TESTmint11111111111111111111111111111111111".into(),
+            ticker: Some("TEST".into()),
+            source: "soltrenchtrending".into(),
+            message_id: 1,
+            entry_time_unix_ms: 0,
+            entry_price_sol: 1e-6,
+            entry_market_cap_sol: 100.0,
+            buy_sol_amount: 0.5,
+            token_amount: 500_000.0,
+            curve_complete: false,
+            peak_price_sol: 1e-6,
+            tp1_done: false,
+            tp2_done: false,
+            realized_pnl_sol: 0.0,
+            remaining_tokens: 0.0,
+        }
+    }
+
+    fn snapshot(price_multiple: f64, complete: bool) -> CurveSnapshot {
+        CurveSnapshot {
+            venue: Venue::PumpFunCurve,
+            price_sol: trade().entry_price_sol * price_multiple,
+            market_cap_sol: 100.0 * price_multiple,
+            complete,
+            pool: None,
+        }
+    }
+
+    fn config() -> ShadowConfig {
+        ShadowConfig {
+            event_socket_path: String::new(),
+            database_path: String::new(),
+            rpc_urls: vec![],
+            buy_sol_amount: 0.5,
+            tp1_multiple: 1.1,
+            tp1_fraction: 40.0,
+            tp2_multiple: 1.5,
+            tp2_fraction: 40.0,
+            moon_trail_pct: 35.0,
+            initial_stop_pct: 35.0,
+            breakeven_after_tp1: true,
+            max_hold_secs: 0,
+            poll_interval_secs: 5,
+            max_open_positions: 20,
+            poll_concurrency: 8,
+        }
+    }
+
+    #[test]
+    fn tp1_fires_at_1_1x_sells_40pct() {
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.15, false), &config());
+        assert_eq!(fills.len(), 1);
+        assert_eq!(fills[0].0, "tp1");
+        assert!((fills[0].1 - 200_000.0).abs() < 1.0); // 40% of 500k
+        assert!(close.is_none());
+    }
+
+    #[test]
+    fn stop_before_tp1_dumps_everything() {
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(0.60, false), &config());
+        assert_eq!(fills.len(), 1);
+        assert_eq!(fills[0].0, "stop");
+        assert_eq!(close, Some(ExitReason::StopLoss));
+    }
+
+    #[test]
+    fn tp1_then_breakeven_stop_closes_rest() {
+        let mut t = trade();
+        t.tp1_done = true;
+        t.remaining_tokens = 300_000.0;
+        // price fell back to entry: breakeven stop
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.0, false), &config());
+        assert_eq!(fills[0].0, "stop");
+        assert_eq!(close, Some(ExitReason::StopLoss));
+    }
+
+    #[test]
+    fn tp1_then_tp2_sells_40pct_of_remaining() {
+        let mut t = trade();
+        t.tp1_done = true;
+        t.remaining_tokens = 300_000.0;
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.6, false), &config());
+        assert_eq!(fills.len(), 1);
+        assert_eq!(fills[0].0, "tp2");
+        assert!((fills[0].1 - 120_000.0).abs() < 1.0); // 40% of 300k
+        assert!(close.is_none());
+    }
+
+    #[test]
+    fn moon_bag_trailing_stop_closes() {
+        let mut t = trade();
+        t.tp1_done = true;
+        t.tp2_done = true;
+        t.remaining_tokens = 100_000.0;
+        t.peak_price_sol = t.entry_price_sol * 3.0;
+        // trailing 35% off peak: 3.0 * 0.65 = 1.95x -> price at 1.9x triggers
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.9, false), &config());
+        assert_eq!(fills[0].0, "stop");
+        assert_eq!(close, Some(ExitReason::StopLoss));
+    }
+
+    #[test]
+    fn moon_bag_holds_while_rising() {
+        let mut t = trade();
+        t.tp1_done = true;
+        t.tp2_done = true;
+        t.remaining_tokens = 100_000.0;
+        t.peak_price_sol = t.entry_price_sol * 3.0;
+        // above trail level (1.95x), below new peak -> hold
+        let (_, close) = evaluate_staged_exits(&t, &snapshot(2.5, false), &config());
+        assert!(close.is_none());
+    }
+
+    #[test]
+    fn graduation_dumps_all() {
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.05, true), &config());
+        assert_eq!(fills[0].0, "graduated");
+        assert_eq!(close, Some(ExitReason::Graduated));
+        assert!((fills[0].1 - 500_000.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn config_rejects_non_moonbag_split() {
+        let mut c = config();
+        c.tp1_fraction = 60.0;
+        c.tp2_fraction = 40.0; // 100% total -> no moon bag -> invalid
+        assert!(ShadowConfig::validate(&c).is_err());
+    }
 }
