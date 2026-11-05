@@ -12,3 +12,10 @@ Cargo.lock
 # Proto sources
 /proto/
 /vendor/
+
+# Telegram signal sniper local data and credentials
+/data/
+/telegram-listener/.env
+/telegram-listener/node_modules/
+/telegram-listener/dist/
+/telegram-listener/data/
