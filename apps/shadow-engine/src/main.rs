@@ -7,7 +7,10 @@
 //! hold) close them at simulated prices. Everything is persisted to
 //! SQLite. No transactions are ever broadcast and no keys are needed.
 
+mod hedged_rpc;
+
 use anyhow::{bail, Context, Result};
+use hedged_rpc::HedgedRpc;
 use rusqlite::Connection;
 use serde::Deserialize;
 use sol_trade_sdk::common::SolanaRpcClient;
@@ -34,7 +37,7 @@ const LAMPORTS_PER_SOL: f64 = 100_000_000.0;
 struct ShadowConfig {
     event_socket_path: String,
     database_path: String,
-    rpc_url: String,
+    rpc_urls: Vec<String>,
     buy_sol_amount: f64,
     take_profit_x: f64,
     stop_loss_pct: f64,
@@ -42,16 +45,28 @@ struct ShadowConfig {
     max_hold_secs: u64,
     poll_interval_secs: u64,
     max_open_positions: usize,
+    poll_concurrency: usize,
 }
 
 impl ShadowConfig {
     fn from_env() -> Result<Self> {
         let f = |name: &str, default: &str| env::var(name).unwrap_or_else(|_| default.to_string());
+        // Comma-separated list; all endpoints are raced in parallel per request.
+        let rpc_urls: Vec<String> = f(
+            "RPC_URLS",
+            "https://api.mainnet-beta.solana.com,https://solana-rpc.publicnode.com",
+        )
+        .split(',')
+        .map(|u| u.trim().trim_end_matches('/').to_string())
+        .filter(|u| !u.is_empty())
+        .collect();
+        if rpc_urls.is_empty() {
+            bail!("RPC_URLS must contain at least one endpoint");
+        }
         Ok(Self {
             event_socket_path: f("EVENT_SOCKET_PATH", "/tmp/telsolsniper-events.sock"),
             database_path: f("SHADOW_DATABASE_PATH", "./data/shadow.sqlite"),
-            rpc_url: env::var("RPC_URL")
-                .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".into()),
+            rpc_urls,
             buy_sol_amount: f("SHADOW_BUY_SOL", "0.5").parse()?,
             take_profit_x: f("SHADOW_TAKE_PROFIT_X", "2.0").parse()?,
             stop_loss_pct: f("SHADOW_STOP_LOSS_PCT", "35").parse()?,
@@ -59,6 +74,7 @@ impl ShadowConfig {
             max_hold_secs: f("SHADOW_MAX_HOLD_SECS", "3600").parse()?,
             poll_interval_secs: f("SHADOW_POLL_SECS", "5").parse()?,
             max_open_positions: f("SHADOW_MAX_OPEN", "20").parse()?,
+            poll_concurrency: f("SHADOW_POLL_CONCURRENCY", "8").parse()?,
         })
     }
 }
@@ -240,25 +256,27 @@ struct CurveSnapshot {
 }
 
 /// Price an active Pump.fun curve; fall back to its graduated PumpSwap
-/// pool so shadow positions stay priced across graduation.
-async fn fetch_curve(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<CurveSnapshot> {
-    if get_bonding_curve_pda(mint).is_some() {
-        if let Ok((curve, _)) = fetch_bonding_curve_account(rpc, mint).await {
-            if !curve.complete {
-                return Ok(CurveSnapshot {
-                    venue: Venue::PumpFunCurve,
-                    price_sol: curve.get_token_price(),
-                    market_cap_sol: curve.get_market_cap_sol() as f64 / LAMPORTS_PER_SOL,
-                    complete: false,
-                    pool: None,
-                });
-            }
+/// pool so shadow positions stay priced across graduation. The curve
+/// read is a single getAccountInfo — hedged across all endpoints.
+async fn fetch_curve(rpc: &HedgedRpc, mint: &Pubkey) -> Result<CurveSnapshot> {
+    if let Some(curve_pda) = get_bonding_curve_pda(mint) {
+        let mint = *mint;
+        let curve = rpc
+            .hedge(move |client| async move {
+                fetch_curve_via_client(&client, &mint, &curve_pda).await
+            })
+            .await;
+        if let Ok(curve) = curve {
+            return Ok(curve);
         }
     }
-    let pool_address = find_pool(rpc, mint)
+    // Graduated or missing curve: fall back to the PumpSwap pool.
+    let mint = *mint;
+    let pool_address = rpc
+        .hedge(move |client| async move { find_pool(&client, &mint).await })
         .await
         .context("no active bonding curve and no PumpSwap pool found for mint")?;
-    let pool = PumpSwapParams::from_pool_address_by_rpc(rpc, &pool_address)
+    let pool = PumpSwapParams::from_pool_address_by_rpc(rpc.primary(), &pool_address)
         .await
         .context("found PumpSwap pool but failed to read its state")?;
     let quote_reserve = pool.effective_quote_reserves()? as f64 / LAMPORTS_PER_SOL;
@@ -274,6 +292,27 @@ async fn fetch_curve(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<CurveSnapsh
         market_cap_sol: quote_reserve * 2.0,
         complete: false,
         pool: Some(pool),
+    })
+}
+
+/// One endpoint's curve read: getAccountInfo on the curve PDA, decode.
+async fn fetch_curve_via_client(
+    client: &SolanaRpcClient,
+    mint: &Pubkey,
+    _curve_pda: &Pubkey,
+) -> Result<CurveSnapshot> {
+    let (curve, _) = fetch_bonding_curve_account(client, mint)
+        .await
+        .context("bonding curve not found on chain")?;
+    if curve.complete {
+        bail!("curve graduated");
+    }
+    Ok(CurveSnapshot {
+        venue: Venue::PumpFunCurve,
+        price_sol: curve.get_token_price(),
+        market_cap_sol: curve.get_market_cap_sol() as f64 / LAMPORTS_PER_SOL,
+        complete: false,
+        pool: None,
     })
 }
 
@@ -324,7 +363,7 @@ fn sell_tokens(curve: &CurveSnapshot, tokens_in: f64) -> f64 {
 }
 
 async fn open_position(
-    rpc: &SolanaRpcClient,
+    rpc: &HedgedRpc,
     store: &ShadowStore,
     config: &ShadowConfig,
     event: NewMintEvent,
@@ -431,51 +470,82 @@ fn evaluate_exit(
     None
 }
 
-async fn poll_positions(
-    rpc: &SolanaRpcClient,
+async fn poll_position(
+    rpc: &HedgedRpc,
     store: &ShadowStore,
     config: &ShadowConfig,
+    trade: ShadowTrade,
 ) -> Result<()> {
-    for trade in store.open_trades()? {
-        let mint = match Pubkey::from_str(&trade.mint) {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let curve = match fetch_curve(rpc, &mint).await {
-            Ok(c) => c,
-            Err(error) => {
-                // Migrated/failed accounts: mark graduated-style exit.
-                warn!(mint = %trade.mint, %error, "curve unavailable; closing as graduated");
-                let exit_price = trade.peak_price_sol.max(trade.entry_price_sol);
-                let pnl_pct = (exit_price / trade.entry_price_sol - 1.0) * 100.0;
-                store.record_exit(trade.id, exit_price, ExitReason::Graduated.as_str(), 0.0, pnl_pct)?;
-                continue;
-            }
-        };
-        if curve.price_sol > trade.peak_price_sol {
-            store.update_peak(trade.id, curve.price_sol)?;
-        }
-        let peak = trade.peak_price_sol.max(curve.price_sol);
-        let trade_for_eval = ShadowTrade { peak_price_sol: peak, ..trade.clone() };
-        if let Some(reason) = evaluate_exit(&trade_for_eval, &curve, config) {
-            // Value the exit with venue-aware math (fees on PumpSwap).
-            let exit_proceeds_sol = sell_tokens(&curve, trade.token_amount);
-            let exit_price = if trade.token_amount > 0.0 {
-                exit_proceeds_sol / trade.token_amount
-            } else {
-                curve.price_sol
-            };
-            let pnl_sol = exit_proceeds_sol - trade.buy_sol_amount;
+    let mint = match Pubkey::from_str(&trade.mint) {
+        Ok(m) => m,
+        Err(_) => return Ok(()),
+    };
+    let curve = match fetch_curve(rpc, &mint).await {
+        Ok(c) => c,
+        Err(error) => {
+            // Migrated/failed accounts: mark graduated-style exit.
+            warn!(mint = %trade.mint, %error, "curve unavailable; closing as graduated");
+            let exit_price = trade.peak_price_sol.max(trade.entry_price_sol);
             let pnl_pct = (exit_price / trade.entry_price_sol - 1.0) * 100.0;
-            store.record_exit(trade.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
-            info!(
-                mint = %trade.mint,
-                ticker = trade.ticker.as_deref().unwrap_or(""),
-                reason = reason.as_str(),
-                pnl_pct,
-                "shadow exit recorded"
-            );
+            store.record_exit(trade.id, exit_price, ExitReason::Graduated.as_str(), 0.0, pnl_pct)?;
+            return Ok(());
         }
+    };
+    if curve.price_sol > trade.peak_price_sol {
+        store.update_peak(trade.id, curve.price_sol)?;
+    }
+    let peak = trade.peak_price_sol.max(curve.price_sol);
+    let trade_for_eval = ShadowTrade { peak_price_sol: peak, ..trade.clone() };
+    if let Some(reason) = evaluate_exit(&trade_for_eval, &curve, config) {
+        // Value the exit with venue-aware math (fees on PumpSwap).
+        let exit_proceeds_sol = sell_tokens(&curve, trade.token_amount);
+        let exit_price = if trade.token_amount > 0.0 {
+            exit_proceeds_sol / trade.token_amount
+        } else {
+            curve.price_sol
+        };
+        let pnl_sol = exit_proceeds_sol - trade.buy_sol_amount;
+        let pnl_pct = (exit_price / trade.entry_price_sol - 1.0) * 100.0;
+        store.record_exit(trade.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
+        info!(
+            mint = %trade.mint,
+            ticker = trade.ticker.as_deref().unwrap_or(""),
+            reason = reason.as_str(),
+            pnl_pct,
+            "shadow exit recorded"
+        );
+    }
+    Ok(())
+}
+
+/// Poll all open positions concurrently with a bounded task pool.
+/// Sequential polling with N positions took N × RPC-latency; this
+/// takes ~1 × latency regardless of N.
+async fn poll_positions(
+    rpc: &HedgedRpc,
+    store: Arc<ShadowStore>,
+    config: Arc<ShadowConfig>,
+) -> Result<()> {
+    let open = store.open_trades()?;
+    if open.is_empty() {
+        return Ok(());
+    }
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(config.poll_concurrency));
+    let mut handles = Vec::with_capacity(open.len());
+    for trade in open {
+        let permit = Arc::clone(&semaphore).acquire_owned().await?;
+        let rpc = rpc.clone();
+        let store = Arc::clone(&store);
+        let config = Arc::clone(&config);
+        handles.push(tokio::spawn(async move {
+            let _permit = permit;
+            if let Err(error) = poll_position(&rpc, &store, &config, trade).await {
+                warn!(%error, "position poll failed");
+            }
+        }));
+    }
+    for handle in handles {
+        let _ = handle.await;
     }
     Ok(())
 }
@@ -489,18 +559,14 @@ async fn run() -> Result<()> {
         )
         .init();
 
-    let config = ShadowConfig::from_env()?;
+    let config = Arc::new(ShadowConfig::from_env()?);
     let store = Arc::new(ShadowStore::open(&config.database_path)?);
-    let rpc = SolanaRpcClient::new_with_timeout_and_commitment(
-        config.rpc_url.clone(),
-        Duration::from_secs(10),
-        solana_commitment_config::CommitmentConfig::confirmed(),
-    );
+    let rpc = HedgedRpc::new(&config.rpc_urls);
 
     info!(
         event_socket = %config.event_socket_path,
         database = %config.database_path,
-        rpc = %config.rpc_url,
+        rpc_endpoints = ?config.rpc_urls,
         buy_sol = config.buy_sol_amount,
         tp_x = config.take_profit_x,
         sl_pct = config.stop_loss_pct,
@@ -561,7 +627,7 @@ async fn run() -> Result<()> {
                 }
             }
             _ = tokio::time::sleep(Duration::from_secs(config.poll_interval_secs)) => {
-                if let Err(error) = poll_positions(&rpc, &store, &config).await {
+                if let Err(error) = poll_positions(&rpc, Arc::clone(&store), Arc::clone(&config)).await {
                     error!(%error, "position polling failed");
                 }
             }
