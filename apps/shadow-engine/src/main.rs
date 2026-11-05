@@ -12,6 +12,11 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use sol_trade_sdk::common::SolanaRpcClient;
 use sol_trade_sdk::instruction::utils::pumpfun::{fetch_bonding_curve_account, get_bonding_curve_pda};
+use sol_trade_sdk::instruction::utils::pumpswap::find_pool;
+use sol_trade_sdk::trading::core::params::PumpSwapParams;
+use sol_trade_sdk::utils::calc::pumpswap::{
+    buy_quote_input_internal_with_fees, sell_base_input_internal_with_fees,
+};
 use solana_sdk::pubkey::Pubkey;
 use std::{
     env,
@@ -215,31 +220,107 @@ fn now_ms() -> i64 {
 }
 
 /// Snapshot of the real bonding curve used for pricing.
-struct CurveSnapshot {
-    price_sol: f64,          // price per token in SOL
-    market_cap_sol: f64,
-    complete: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Venue {
+    #[allow(dead_code)] // logged in future work; kept for venue-specific rules
+    PumpFunCurve,
+    PumpSwap,
 }
 
+#[derive(Clone)]
+struct CurveSnapshot {
+    #[allow(dead_code)] // venue-specific exit rules planned; venue set on every snapshot
+    venue: Venue,
+    /// Price per whole token in SOL (curve) — pool snapshot for PumpSwap
+    price_sol: f64,
+    market_cap_sol: f64,
+    complete: bool,
+    /// PumpSwap pool state for constant-product sim (None on curve venue)
+    pool: Option<PumpSwapParams>,
+}
+
+/// Price an active Pump.fun curve; fall back to its graduated PumpSwap
+/// pool so shadow positions stay priced across graduation.
 async fn fetch_curve(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<CurveSnapshot> {
-    let (curve, _) = fetch_bonding_curve_account(rpc, mint)
+    if get_bonding_curve_pda(mint).is_some() {
+        if let Ok((curve, _)) = fetch_bonding_curve_account(rpc, mint).await {
+            if !curve.complete {
+                return Ok(CurveSnapshot {
+                    venue: Venue::PumpFunCurve,
+                    price_sol: curve.get_token_price(),
+                    market_cap_sol: curve.get_market_cap_sol() as f64 / LAMPORTS_PER_SOL,
+                    complete: false,
+                    pool: None,
+                });
+            }
+        }
+    }
+    let pool_address = find_pool(rpc, mint)
         .await
-        .context("bonding curve not found on chain")?;
+        .context("no active bonding curve and no PumpSwap pool found for mint")?;
+    let pool = PumpSwapParams::from_pool_address_by_rpc(rpc, &pool_address)
+        .await
+        .context("found PumpSwap pool but failed to read its state")?;
+    let quote_reserve = pool.effective_quote_reserves()? as f64 / LAMPORTS_PER_SOL;
+    let base_reserve = pool.pool_base_token_reserves as f64;
+    if base_reserve <= 0.0 {
+        bail!("PumpSwap pool has zero base reserves");
+    }
+    let price_sol = quote_reserve / (base_reserve / 1_000_000.0); // base mint is 6dp
     Ok(CurveSnapshot {
-        price_sol: curve.get_token_price(),
-        market_cap_sol: curve.get_market_cap_sol() as f64 / LAMPORTS_PER_SOL,
-        complete: curve.complete,
+        venue: Venue::PumpSwap,
+        price_sol,
+        // Rough market cap from pool depth; quote vault assumes SOL pairing.
+        market_cap_sol: quote_reserve * 2.0,
+        complete: false,
+        pool: Some(pool),
     })
 }
 
-/// Constant-product simulation of a buy: tokens out for sol in.
+/// Simulated buy: tokens out for sol in. PumpSwap uses the SDK's
+/// constant-product math with real pool fees; the curve uses the
+/// spot-price approximation (adequate for shadow accounting).
 fn buy_tokens(curve: &CurveSnapshot, sol_in: f64) -> f64 {
-    if curve.price_sol <= 0.0 {
+    if sol_in <= 0.0 {
         return 0.0;
     }
-    // price = v_sol / v_tokens; buying sol_in moves price along the curve.
-    // Approximate with geometric-mean fill; adequate for shadow accounting.
-    sol_in / curve.price_sol
+    if let Some(pool) = &curve.pool {
+        let quote_in_lamports = (sol_in * LAMPORTS_PER_SOL).max(1.0) as u64;
+        if let Ok(result) = buy_quote_input_internal_with_fees(
+            quote_in_lamports,
+            0,
+            pool.pool_base_token_reserves,
+            pool.pool_quote_token_reserves,
+            pool.virtual_quote_reserves,
+            &pool.fee_basis_points,
+        ) {
+            return result.base as f64 / 1_000_000.0; // raw base units -> whole tokens (6dp supply)
+        }
+    }
+    if curve.price_sol > 0.0 {
+        sol_in / curve.price_sol
+    } else {
+        0.0
+    }
+}
+
+/// Simulated sell: SOL out for whole tokens in (PumpSwap venue only).
+fn sell_tokens(curve: &CurveSnapshot, tokens_in: f64) -> f64 {
+    let Some(pool) = &curve.pool else {
+        return tokens_in * curve.price_sol;
+    };
+    let base_in = (tokens_in * 1_000_000.0).max(1.0) as u64;
+    match sell_base_input_internal_with_fees(
+        base_in,
+        0,
+        pool.pool_base_token_reserves,
+        pool.pool_quote_token_reserves,
+        pool.virtual_quote_reserves,
+        &pool.fee_basis_points,
+    ) {
+        Ok(result) => result.ui_quote as f64 / LAMPORTS_PER_SOL,
+        Err(_) => tokens_in * curve.price_sol,
+    }
 }
 
 async fn open_position(
@@ -267,12 +348,12 @@ async fn open_position(
     let curve = match fetch_curve(rpc, &mint).await {
         Ok(c) => c,
         Err(error) => {
-            info!(mint = %event.mint, %error, "no live bonding curve; skipping");
+            info!(mint = %event.mint, %error, "no tradable venue (curve or PumpSwap); skipping");
             return Ok(());
         }
     };
     if curve.complete {
-        info!(mint = %event.mint, "curve already graduated; skipping");
+        info!(mint = %event.mint, "venue unavailable; skipping");
         return Ok(());
     }
 
@@ -377,8 +458,14 @@ async fn poll_positions(
         let peak = trade.peak_price_sol.max(curve.price_sol);
         let trade_for_eval = ShadowTrade { peak_price_sol: peak, ..trade.clone() };
         if let Some(reason) = evaluate_exit(&trade_for_eval, &curve, config) {
-            let exit_price = curve.price_sol;
-            let pnl_sol = trade.token_amount * exit_price - trade.buy_sol_amount;
+            // Value the exit with venue-aware math (fees on PumpSwap).
+            let exit_proceeds_sol = sell_tokens(&curve, trade.token_amount);
+            let exit_price = if trade.token_amount > 0.0 {
+                exit_proceeds_sol / trade.token_amount
+            } else {
+                curve.price_sol
+            };
+            let pnl_sol = exit_proceeds_sol - trade.buy_sol_amount;
             let pnl_pct = (exit_price / trade.entry_price_sol - 1.0) * 100.0;
             store.record_exit(trade.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
             info!(
