@@ -592,6 +592,11 @@ fn record_fill(
     Ok(())
 }
 
+/// Slippage applied when a fill is modeled at a level price instead of the
+/// observed snapshot price (stop/TP gap fills). Matches what a real
+/// stop-market order would roughly lose.
+const LEVEL_FILL_SLIPPAGE: f64 = 0.05;
+
 /// Staged exit evaluation. Returns (fills_to_execute, close_position).
 /// Rules, in priority order:
 ///   1. stop loss -SHADOW_STOP_LOSS_PCT (only before TP1 fires)
@@ -604,44 +609,56 @@ fn evaluate_staged_exits(
     trade: &ShadowTrade,
     curve: &CurveSnapshot,
     config: &ShadowConfig,
-) -> (Vec<(&'static str, f64)>, Option<ExitReason>) {
+) -> (Vec<(&'static str, f64, f64)>, Option<ExitReason>) {
+    // Each fill: (kind, tokens, fill_price_sol). TP/stop fills execute at
+    // the level price (+slippage), not the observed snapshot — models a
+    // real order sitting at that level instead of a 5s-snapshot observer.
     let multiple = curve.price_sol / trade.entry_price_sol;
-    let mut fills = Vec::new();
+    let mut fills: Vec<(&'static str, f64, f64)> = Vec::new();
 
     if curve.complete {
-        fills.push(("graduated", trade.tokens_at_entry()));
+        fills.push(("graduated", trade.tokens_at_entry(), curve.price_sol));
         return (fills, Some(ExitReason::Graduated));
     }
 
     if !trade.tp1_done && multiple >= config.tp1_multiple {
         let tokens = trade.tokens_at_entry() * config.tp1_fraction / 100.0;
-        fills.push(("tp1", tokens));
+        // Gap fill: if the snapshot is above the level, the order filled at
+        // the level; slippage makes it slightly worse.
+        let fill_price = config.tp1_multiple * trade.entry_price_sol * (1.0 - LEVEL_FILL_SLIPPAGE);
+        fills.push(("tp1", tokens, fill_price.min(curve.price_sol)));
     }
     if trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
         let tokens = trade.tokens_at_entry() * config.tp2_fraction / 100.0;
-        fills.push(("tp2", tokens));
+        let fill_price = config.tp2_multiple * trade.entry_price_sol * (1.0 - LEVEL_FILL_SLIPPAGE);
+        fills.push(("tp2", tokens, fill_price.min(curve.price_sol)));
     }
 
     // Stops are evaluated on what remains after any TPs queued this tick.
     // Pre-TP1: hard stop. Post-TP1 (config.breakeven_after_tp1): breakeven
     // dump. Moon bag stage (post-TP2): trailing stop off peak.
-    let stop_hit = if !trade.tp1_done {
-        multiple <= 1.0 - config.initial_stop_pct / 100.0
+    let stop_price = if !trade.tp1_done {
+        let level = (1.0 - config.initial_stop_pct / 100.0) * trade.entry_price_sol;
+        (multiple <= 1.0 - config.initial_stop_pct / 100.0).then_some(level)
     } else if !trade.tp2_done {
-        config.breakeven_after_tp1 && multiple <= 1.0
+        (config.breakeven_after_tp1 && multiple <= 1.0).then_some(trade.entry_price_sol)
     } else {
-        trade.peak_price_sol / trade.entry_price_sol >= config.tp2_multiple
-            && curve.price_sol
-                <= trade.peak_price_sol * (1.0 - config.moon_trail_pct / 100.0)
+        let level = trade.peak_price_sol * (1.0 - config.moon_trail_pct / 100.0);
+        ((trade.peak_price_sol / trade.entry_price_sol >= config.tp2_multiple)
+            && curve.price_sol <= level)
+            .then_some(level)
     };
 
-    if stop_hit {
-        fills.push(("stop", trade.tokens_at_entry()));
+    if let Some(level) = stop_price {
+        // Stop fills at the stop level minus slippage, never at the crash
+        // bottom a 5s poller happened to observe.
+        let fill_price = level * (1.0 - LEVEL_FILL_SLIPPAGE);
+        fills.push(("stop", trade.tokens_at_entry(), fill_price));
         return (fills, Some(ExitReason::StopLoss));
     }
 
     let remaining_after_fills = trade.tokens_at_entry()
-        - fills.iter().map(|(_, t)| *t).sum::<f64>();
+        - fills.iter().map(|(_, t, _)| *t).sum::<f64>();
     if remaining_after_fills <= 1.0 {
         // Everything sold — position is fully closed.
         return (fills, Some(ExitReason::TakeProfit));
@@ -679,10 +696,16 @@ async fn poll_position(
 
     let mut realized = trade.realized_pnl_sol;
     let mut remaining = trade.tokens_at_entry();
-    for (kind, tokens_sold) in &fills {
+    for (kind, tokens_sold, fill_price) in &fills {
         // Venue-aware valuation: PumpSwap sell math includes LP+protocol fees.
-        let proceeds = sell_tokens(&curve, *tokens_sold);
-        record_fill(store, &trade_for_eval, kind, curve.price_sol, *tokens_sold)?;
+        // For level fills (TP/stop) the fill price is authoritative; for
+        // snapshot fills (graduated) we value through the venue curve.
+        let proceeds = if *kind == "graduated" {
+            sell_tokens(&curve, *tokens_sold)
+        } else {
+            tokens_sold * fill_price
+        };
+        record_fill(store, &trade_for_eval, kind, *fill_price, *tokens_sold)?;
         realized += proceeds - trade.buy_sol_amount * (tokens_sold / trade.token_amount);
         remaining -= tokens_sold;
         let fractional = remaining > 1.0 && close_reason.is_none();
@@ -690,9 +713,10 @@ async fn poll_position(
     }
 
     if let Some(reason) = close_reason {
+        let exit_price = fills.last().map(|(_, _, p)| *p).unwrap_or(curve.price_sol);
         let pnl_sol = realized;
         let pnl_pct = (realized / trade.buy_sol_amount) * 100.0;
-        store.record_exit(trade_for_eval.id, curve.price_sol, reason.as_str(), pnl_sol, pnl_pct)?;
+        store.record_exit(trade_for_eval.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
         info!(
             mint = %trade.mint,
             ticker = trade.ticker.as_deref().unwrap_or(""),
