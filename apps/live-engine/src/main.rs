@@ -109,8 +109,19 @@ impl LiveConfig {
             entry_timeout_ms: f("LIVE_ENTRY_TIMEOUT_MS", "2500").parse()?,
             max_open_positions: f("LIVE_MAX_OPEN", "5").parse()?,
         };
-        if cfg.tp2_multiple <= cfg.tp1_multiple || cfg.tp1_fraction + cfg.tp2_fraction >= 100.0 {
-            bail!("invalid ladder config");
+        // TP2 is optional: LIVE_TP2_X=0 selects single-TP mode, where the
+        // remainder becomes the moon bag.
+        let two_tps = cfg.tp2_multiple > 0.0;
+        let sold = if two_tps { cfg.tp1_fraction + cfg.tp2_fraction } else { cfg.tp1_fraction };
+        if !(cfg.tp1_multiple > 1.0)
+            || !(cfg.tp1_fraction > 0.0 && cfg.tp1_fraction <= 100.0)
+            || sold >= 100.0
+            || (two_tps && (cfg.tp2_multiple <= cfg.tp1_multiple || cfg.tp2_fraction <= 0.0))
+        {
+            bail!(
+                "invalid ladder config: tp1_x={} tp1_pct={} tp2_x={} tp2_pct={} (tp2_x=0 means single TP)",
+                cfg.tp1_multiple, cfg.tp1_fraction, cfg.tp2_multiple, cfg.tp2_fraction
+            );
         }
         Ok(cfg)
     }
@@ -192,6 +203,9 @@ impl LiveStore {
         };
         if !cols.iter().any(|c| c == "cost_lamports") {
             connection.execute("ALTER TABLE live_trades ADD COLUMN cost_lamports INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !cols.iter().any(|c| c == "pending_exit_reason") {
+            connection.execute("ALTER TABLE live_trades ADD COLUMN pending_exit_reason TEXT", [])?;
         }
         let fill_cols: Vec<String> = {
             let mut stmt = connection.prepare("PRAGMA table_info(live_fills)")?;
@@ -286,13 +300,49 @@ impl LiveStore {
         Ok(())
     }
 
-    fn record_exit(&self, id: i64, exit_reason: &str, pnl_sol: f64) -> Result<()> {
+    /// Mark the intent to exit. The trade stays open, with PnL unbooked, until
+    /// its sells are confirmed on chain — booking at submit time made every
+    /// trade look like a total loss (proceeds were still zero and the buy cost
+    /// still carried the ATA rent).
+    fn record_exit(&self, id: i64, exit_reason: &str, _pnl_sol: f64) -> Result<()> {
         let connection = self.connection.lock().unwrap();
         connection.execute(
-            r#"UPDATE live_trades SET exit_time_unix_ms = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER), exit_reason = ?2, pnl_sol = ?3 WHERE id = ?1"#,
-            rusqlite::params![id, exit_reason, pnl_sol],
+            "UPDATE live_trades SET pending_exit_reason = ?2 WHERE id = ?1 AND pending_exit_reason IS NULL",
+            rusqlite::params![id, exit_reason],
         )?;
         Ok(())
+    }
+
+    /// All journal orders for this trade are terminal (confirmed/failed).
+    fn orders_settled(&self, mint: &str) -> Result<bool> {
+        let connection = self.connection.lock().unwrap();
+        let open: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM order_journal WHERE mint = ?1 AND state IN ('intended','submitted','unknown')",
+            [mint],
+            |r| r.get(0),
+        )?;
+        Ok(open == 0)
+    }
+
+    fn finalize_exit(&self, id: i64, reason: &str, pnl_sol: f64) -> Result<()> {
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            r#"UPDATE live_trades
+               SET exit_time_unix_ms = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER),
+                   exit_reason = ?2, pnl_sol = ?3, pending_exit_reason = NULL
+               WHERE id = ?1"#,
+            rusqlite::params![id, reason, pnl_sol],
+        )?;
+        Ok(())
+    }
+
+    fn pending_exits(&self) -> Result<Vec<(i64, String, String)>> {
+        let connection = self.connection.lock().unwrap();
+        let mut stmt = connection.prepare(
+            "SELECT id, mint, pending_exit_reason FROM live_trades WHERE pending_exit_reason IS NOT NULL AND exit_time_unix_ms IS NULL",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.filter_map(Result::ok).collect())
     }
 
     /// Count a consecutive zero-balance read; returns the running count.
@@ -993,7 +1043,7 @@ async fn poll_live_position(
         }
         return Ok(()); // one action per tick
     }
-    if trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
+    if config.tp2_multiple > 0.0 && trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
         let tokens = tokens_now * config.tp2_fraction / 100.0;
         match live_sell(client, config, store, trade.id, "tp2", mint, tokens, false).await {
             Ok((fill_price, sig, proceeds_lamports)) => {
@@ -1015,13 +1065,22 @@ async fn poll_live_position(
         return Ok(());
     }
 
+    let trailing_enabled = if trade.tp1_done {
+        // Single-TP mode (tp2 disabled): the whole remainder is the moon bag
+        // and trails the peak immediately. With TP2 enabled, trailing starts
+        // once TP2 has fired.
+        config.tp2_multiple <= 0.0 || trade.tp2_done
+    } else {
+        false
+    };
     let stop_hit = if !trade.tp1_done {
         multiple <= 1.0 - config.initial_stop_pct / 100.0
-    } else if !trade.tp2_done {
+    } else if config.tp2_multiple > 0.0 && !trade.tp2_done {
         config.breakeven_after_tp1 && multiple <= 1.0
+    } else if trailing_enabled {
+        price <= peak * (1.0 - config.moon_trail_pct / 100.0)
     } else {
-        peak / trade.entry_price_sol >= config.tp2_multiple
-            && price <= peak * (1.0 - config.moon_trail_pct / 100.0)
+        false
     };
     if stop_hit && tokens_now > 1.0 {
         let kind = if trade.tp1_done { "moon_bag" } else { "stop" };
@@ -1138,6 +1197,27 @@ async fn reconcile_loop(
                 continue;
             }
         };
+        // Deferred settlements: exits whose sells are now confirmed get
+        // booked with real proceeds. This is what makes PnL trustworthy.
+        if let Ok(pending) = store.pending_exits() {
+            for (trade_id, mint, reason) in pending {
+                let settled = store.orders_settled(&mint).unwrap_or(false);
+                if !settled {
+                    continue;
+                }
+                match store.realized_pnl_sol(trade_id) {
+                    Ok(pnl) => {
+                        if let Err(error) = store.finalize_exit(trade_id, &reason, pnl) {
+                            warn!(%error, "failed to finalize exit");
+                        } else {
+                            info!(trade_id, mint = %mint, reason = %reason, pnl_sol = pnl, "LIVE exit settled");
+                        }
+                    }
+                    Err(error) => warn!(%error, "exit finalize skipped"),
+                }
+            }
+        }
+
         for order in orders {
             match order.signature.as_deref() {
                 None => {
