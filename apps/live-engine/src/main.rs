@@ -25,6 +25,9 @@ use sol_trade_sdk::{
     },
     AccountPolicy, BuyAmount, SolanaTrade, TradeTokenType,
 };
+use sol_trade_sdk::swqos::common::TradeError;
+use sol_trade_sdk::swqos::SwqosType;
+use solana_sdk::signature::Signature;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -66,6 +69,7 @@ struct LiveConfig {
     /// the cost — keep it tiny.
     tip_sol: f64,
     cu_price_micro_lamports: u32,
+    max_cu_price: u64,
     tp1_multiple: f64,
     tp1_fraction: f64,
     tp2_multiple: f64,
@@ -95,6 +99,7 @@ impl LiveConfig {
             slippage_bps: f("LIVE_SLIPPAGE_BPS", "1000").parse()?, // 10%: trench tokens move
             tip_sol: f("LIVE_TIP_SOL", "0.00002").parse()?,
             cu_price_micro_lamports: f("LIVE_CU_PRICE", "150000").parse()?,
+            max_cu_price: f("LIVE_MAX_CU_PRICE", "2000000").parse()?,
             tp1_multiple: f("LIVE_TP1_X", "1.1").parse()?,
             tp1_fraction: f("LIVE_TP1_SELL_PCT", "40").parse()?,
             tp2_multiple: f("LIVE_TP2_X", "1.5").parse()?,
@@ -102,7 +107,7 @@ impl LiveConfig {
             moon_trail_pct: f("LIVE_MOON_TRAIL_PCT", "35").parse()?,
             initial_stop_pct: f("LIVE_STOP_LOSS_PCT", "35").parse()?,
             breakeven_after_tp1: f("LIVE_BREAKEVEN_AFTER_TP1", "true").eq_ignore_ascii_case("true"),
-            poll_interval_secs: f("LIVE_POLL_SECS", "5").parse()?,
+            poll_interval_secs: f("LIVE_POLL_SECS", "2").parse()?,
             failure_cooldown_secs: f("LIVE_FAILURE_COOLDOWN_SECS", "60").parse()?,
             reconcile_interval_secs: f("LIVE_RECONCILE_SECS", "30").parse()?,
             entry_tick_ms: f("LIVE_ENTRY_TICK_MS", "250").parse()?,
@@ -322,6 +327,15 @@ impl LiveStore {
             |r| r.get(0),
         )?;
         Ok(open == 0)
+    }
+
+    fn apply_fill_proceeds(&self, signature: &str, lamports: i64) -> Result<()> {
+        let connection = self.connection.lock().unwrap();
+        connection.execute(
+            "UPDATE live_fills SET proceeds_lamports = ?2, proceeds_sol = ?3 WHERE signature = ?1",
+            rusqlite::params![signature, lamports, lamports as f64 / LAMPORTS_PER_SOL],
+        )?;
+        Ok(())
     }
 
     fn finalize_exit(&self, id: i64, reason: &str, pnl_sol: f64) -> Result<()> {
@@ -553,6 +567,12 @@ fn config_venue_timeout_ms() -> u64 {
 /// Resolve a PumpSwap pool address from Dexscreener (~35ms) instead of
 /// `find_pool`, whose getProgramAccounts fallback costs 6-26s on public RPC.
 /// That difference is the whole entry window.
+/// Canonical PumpSwap pool: pure PDA maths, no network. This is the fast path
+/// for every graduated token (pumpswap.rs::get_canonical_pool_pda).
+fn canonical_pool(mint: &Pubkey) -> Pubkey {
+    sol_trade_sdk::instruction::utils::pumpswap::get_canonical_pool_pda(mint)
+}
+
 async fn dexscreener_pool(mint: &Pubkey) -> Option<Pubkey> {
     static HTTP: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     let http = HTTP.get_or_init(|| {
@@ -609,6 +629,16 @@ async fn fetch_venue_params(
             return Ok((DexType::PumpSwap, DexParamEnum::PumpSwap(params), price));
         }
     }
+    // 1. Canonical pool by PDA — microseconds, verified by one account read.
+    let canonical = canonical_pool(mint);
+    if let Ok(params) = PumpSwapParams::from_pool_address_by_rpc(rpc, &canonical).await {
+        remember_pool(mint, Some(canonical));
+        let base = params.pool_base_token_reserves as f64;
+        let quote = params.pool_quote_token_reserves as f64 / LAMPORTS_PER_SOL;
+        let price = if base > 0.0 { quote / (base / TOKEN_DECIMALS) } else { 0.0 };
+        return Ok((DexType::PumpSwap, DexParamEnum::PumpSwap(params), price));
+    }
+    // 2. Non-canonical pools (creator-fee / higher index): dexscreener index.
     if let Some(pool) = dexscreener_pool(mint).await {
         if let Ok(params) = PumpSwapParams::from_pool_address_by_rpc(rpc, &pool).await {
             remember_pool(mint, Some(pool));
@@ -738,7 +768,24 @@ async fn wallet_token_balance(rpc_url: &str, mint: &Pubkey, wallet: &Pubkey) -> 
 }
 
 async fn quote_pumpswap_price(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<f64> {
-    let params = PumpSwapParams::from_mint_by_rpc(rpc, mint).await?;
+    // Price polling must use the same fast PDA/cache path as entry; calling
+    // from_mint_by_rpc on every 2s tick would reintroduce the slow scan.
+    let params = if let Some(Some(pool)) = cached_pool(mint) {
+        PumpSwapParams::from_pool_address_by_rpc(rpc, &pool).await?
+    } else {
+        let canonical = canonical_pool(mint);
+        match PumpSwapParams::from_pool_address_by_rpc(rpc, &canonical).await {
+            Ok(params) => {
+                remember_pool(mint, Some(canonical));
+                params
+            }
+            Err(_) => {
+                let params = PumpSwapParams::from_mint_by_rpc(rpc, mint).await?;
+                remember_pool(mint, Some(params.pool));
+                params
+            }
+        }
+    };
     let base_reserve = params.pool_base_token_reserves;
     let quote_reserve = params.pool_quote_token_reserves;
     Ok((quote_reserve as f64 / LAMPORTS_PER_SOL) / (base_reserve as f64 / TOKEN_DECIMALS))
@@ -748,6 +795,59 @@ async fn quote_pumpswap_price(rpc: &SolanaRpcClient, mint: &Pubkey) -> Result<f6
 /// GasFeeStrategy::set_global_fee_strategy only configures the premium
 /// SWQOS transport tiers — it SKIPS SwqosType::Default. We run Default,
 /// so set it explicitly: low tip (0.00002 SOL) + reasonable CU price.
+/// Live priority-fee bid, refreshed from getRecentPrioritizationFees for the
+/// accounts we actually contend on (a hot pool), per Solana's guidance that
+/// fee markets are per-account, not per-network.
+static FEE_BID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(150_000);
+
+fn current_cu_price(config: &LiveConfig) -> u32 {
+    let dynamic = FEE_BID.load(std::sync::atomic::Ordering::Relaxed);
+    let value = dynamic.max(config.cu_price_micro_lamports as u64);
+    value.min(config.max_cu_price) as u32
+}
+
+async fn fee_refresh_loop(config: Arc<LiveConfig>) {
+    let http = reqwest::Client::new();
+    loop {
+        let account = venue_cache()
+            .lock()
+            .unwrap()
+            .iter()
+            .max_by_key(|(_, (at, _))| *at)
+            .and_then(|(_, (_, pool))| *pool)
+            .map(|pool| pool.to_string());
+        if let Some(account) = account {
+            let body = serde_json::json!({
+                "jsonrpc": "2.0", "id": 1, "method": "getRecentPrioritizationFees",
+                "params": [[account]]
+            });
+            if let Ok(value) = http.post(&config.rpc_url).json(&body).send().await {
+                if let Ok(json) = value.json::<serde_json::Value>().await {
+                    let mut samples: Vec<u64> = json["result"]
+                        .as_array()
+                        .map(|rows| {
+                            rows.iter()
+                                .filter_map(|r| r["prioritizationFee"].as_u64())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    samples.sort_unstable();
+                    // p75 of recent slots: enough to outbid the crowd without
+                    // paying the tail; zero-fee slots are kept (they mean no
+                    // contention, not that the fee is free).
+                    if !samples.is_empty() {
+                        let p75 = samples[(samples.len() * 3) / 4];
+                        let bid = p75.max(config.cu_price_micro_lamports as u64).min(config.max_cu_price);
+                        FEE_BID.store(bid, std::sync::atomic::Ordering::Relaxed);
+                        tracing::debug!(bid, samples = samples.len(), "priority fee bid refreshed");
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+    }
+}
+
 fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
     use sol_trade_sdk::swqos::{SwqosType, TradeType};
     use sol_trade_sdk::common::GasFeeStrategyType;
@@ -757,7 +857,7 @@ fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
         TradeType::Buy,
         GasFeeStrategyType::Normal,
         500_000,
-        config.cu_price_micro_lamports as u64,
+        current_cu_price(config) as u64,
         config.tip_sol,
     );
     gas.set(
@@ -765,7 +865,7 @@ fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
         TradeType::Sell,
         GasFeeStrategyType::Normal,
         500_000,
-        config.cu_price_micro_lamports as u64,
+        current_cu_price(config) as u64,
         config.tip_sol,
     );
     gas
@@ -822,8 +922,10 @@ async fn live_buy(
         use_exact_sol_amount: Some(true),
         grpc_recv_us: None,
     };
-    let sent = client.buy(params).await;
-    let (ok, signatures, error, _) = match sent {
+    // Submit with one bounded retry on transient failures (submit-window
+    // timeouts, dropped connections). On-chain rejects are terminal.
+    let attempt = send_buy_with_retry(client, config, params, 1).await;
+    let (ok, signatures, error, _) = match attempt {
         Ok(value) => value,
         Err(error) => {
             // No signature came back, so no transaction can be reconciled.
@@ -843,10 +945,14 @@ async fn live_buy(
         }
     };
     if !ok {
-        store.journal_failed(
-            journal_id,
-            &redact::redact_error(&format!("{error:?}"), &[config.private_key.as_str()]),
-        )?;
+        let text = redact::redact_error(&format!("{error:?}"), &[config.private_key.as_str()]);
+        if text.contains("InstructionError") || text.contains("insufficient") {
+            store.journal_failed(journal_id, &text)?;
+        } else {
+            // Transient: the first submission may still land, so leave the
+            // journal as intended for the reconciler to resolve.
+            store.journal_unknown(journal_id, &format!("submit returned not-ok: {}", clip(&text, 160)))?;
+        }
         bail!("buy failed: {:?}", error);
     }
     let signature = signatures
@@ -862,6 +968,40 @@ async fn live_buy(
     // entry_price stays the market (curve/pool) price so TP/SL multiples
     // measure market movement; cost_lamports carries the all-in real cost.
     Ok((price_sol, token_amount, signature, cost_lamports, journal_id))
+}
+
+/// Submit a buy, retrying up to `retries` times when the failure is clearly
+/// transport-level (no signature, submit window expired). Never retries an
+/// on-chain rejection — that is deterministic and would burn fees.
+async fn send_buy_with_retry(
+    client: &SolanaTrade,
+    config: &LiveConfig,
+    mut params: sol_trade_sdk::TradeBuyParams,
+    retries: u32,
+) -> Result<(bool, Vec<Signature>, Option<TradeError>, Vec<(SwqosType, i64)>)> {
+    let mut last_error: Option<anyhow::Error> = None;
+    for attempt in 0..=retries {
+        if attempt > 0 {
+            // A fresh blockhash for the retry; the old one may be near expiry.
+            let blockhash = match client.infrastructure.rpc.get_latest_blockhash().await {
+                Ok(blockhash) => blockhash,
+                Err(error) => return Err(error.into()),
+            };
+            params.recent_blockhash = Some(blockhash);
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        match client.buy(params.clone()).await {
+            Ok(value) => return Ok(value),
+            Err(error) => {
+                let text = error.to_string();
+                if text.contains("InstructionError") || text.contains("insufficient") {
+                    return Err(error.into());
+                }
+                last_error = Some(error);
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("buy failed")))
 }
 
 async fn live_sell(
@@ -1190,7 +1330,7 @@ async fn reconcile_loop(
 ) {
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(config.reconcile_interval_secs)).await;
-        let orders = match store.unsettled_orders(20_000) {
+        let orders = match store.unsettled_orders(8_000) {
             Ok(orders) => orders,
             Err(error) => {
                 warn!(error = %redact::redact_error(&error.to_string(), &[]), "journal read failed");
@@ -1290,6 +1430,13 @@ async fn reconcile_loop(
                     Ok(Some((true, delta, _))) => {
                         if let Err(error) = store.journal_confirmed(order.id, delta.abs(), order.tokens) {
                             warn!(%error, "journal update failed");
+                        }
+                        if order.side == "sell" {
+                            // Fill rows were written at submit time with 0 proceeds;
+                            // the confirmed lamport delta is the truth.
+                            if let Err(error) = store.apply_fill_proceeds(signature, delta.max(0)) {
+                                warn!(%error, "failed to backfill fill proceeds");
+                            }
                         }
                         if order.side == "buy" {
                             // Fill in the real cost and the real token balance.
@@ -1443,6 +1590,7 @@ async fn main() -> Result<()> {
         Arc::clone(&client),
         Arc::clone(&config),
     ));
+    let _fee_task = tokio::spawn(fee_refresh_loop(Arc::clone(&config)));
     let _reconcile_task = tokio::spawn(reconcile_loop(
         Arc::clone(&store),
         Arc::clone(&config),

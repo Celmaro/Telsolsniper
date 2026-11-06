@@ -85,6 +85,21 @@ struct Resolution {
 async fn resolve(rpc: &SolanaRpcClient, mint: &Pubkey) -> Resolution {
     let started = Instant::now();
 
+    // 0. Canonical PumpSwap pool PDA first: pure local maths, one account read.
+    // This is the same fast path the live engine uses.
+    let canonical = sol_trade_sdk::instruction::utils::pumpswap::get_canonical_pool_pda(mint);
+    if let Ok(params) = PumpSwapParams::from_pool_address_by_rpc(rpc, &canonical).await {
+        let base = params.pool_base_token_reserves as f64;
+        let quote = params.pool_quote_token_reserves as f64 / LAMPORTS_PER_SOL;
+        return Resolution {
+            venue: "pumpswap",
+            price_sol: if base > 0.0 { Some(quote / (base / 1_000_000.0)) } else { None },
+            complete: true,
+            note: format!("pool={canonical}"),
+            resolve_ms: started.elapsed().as_millis(),
+        };
+    }
+
     // 1. Active Pump.fun bonding curve.
     match fetch_bonding_curve_account(rpc, mint).await {
         Ok((curve, _)) => {
@@ -237,6 +252,17 @@ async fn main() -> Result<()> {
 
     let config = Config::from_args()?;
     let rpc = SolanaRpcClient::new(config.rpc_url.clone());
+
+    // --pda: print the canonical PumpSwap pool PDA for each mint (no network).
+    if std::env::args().any(|a| a == "--pda") {
+        for mint_str in &config.mints {
+            if let Ok(mint) = Pubkey::from_str(mint_str) {
+                let pool = sol_trade_sdk::instruction::utils::pumpswap::get_canonical_pool_pda(&mint);
+                println!("{mint_str} -> {pool}");
+            }
+        }
+        return Ok(());
+    }
 
     for mint in &config.mints {
         probe_one(&rpc, &config, mint).await;
