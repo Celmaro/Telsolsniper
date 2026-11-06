@@ -32,6 +32,10 @@ use tracing::{error, info, warn};
 const TOKEN_DECIMALS: f64 = 1_000_000.0; // pump tokens: 6 dp
 const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
+fn clip(text: &str, max: usize) -> String {
+    text.chars().take(max).collect::<String>().replace('\n', " ")
+}
+
 fn now_ms() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -134,6 +138,7 @@ struct LiveTrade {
     tp2_done: bool,
     realized_pnl_sol: f64,
     remaining_tokens: f64,
+    entry_time_unix_ms: i64,
 }
 
 impl LiveStore {
@@ -225,7 +230,8 @@ impl LiveStore {
         let connection = self.connection.lock().unwrap();
         let mut stmt = connection.prepare(
             r#"SELECT id, mint, ticker, source, token_amount, entry_price_sol,
-                      peak_price_sol, tp1_done, tp2_done, realized_pnl_sol, remaining_tokens
+                      peak_price_sol, tp1_done, tp2_done, realized_pnl_sol, remaining_tokens,
+                      entry_time_unix_ms
                FROM live_trades WHERE exit_time_unix_ms IS NULL"#,
         )?;
         let rows = stmt.query_map([], |row| {
@@ -241,6 +247,7 @@ impl LiveStore {
                 tp2_done: row.get::<_, i64>(8)? != 0,
                 realized_pnl_sol: row.get(9)?,
                 remaining_tokens: row.get(10)?,
+                entry_time_unix_ms: row.get(11)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
@@ -376,12 +383,21 @@ impl LiveStore {
     /// True when the entry buy for this mint is confirmed on chain.
     fn entry_confirmed(&self, mint: &str) -> Result<bool> {
         let connection = self.connection.lock().unwrap();
-        let count: i64 = connection.query_row(
+        let buys: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM order_journal WHERE mint = ?1 AND side = 'buy'",
+            [mint],
+            |r| r.get(0),
+        )?;
+        if buys == 0 {
+            // Trade predates the journal: nothing to wait for.
+            return Ok(true);
+        }
+        let confirmed: i64 = connection.query_row(
             "SELECT COUNT(*) FROM order_journal WHERE mint = ?1 AND side = 'buy' AND state = 'confirmed'",
             [mint],
             |r| r.get(0),
         )?;
-        Ok(count > 0)
+        Ok(confirmed > 0)
     }
 
     /// Reconciliation result for an entry: replace the estimate with the
@@ -760,12 +776,19 @@ async fn live_buy(
     let (ok, signatures, error, _) = match sent {
         Ok(value) => value,
         Err(error) => {
-            // The request may still have reached the network: journal it as
-            // unknown rather than failed so reconciliation resolves it.
-            store.journal_unknown(
-                journal_id,
-                &redact::redact_error(&error.to_string(), &[config.private_key.as_str()]),
-            )?;
+            // No signature came back, so no transaction can be reconciled.
+            // Classify: unsupported token-quote venues are terminal for now.
+            let text = redact::redact_error(&error.to_string(), &[config.private_key.as_str()]);
+            let unsupported = text.contains("PumpFunV3Params")
+                || text.contains("PumpFunQuoteRoute")
+                || text.contains("do not match the supplied pool")
+                || text.contains("active non-cashback curve");
+            let note = if unsupported {
+                format!("unsupported venue (token-quote pool): {}", clip(&text, 160))
+            } else {
+                format!("not submitted: {}", clip(&text, 160))
+            };
+            store.journal_failed(journal_id, &note)?;
             return Err(error);
         }
     };
@@ -1118,18 +1141,64 @@ async fn reconcile_loop(
         for order in orders {
             match order.signature.as_deref() {
                 None => {
-                    // Never submitted (crashed before send). A buy intent is
-                    // safe to retire; a sell without a signature is genuinely
-                    // unknown and needs a human.
-                    let note = if order.side == "buy" {
-                        "intent recorded but never submitted"
+                    // No signature. A sell here is genuinely unknown and needs
+                    // a human. A buy may still have landed without returning a
+                    // signature (entry timed out mid-send), so before retiring
+                    // it, check whether tokens actually arrived: if they did,
+                    // adopt the position so exits can close it.
+                    if order.side == "buy" {
+                        if now_ms() - order.created_ms < 45_000 {
+                            continue;
+                        }
+                        let mint = Pubkey::from_str(&order.mint).ok();
+                        let tokens = match mint {
+                            Some(mint) => wallet_token_balance(&config.rpc_url, &mint, &wallet)
+                                .await
+                                .unwrap_or(0.0),
+                            None => 0.0,
+                        };
+                        let already = store.seen(&order.mint).unwrap_or(true);
+                        if tokens > 0.0001 && !already {
+                            let cost = (order.lamports.max(1) as f64) / LAMPORTS_PER_SOL;
+                            let price = cost / tokens;
+                            match store.record_entry(
+                                &order.mint,
+                                None,
+                                "adopted",
+                                price,
+                                cost,
+                                tokens,
+                                "adopted-no-signature",
+                                order.lamports,
+                            ) {
+                                Ok(trade_id) => {
+                                    let _ = store.link_journal_trade(order.id, trade_id);
+                                    let _ = store.journal_confirmed(order.id, order.lamports, tokens);
+                                    warn!(
+                                        mint = %order.mint, tokens, price_sol = price,
+                                        "ADOPTED position: buy landed without a signature — exits enabled"
+                                    );
+                                }
+                                Err(error) => warn!(%error, "failed to adopt position"),
+                            }
+                        } else {
+                            // Keep whatever the submit path already recorded:
+                            // "unsupported venue" is a different bug from "timed out".
+                            let note = match order.error.as_deref() {
+                                Some(previous) if !previous.is_empty() && previous != "None" => {
+                                    format!("{previous} — never submitted (no signature)")
+                                }
+                                _ => "never submitted (no signature)".to_string(),
+                            };
+                            if let Err(error) = store.journal_failed(order.id, &note) {
+                                warn!(%error, "journal update failed");
+                            }
+                        }
+
                     } else {
-                        "no signature recorded; submit status unknown"
-                    };
-                    if let Err(error) = store.journal_unknown(order.id, note) {
-                        warn!(%error, "journal update failed");
-                    }
-                    if order.side == "sell" {
+                        if let Err(error) = store.journal_unknown(order.id, "no signature recorded; submit status unknown") {
+                            warn!(%error, "journal update failed");
+                        }
                         error!(
                             mint = %order.mint,
                             kind = %order.kind,
@@ -1168,15 +1237,17 @@ async fn reconcile_loop(
                         warn!(signature = %signature, mint = %order.mint, error = %text, "journal reconciled failed");
                     }
                     Ok(None) => {
-                        // Not visible yet: stay pending. After 5 minutes the
-                        // cluster has dropped it, so it is genuinely unknown.
-                        if now_ms() - order.created_ms > 300_000 {
-                            if let Err(error) = store.journal_unknown(order.id, "not found after 5m") {
+                        // Not visible yet: stay pending. A blockhash lives ~90s,
+                        // so a signature still unknown after 10 minutes never
+                        // landed — that is terminal, not ambiguous.
+                        if now_ms() - order.created_ms > 600_000 {
+                            let note = "signature not found after 10m: transaction never landed";
+                            if let Err(error) = store.journal_failed(order.id, note) {
                                 warn!(%error, "journal update failed");
                             }
-                            error!(
-                                signature = %signature, mint = %order.mint,
-                                "UNKNOWN order — resolve manually before trusting PnL"
+                            warn!(
+                                signature = %signature, mint = %order.mint, kind = %order.kind,
+                                "order never landed; marked failed"
                             );
                         }
                     }
@@ -1206,6 +1277,42 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
             }
         };
         for trade in trades {
+            // Backstop: a position that never resolves (no price, no balance)
+            // must still be closed so it cannot linger for hours.
+            const STALE_POSITION_MINUTES: i64 = 240;
+            let age_minutes = now_ms().saturating_sub(trade.entry_time_unix_ms) / 60_000;
+            if age_minutes > STALE_POSITION_MINUTES {
+                warn!(mint = %trade.mint, age_minutes, "position exceeded stale limit; force closing");
+                // Try to recover value first: a stale position may still hold
+                // tokens. Only book the exit after the balance is empty.
+                if let Ok(mint) = Pubkey::from_str(&trade.mint) {
+                    let wallet = client.payer.pubkey();
+                    let tokens = wallet_token_balance(&config.rpc_url, &mint, &wallet)
+                        .await
+                        .unwrap_or(0.0);
+                    if tokens > 0.0001 {
+                        match live_sell(&client, &config, &store, trade.id, "stale", mint, tokens, true).await {
+                            Ok(_) => info!(mint = %trade.mint, tokens, "stale position sold"),
+                            Err(error) => {
+                                warn!(
+                                    mint = %trade.mint,
+                                    error = %redact::redact_error(&error.to_string(), &[config.private_key.as_str()]),
+                                    "stale sell failed; booking exit anyway"
+                                );
+                            }
+                        }
+                    }
+                }
+                match store.realized_pnl_sol(trade.id) {
+                    Ok(pnl) => {
+                        if let Err(error) = store.record_exit(trade.id, "stale", pnl) {
+                            warn!(%error, "failed to close stale position");
+                        }
+                    }
+                    Err(error) => warn!(%error, "stale close skipped: pnl unavailable"),
+                }
+                continue;
+            }
             if let Err(error) = poll_live_position(&client, &store, &config, trade).await {
                 warn!(
                     error = %redact::redact_error(&error.to_string(), &[config.private_key.as_str()]),

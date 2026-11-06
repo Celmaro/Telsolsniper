@@ -35,6 +35,7 @@ pub struct JournalOrder {
     pub lamports: i64,
     pub tokens: f64,
     pub created_ms: i64,
+    pub error: Option<String>,
 }
 
 pub fn init(connection: &Connection) -> Result<()> {
@@ -152,12 +153,16 @@ pub fn mark_unknown(connection: &Connection, id: i64, note: &str, now_ms: i64) -
 pub fn unsettled(connection: &Connection, min_age_ms: i64, now_ms: i64) -> Result<Vec<JournalOrder>> {
     let mut stmt = connection.prepare(
         r#"SELECT id, client_order_id, trade_id, mint, side, kind, signature, state,
-                  lamports, tokens, created_ms
+                  lamports, tokens, created_ms, error
            FROM order_journal
-           WHERE state IN (?1, ?2) AND created_ms <= ?3
+           WHERE state IN (?1, ?2, ?4) AND created_ms <= ?3
            ORDER BY id"#,
     )?;
-    let rows = stmt.query_map(params![STATE_INTENDED, STATE_SUBMITTED, now_ms - min_age_ms], |row| {
+    // `unknown` is re-examined too: rules improve, and a signature that has
+    // not landed after ten minutes can be retired truthfully.
+    let rows = stmt.query_map(
+        params![STATE_INTENDED, STATE_SUBMITTED, now_ms - min_age_ms, STATE_UNKNOWN],
+        |row| {
         Ok(JournalOrder {
             id: row.get(0)?,
             client_order_id: row.get(1)?,
@@ -170,15 +175,21 @@ pub fn unsettled(connection: &Connection, min_age_ms: i64, now_ms: i64) -> Resul
             lamports: row.get(8)?,
             tokens: row.get(9)?,
             created_ms: row.get(10)?,
+            error: row.get(11)?,
         })
     })?;
     rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
 }
 
 /// True if any order for this mint is unresolved — its PnL must not be booked.
+/// A mint is blocked only when an order could still land or is unaccounted
+/// for: any unresolved sell, or a buy that carries a signature. A buy intent
+/// with no signature never reached the network and must not block exits.
 pub fn has_unresolved(connection: &Connection, mint: &str) -> Result<bool> {
     let count: i64 = connection.query_row(
-        "SELECT COUNT(*) FROM order_journal WHERE mint = ?1 AND state IN (?2, ?3, ?4)",
+        "SELECT COUNT(*) FROM order_journal
+         WHERE mint = ?1 AND state IN (?2, ?3, ?4)
+           AND (side = 'sell' OR signature IS NOT NULL)",
         params![mint, STATE_INTENDED, STATE_SUBMITTED, STATE_UNKNOWN],
         |row| row.get(0),
     )?;
@@ -215,6 +226,7 @@ pub fn history(connection: &Connection, mint: &str) -> Result<Vec<JournalOrder>>
             lamports: row.get(8)?,
             tokens: row.get(9)?,
             created_ms: row.get(10)?,
+            error: row.get(11)?,
         })
     })?;
     rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
@@ -238,7 +250,8 @@ mod tests {
         let order = &unsettled(&connection, 0, 1_000).unwrap()[0];
         assert_eq!(order.state, STATE_INTENDED);
         assert_eq!(order.lamports, 1_000_000);
-        assert!(has_unresolved(&connection, "mintA").unwrap());
+        // An unsigned buy is visible to the reconciler but cannot block exits.
+        assert!(!has_unresolved(&connection, "mintA").unwrap());
         assert_eq!(id, order.id);
     }
 
@@ -253,12 +266,22 @@ mod tests {
     }
 
     #[test]
-    fn unknown_blocks_settlement() {
+    fn unknown_sell_blocks_settlement_and_stays_visible() {
         let connection = db();
         let id = record_intent(&connection, "c1", Some(7), "mintB", "sell", "stop", 0, 0.0, 0).unwrap();
         mark_unknown(&connection, id, "tx not found", 1).unwrap();
         assert!(has_unresolved(&connection, "mintB").unwrap());
-        assert!(!unsettled(&connection, 0, 10_000).unwrap().iter().any(|o| o.id == id));
+        // unknown rows are re-examined: the reconciler must see them again.
+        assert!(unsettled(&connection, 0, 10_000).unwrap().iter().any(|o| o.id == id));
+    }
+
+    #[test]
+    fn unsigned_buy_intent_does_not_block_exits() {
+        let connection = db();
+        let id = record_intent(&connection, "c9", None, "mintD", "buy", "entry", 1_000_000, 0.0, 0).unwrap();
+        mark_unknown(&connection, id, "timed out before signature", 1).unwrap();
+        // No signature means nothing can land: exits must not be frozen.
+        assert!(!has_unresolved(&connection, "mintD").unwrap());
     }
 
     #[test]
