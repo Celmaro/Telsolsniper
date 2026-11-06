@@ -91,15 +91,23 @@ impl ShadowConfig {
     }
 
     /// Staged ladder must leave a moon bag and escalate.
+    /// SHADOW_TP2_X=0 (or any value <= 0) selects single-TP mode: TP1 fires and
+    /// the whole remainder becomes the moon bag, matching the live engine.
     fn validate(cfg: &Self) -> Result<()> {
-        if cfg.tp2_multiple <= cfg.tp1_multiple {
-            bail!("SHADOW_TP2_X must be greater than SHADOW_TP1_X");
+        let two_tps = cfg.tp2_multiple > 0.0;
+        if !(cfg.tp1_multiple > 1.0) {
+            bail!("SHADOW_TP1_X must be above 1.0");
         }
         if cfg.tp1_fraction <= 0.0 || cfg.tp1_fraction >= 100.0 {
             bail!("SHADOW_TP1_SELL_PCT must be between 0 and 100");
         }
-        if cfg.tp2_fraction <= 0.0 || cfg.tp1_fraction + cfg.tp2_fraction >= 100.0 {
-            bail!("SHADOW_TP1_SELL_PCT + SHADOW_TP2_SELL_PCT must be below 100 (leave a moon bag)");
+        if two_tps {
+            if cfg.tp2_multiple <= cfg.tp1_multiple {
+                bail!("SHADOW_TP2_X must be greater than SHADOW_TP1_X (or 0 for single TP)");
+            }
+            if cfg.tp2_fraction <= 0.0 || cfg.tp1_fraction + cfg.tp2_fraction >= 100.0 {
+                bail!("SHADOW_TP1_SELL_PCT + SHADOW_TP2_SELL_PCT must be below 100 (leave a moon bag)");
+            }
         }
         Ok(())
     }
@@ -628,25 +636,30 @@ fn evaluate_staged_exits(
         let fill_price = config.tp1_multiple * trade.entry_price_sol * (1.0 - LEVEL_FILL_SLIPPAGE);
         fills.push(("tp1", tokens, fill_price.min(curve.price_sol)));
     }
-    if trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
+    if config.tp2_multiple > 0.0 && trade.tp1_done && !trade.tp2_done && multiple >= config.tp2_multiple {
         let tokens = trade.tokens_at_entry() * config.tp2_fraction / 100.0;
         let fill_price = config.tp2_multiple * trade.entry_price_sol * (1.0 - LEVEL_FILL_SLIPPAGE);
         fills.push(("tp2", tokens, fill_price.min(curve.price_sol)));
     }
 
     // Stops are evaluated on what remains after any TPs queued this tick.
-    // Pre-TP1: hard stop. Post-TP1 (config.breakeven_after_tp1): breakeven
-    // dump. Moon bag stage (post-TP2): trailing stop off peak.
+    // Pre-TP1: hard stop. Post-TP1: breakeven (two-TP mode) or trailing off the
+    // peak (single-TP mode, where the remainder is the moon bag).
+    let trailing_stage = if trade.tp1_done {
+        config.tp2_multiple <= 0.0 || trade.tp2_done
+    } else {
+        false
+    };
     let stop_price = if !trade.tp1_done {
         let level = (1.0 - config.initial_stop_pct / 100.0) * trade.entry_price_sol;
         (multiple <= 1.0 - config.initial_stop_pct / 100.0).then_some(level)
-    } else if !trade.tp2_done {
+    } else if config.tp2_multiple > 0.0 && !trade.tp2_done {
         (config.breakeven_after_tp1 && multiple <= 1.0).then_some(trade.entry_price_sol)
-    } else {
+    } else if trailing_stage {
         let level = trade.peak_price_sol * (1.0 - config.moon_trail_pct / 100.0);
-        ((trade.peak_price_sol / trade.entry_price_sol >= config.tp2_multiple)
-            && curve.price_sol <= level)
-            .then_some(level)
+        (curve.price_sol <= level).then_some(level)
+    } else {
+        None
     };
 
     if let Some(level) = stop_price {

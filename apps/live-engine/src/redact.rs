@@ -121,10 +121,10 @@ mod tests {
 
     #[test]
     fn redacts_known_secret_values_everywhere() {
-        let key = "SCRUBBED_PRIVATE_KEY";
+        let key = "TestPrivateKeyDoNotUse1111111111111111111111111111111111111";
         let error = format!("failed to sign with {key}: bad keypair");
         let redacted = redact_error(&error, &[key]);
-        assert!(!redacted.contains("2A8VoKhi"), "leaked: {redacted}");
+        assert!(!redacted.contains("TestPrivateKeyDoNotUse"), "leaked: {redacted}");
         assert!(redacted.contains("[REDACTED]"));
     }
 
