@@ -23,7 +23,7 @@ use sol_trade_sdk::{
         core::params::{DexParamEnum, PumpFunParams, PumpSwapParams},
         factory::DexType,
     },
-    AccountPolicy, BuyAmount, SolanaTrade, TradeTokenType,
+    SolanaTrade, TradeTokenType,
 };
 use sol_trade_sdk::swqos::common::TradeError;
 use sol_trade_sdk::swqos::SwqosType;
@@ -65,11 +65,13 @@ struct LiveConfig {
     private_key: String,
     buy_sol: f64,
     slippage_bps: u64,
+    exit_slippage_bps: u64,
     /// Tip per transaction in SOL. At 0.001 SOL trades a 0.001 tip doubles
     /// the cost — keep it tiny.
     tip_sol: f64,
     cu_price_micro_lamports: u32,
     max_cu_price: u64,
+    cu_limit: u32,
     tp1_multiple: f64,
     tp1_fraction: f64,
     tp2_multiple: f64,
@@ -97,9 +99,16 @@ impl LiveConfig {
             private_key: std::env::var("PRIVATE_KEY").unwrap_or_default(),
             buy_sol,
             slippage_bps: f("LIVE_SLIPPAGE_BPS", "1000").parse()?, // 10%: trench tokens move
+            // Exits must land even in a dump: 40% tolerance is cheaper than a
+            // reverted stop, which realises the full loss plus fees.
+            exit_slippage_bps: f("LIVE_EXIT_SLIPPAGE_BPS", "4000").parse()?,
             tip_sol: f("LIVE_TIP_SOL", "0.00002").parse()?,
             cu_price_micro_lamports: f("LIVE_CU_PRICE", "150000").parse()?,
             max_cu_price: f("LIVE_MAX_CU_PRICE", "2000000").parse()?,
+            // Measured on chain: buys use 78.9k median / 116.9k max CU, sells
+            // 76.1k / 84.9k. Asking for 500k made the priority fee 6x larger
+            // than necessary (75k -> ~19.5k lamports per tx).
+            cu_limit: f("LIVE_CU_LIMIT", "130000").parse()?,
             tp1_multiple: f("LIVE_TP1_X", "1.1").parse()?,
             tp1_fraction: f("LIVE_TP1_SELL_PCT", "40").parse()?,
             tp2_multiple: f("LIVE_TP2_X", "1.5").parse()?,
@@ -856,7 +865,7 @@ fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
         SwqosType::Default,
         TradeType::Buy,
         GasFeeStrategyType::Normal,
-        500_000,
+        config.cu_limit,
         current_cu_price(config) as u64,
         config.tip_sol,
     );
@@ -864,7 +873,7 @@ fn build_gas(config: &LiveConfig) -> GasFeeStrategy {
         SwqosType::Default,
         TradeType::Sell,
         GasFeeStrategyType::Normal,
-        500_000,
+        config.cu_limit,
         current_cu_price(config) as u64,
         config.tip_sol,
     );
@@ -893,7 +902,7 @@ async fn live_buy(
         lamports as i64,
         0.0,
     )?;
-    let blockhash = client.infrastructure.rpc.get_latest_blockhash().await?;
+    let blockhash = cached_blockhash(client).await?;
     let gas = build_gas(config);
 
     let params = sol_trade_sdk::TradeBuyParams {
@@ -975,7 +984,7 @@ async fn live_buy(
 /// on-chain rejection — that is deterministic and would burn fees.
 async fn send_buy_with_retry(
     client: &SolanaTrade,
-    config: &LiveConfig,
+    _config: &LiveConfig,
     mut params: sol_trade_sdk::TradeBuyParams,
     retries: u32,
 ) -> Result<(bool, Vec<Signature>, Option<TradeError>, Vec<(SwqosType, i64)>)> {
@@ -1004,6 +1013,102 @@ async fn send_buy_with_retry(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("buy failed")))
 }
 
+/// Cached recent blockhash. A blockhash costs one RPC round trip (~20-40ms) and
+/// stays valid ~60s, so the hot path reads a value that a background task keeps
+/// fresh instead of paying for it inside the entry/exit window.
+static BLOCKHASH: std::sync::OnceLock<parking_lot_shim::RwLock<(Option<solana_sdk::hash::Hash>, i64)>> =
+    std::sync::OnceLock::new();
+
+mod parking_lot_shim {
+    // Minimal replacement so we avoid a new dependency.
+    pub struct RwLock<T>(std::sync::RwLock<T>);
+    impl<T> RwLock<T> {
+        pub fn new(value: T) -> Self {
+            Self(std::sync::RwLock::new(value))
+        }
+        pub fn read(&self) -> std::sync::RwLockReadGuard<'_, T> {
+            self.0.read().unwrap_or_else(|e| e.into_inner())
+        }
+        pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, T> {
+            self.0.write().unwrap_or_else(|e| e.into_inner())
+        }
+    }
+}
+
+fn blockhash_store() -> &'static parking_lot_shim::RwLock<(Option<solana_sdk::hash::Hash>, i64)> {
+    BLOCKHASH.get_or_init(|| parking_lot_shim::RwLock::new((None, 0)))
+}
+
+/// Fresh enough to submit: 10s keeps it well inside the ~60s validity window.
+async fn cached_blockhash(client: &SolanaTrade) -> Result<solana_sdk::hash::Hash> {
+    {
+        let guard = blockhash_store().read();
+        if let (Some(hash), at) = *guard {
+            if now_ms() - at < 10_000 {
+                return Ok(hash);
+            }
+        }
+    }
+    let hash = client.infrastructure.rpc.get_latest_blockhash().await?;
+    *blockhash_store().write() = (Some(hash), now_ms());
+    Ok(hash)
+}
+
+async fn blockhash_refresh_loop(client: Arc<SolanaTrade>) {
+    loop {
+        match client.infrastructure.rpc.get_latest_blockhash().await {
+            Ok(hash) => *blockhash_store().write() = (Some(hash), now_ms()),
+            Err(error) => tracing::debug!(
+                error = %redact::redact_error(&error.to_string(), &[]),
+                "blockhash refresh failed"
+            ),
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+    }
+}
+
+async fn send_sell_with_retry(
+    client: &SolanaTrade,
+    mut params: sol_trade_sdk::TradeSellParams,
+    retries: u32,
+) -> Result<(bool, Vec<Signature>, Option<TradeError>, Vec<(SwqosType, i64)>)> {
+    let mut last_error: Option<anyhow::Error> = None;
+    for attempt in 0..=retries {
+        if attempt > 0 {
+            params.recent_blockhash = Some(cached_blockhash(client).await?);
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        }
+        match client.sell(params.clone()).await {
+            Ok(value) => {
+                // A transport timeout ("No SWQOS result within submit result
+                // window") can still have landed; only a returned not-ok with
+                // an instruction error is terminal.
+                let (ok, _, ref error, _) = value;
+                let terminal = error
+                    .as_ref()
+                    .map(|e| {
+                        let text = format!("{e:?}");
+                        text.contains("InstructionError") || text.contains("insufficient")
+                    })
+                    .unwrap_or(false);
+                if ok || terminal || attempt == retries {
+                    return Ok(value);
+                }
+                let text = format!("{error:?}");
+                last_error = Some(anyhow::anyhow!("{text}"));
+            }
+            Err(error) => {
+                let text = error.to_string();
+                if text.contains("InstructionError") || text.contains("insufficient") {
+                    return Err(error.into());
+                }
+                last_error = Some(error.into());
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("sell failed")))
+}
+
 async fn live_sell(
     client: &SolanaTrade,
     config: &LiveConfig,
@@ -1026,15 +1131,19 @@ async fn live_sell(
         0,
         token_amount,
     )?;
-    let blockhash = client.infrastructure.rpc.get_latest_blockhash().await?;
+    let blockhash = cached_blockhash(client).await?;
     let gas = build_gas(config);
+
+    // Exits prioritise landing over price: a stop that reverts because the
+    // price gapped past 10% slippage is a total loss, not a save.
+    let exit_slippage = config.exit_slippage_bps.max(config.slippage_bps);
 
     let params = sol_trade_sdk::TradeSellParams {
         dex_type,
         output_token_type: TradeTokenType::SOL,
         mint,
         input_token_amount: raw_amount,
-        slippage_basis_points: Some(config.slippage_bps),
+        slippage_basis_points: Some(exit_slippage),
         recent_blockhash: Some(blockhash),
         extension_params,
         address_lookup_table_accounts: Vec::new(),
@@ -1055,22 +1164,38 @@ async fn live_sell(
         simulate: false,
         grpc_recv_us: None,
     };
-    let sent = client.sell(params).await;
+    let sent = send_sell_with_retry(client, params.clone(), 1).await;
     let (ok, signatures, error, _) = match sent {
         Ok(value) => value,
         Err(error) => {
-            store.journal_unknown(
-                journal_id,
-                &redact::redact_error(&error.to_string(), &[config.private_key.as_str()]),
-            )?;
+            let text = redact::redact_error(&error.to_string(), &[config.private_key.as_str()]);
+            store.journal_unknown(journal_id, &text)?;
             return Err(error);
         }
     };
     if !ok {
-        store.journal_failed(
-            journal_id,
-            &redact::redact_error(&format!("{error:?}"), &[config.private_key.as_str()]),
-        )?;
+        let text = redact::redact_error(&format!("{error:?}"), &[config.private_key.as_str()]);
+        // SPL Token 11 = NonNativeHasBalance: the ATA still held dust, so
+        // close_mint_token_ata made the whole sell revert. Retry the same
+        // amount without the close — landing the exit matters more than rent.
+        let dust_close = text.contains("Custom\":11") || text.contains("Custom\": 11");
+        if dust_close && close_ata {
+            let mut retry_params = params.clone();
+            retry_params.close_mint_token_ata = false;
+            if let Ok((ok2, sigs2, err2, _)) = send_sell_with_retry(client, retry_params, 0).await {
+                if ok2 {
+                    if let Some(sig) = sigs2.first() {
+                        store.journal_submitted(journal_id, &sig.to_string())?;
+                        warn!(mint = %mint.to_string(), "sell landed without ATA close (dust left; rent forfeited)");
+                        return Ok((price_sol, sig.to_string(), 0));
+                    }
+                }
+                let text2 = redact::redact_error(&format!("{err2:?}"), &[config.private_key.as_str()]);
+                store.journal_failed(journal_id, &text2)?;
+                bail!("sell failed after dust retry: {text2}");
+            }
+        }
+        store.journal_failed(journal_id, &text)?;
         bail!("sell failed: {:?}", error);
     }
     let signature = signatures
@@ -1323,6 +1448,41 @@ async fn tx_outcome(
 
 /// Reconciliation: resolve journal orders that never reported a final state.
 /// Runs independently of trading so a stuck order cannot block entries.
+async fn signature_status_batch(
+    rpc_url: &str,
+    signatures: &[String],
+) -> Result<std::collections::HashMap<String, Option<(bool, Option<String>)>>> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "getSignatureStatuses",
+        "params": [signatures, {"searchTransactionHistory": true}]
+    });
+    let value: serde_json::Value = reqwest::Client::new()
+        .post(rpc_url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(4))
+        .send()
+        .await?
+        .json()
+        .await?;
+    let values = value["result"]["value"]
+        .as_array()
+        .context("signature status response missing value")?;
+    let mut result = std::collections::HashMap::new();
+    for (signature, status) in signatures.iter().zip(values) {
+        if status.is_null() {
+            result.insert(signature.clone(), None);
+        } else {
+            let err = if status["err"].is_null() {
+                None
+            } else {
+                Some(status["err"].to_string())
+            };
+            result.insert(signature.clone(), Some((err.is_none(), err)));
+        }
+    }
+    Ok(result)
+}
+
 async fn reconcile_loop(
     store: Arc<LiveStore>,
     config: Arc<LiveConfig>,
@@ -1358,7 +1518,27 @@ async fn reconcile_loop(
             }
         }
 
-        for order in orders {
+        // Batch lookup of all outstanding signatures in ONE RPC call, instead
+        // of one getTransaction per order. Most rows are not confirmed yet, so
+        // a single status check resolves them without fetching full txs.
+        let signed: Vec<(usize, String)> = orders
+            .iter()
+            .enumerate()
+            .filter_map(|(i, o)| o.signature.clone().map(|s| (i, s)))
+            .collect();
+        let statuses: std::collections::HashMap<String, Option<(bool, Option<String>)>> =
+            if signed.is_empty() {
+                std::collections::HashMap::new()
+            } else {
+                signature_status_batch(
+                    &config.rpc_url,
+                    signed.iter().map(|(_, s)| s.clone()).collect::<Vec<_>>().as_slice(),
+                )
+                .await
+                .unwrap_or_default()
+            };
+
+        for order in orders.iter() {
             match order.signature.as_deref() {
                 None => {
                     // No signature. A sell here is genuinely unknown and needs
@@ -1426,7 +1606,34 @@ async fn reconcile_loop(
                         );
                     }
                 }
-                Some(signature) => match tx_outcome(&config.rpc_url, signature, &wallet).await {
+                Some(signature) => {
+                    // Cheap path first: the batch already told us the state.
+                    let known = statuses.get(signature).cloned().flatten();
+                    if let Some((false, Some(error_text))) = known {
+                        let text = redact::redact_error(&error_text, &[config.private_key.as_str()]);
+                        if let Err(error) = store.journal_failed(order.id, &text) {
+                            warn!(%error, "journal update failed");
+                        }
+                        warn!(signature = %signature, mint = %order.mint, error = %text, "journal reconciled failed");
+                        continue;
+                    }
+                    if known.is_none() {
+                        // Not visible yet: stay pending. A blockhash lives ~90s,
+                        // so a signature still unknown after 10 minutes never
+                        // landed — that is terminal, not ambiguous.
+                        if now_ms() - order.created_ms > 600_000 {
+                            let note = "signature not found after 10m: transaction never landed";
+                            if let Err(error) = store.journal_failed(order.id, note) {
+                                warn!(%error, "journal update failed");
+                            }
+                            warn!(
+                                signature = %signature, mint = %order.mint, kind = %order.kind,
+                                "order never landed; marked failed"
+                            );
+                        }
+                        continue;
+                    }
+                    match tx_outcome(&config.rpc_url, signature, &wallet).await {
                     Ok(Some((true, delta, _))) => {
                         if let Err(error) = store.journal_confirmed(order.id, delta.abs(), order.tokens) {
                             warn!(%error, "journal update failed");
@@ -1482,7 +1689,8 @@ async fn reconcile_loop(
                         error = %redact::redact_error(&error.to_string(), &[]),
                         "reconcile RPC error"
                     ),
-                },
+                    }
+                }
             }
         }
     }
@@ -1591,6 +1799,7 @@ async fn main() -> Result<()> {
         Arc::clone(&config),
     ));
     let _fee_task = tokio::spawn(fee_refresh_loop(Arc::clone(&config)));
+    let _hash_task = tokio::spawn(blockhash_refresh_loop(Arc::clone(&client)));
     let _reconcile_task = tokio::spawn(reconcile_loop(
         Arc::clone(&store),
         Arc::clone(&config),
