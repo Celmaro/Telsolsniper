@@ -72,6 +72,10 @@ struct LiveConfig {
     cu_price_micro_lamports: u32,
     max_cu_price: u64,
     cu_limit: u32,
+    /// Exit near entry if TP1 has not fired within this many seconds (0 = off).
+    time_stop_secs: u64,
+    /// The time-stop only fires below this multiple; above it, let the ladder run.
+    time_stop_min_x: f64,
     tp1_multiple: f64,
     tp1_fraction: f64,
     tp2_multiple: f64,
@@ -109,6 +113,10 @@ impl LiveConfig {
             // 76.1k / 84.9k. Asking for 500k made the priority fee 6x larger
             // than necessary (75k -> ~19.5k lamports per tx).
             cu_limit: f("LIVE_CU_LIMIT", "130000").parse()?,
+            // Measured on 71 live trades: 68% never reach TP1. Sitting in them
+            // until the -15% stop is the biggest single leak.
+            time_stop_secs: f("LIVE_TIME_STOP_SECS", "90").parse()?,
+            time_stop_min_x: f("LIVE_TIME_STOP_MIN_X", "1.2").parse()?,
             tp1_multiple: f("LIVE_TP1_X", "1.1").parse()?,
             tp1_fraction: f("LIVE_TP1_SELL_PCT", "40").parse()?,
             tp2_multiple: f("LIVE_TP2_X", "1.5").parse()?,
@@ -1338,17 +1346,32 @@ async fn poll_live_position(
     } else {
         false
     };
-    let stop_hit = if !trade.tp1_done {
-        multiple <= 1.0 - config.initial_stop_pct / 100.0
-    } else if config.tp2_multiple > 0.0 && !trade.tp2_done {
-        config.breakeven_after_tp1 && multiple <= 1.0
-    } else if trailing_enabled {
-        price <= peak * (1.0 - config.moon_trail_pct / 100.0)
-    } else {
-        false
-    };
+    // Time-stop: 68% of these signals never reach TP1 and just bleed to the
+    // stop. If TP1 is not hit within the window, exit near entry and free the
+    // slot. Measured: worth +64% expectancy (expectancy_real.py ladder E).
+    let timed_out = !trade.tp1_done
+        && config.time_stop_secs > 0
+        && (now_ms() - trade.entry_time_unix_ms) / 1000 >= config.time_stop_secs as i64
+        && multiple < config.time_stop_min_x;
+
+    let stop_hit = timed_out
+        || if !trade.tp1_done {
+            multiple <= 1.0 - config.initial_stop_pct / 100.0
+        } else if config.tp2_multiple > 0.0 && !trade.tp2_done {
+            config.breakeven_after_tp1 && multiple <= 1.0
+        } else if trailing_enabled {
+            price <= peak * (1.0 - config.moon_trail_pct / 100.0)
+        } else {
+            false
+        };
     if stop_hit && tokens_now > 1.0 {
-        let kind = if trade.tp1_done { "moon_bag" } else { "stop" };
+        let kind = if timed_out {
+            "time_stop"
+        } else if trade.tp1_done {
+            "moon_bag"
+        } else {
+            "stop"
+        };
         match live_sell(client, config, store, trade.id, kind, mint, tokens_now, true).await {
             Ok((fill_price, sig, proceeds_lamports)) => {
                 store.record_fill(trade.id, kind, fill_price / trade.entry_price_sol, fill_price, tokens_now, proceeds_lamports, Some(&sig))?;
