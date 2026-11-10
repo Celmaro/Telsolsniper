@@ -150,7 +150,17 @@ async function main(): Promise<void> {
         linkUrls
       );
       const maxMints = config.maxMintsPerMessage;
-      const signals = parseable.slice(0, maxMints);
+      const kind = parseable[0]?.kind ?? "other";
+      // Only an entry post announces a token the channel is calling now.
+      // Follow-ups, victory laps and leaderboard recaps reference positions
+      // already called: buying those means buying after the move.
+      const tradeable = config.tradeKinds.has(kind);
+      const signals = tradeable ? parseable.slice(0, maxMints) : [];
+      if (parseable.length > 0 && !tradeable) {
+        console.info(
+          `not an entry post source=${channel} message=${message.id} kind=${kind} mints=${parseable.length}`
+        );
+      }
       if (parseable.length > maxMints) {
         console.info(
           `capped source=${channel} message=${message.id} announced=${parseable.length} taking=${maxMints}`

@@ -233,7 +233,10 @@ pub const BUY_EXACT_QUOTE_IN_DISCRIMINATOR: [u8; 8] = [198, 46, 21, 82, 180, 217
 pub const SELL_DISCRIMINATOR: [u8; 8] = [51, 230, 133, 164, 1, 127, 131, 173];
 
 const PUMPSWAP_GLOBAL_CONFIG_TTL: Duration = Duration::from_secs(90);
-const PUMPSWAP_GLOBAL_CONFIG_RPC_TIMEOUT: Duration = Duration::from_millis(180);
+// Warm-up runs in a background task, never on the trade hot path, so this
+// can be generous. At 180ms a public RPC timed out ~5x/hour; each failure
+// logged a warning and threw away a perfectly good cached value.
+const PUMPSWAP_GLOBAL_CONFIG_RPC_TIMEOUT: Duration = Duration::from_millis(1_500);
 const PUMPSWAP_FEE_CONFIG_TTL: Duration = Duration::from_secs(300);
 const PUMPSWAP_FEE_CONFIG_RPC_TIMEOUT: Duration = Duration::from_millis(180);
 
@@ -509,21 +512,18 @@ pub async fn warm_pumpswap_global_config(rpc: Option<&Arc<SolanaRpcClient>>) {
 }
 
 fn cached_global_config() -> Option<GlobalConfig> {
+    // Prefer a fresh value, but fall back to a stale one rather than None:
+    // PumpSwap's global fee rates change rarely, and returning None makes the
+    // caller use hard-coded legacy defaults, which are strictly less accurate
+    // than a value we actually read from chain.
     let guard = GLOBAL_CONFIG_CACHE.read();
-    let cached = guard.as_ref()?;
-    let config =
-        (cached.fetched_at.elapsed() <= PUMPSWAP_GLOBAL_CONFIG_TTL).then(|| cached.config.clone());
-    drop(guard);
-    config
+    guard.as_ref().map(|cached| cached.config.clone())
 }
 
 fn cached_fee_config() -> Option<PumpSwapFeeConfig> {
+    // Stale beats absent — see cached_global_config.
     let guard = FEE_CONFIG_CACHE.read();
-    let cached = guard.as_ref()?;
-    let config =
-        (cached.fetched_at.elapsed() <= PUMPSWAP_FEE_CONFIG_TTL).then(|| cached.config.clone());
-    drop(guard);
-    config
+    guard.as_ref().map(|cached| cached.config.clone())
 }
 
 pub async fn fetch_fee_config(rpc: &SolanaRpcClient) -> Option<PumpSwapFeeConfig> {

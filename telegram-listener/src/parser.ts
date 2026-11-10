@@ -8,6 +8,45 @@ export interface ParsedTelegramSignal {
   messageText: string;
   telegramDateUnixMs: number | null;
   receivedAtUnixMs: number;
+  /** What kind of post this is, so the engines only trade real entries. */
+  kind: SignalKind;
+}
+
+/**
+ * Post types observed on the three channels.
+ *
+ * Only `entry` announces a token the channel is calling *now*. The rest are
+ * commentary on positions it already called: follow-ups ("Another Whale
+ * Aped $COGE"), victory laps ("TIRED is up 2X" — buying that means buying the
+ * top), and leaderboard recaps. Buying anything but `entry` is a bug.
+ */
+export type SignalKind =
+  | "entry"
+  | "followup"
+  | "victory_lap"
+  | "leaderboard"
+  | "recap"
+  | "other";
+
+const RECAP_PATTERN = /24hr?\s+.*Trending\s+Stats|\d+hr\s+.*Stats|Stats\s*💰|📊\s*Stats/i;
+const LEADERBOARD_PATTERN = /Top\s+(?:Whale|Trench|Early)\s+Trending|🏆\s*Top\s+Trending/i;
+const VICTORY_PATTERN =
+  /is\s+up\s+\d|from\s+⚡|from\s+.*Entry\s+Signal|📈.*is\s+up|💸💸/i;
+const FOLLOWUP_PATTERN =
+  /Another\s+Whale\s+Aped|Whale\s+Accumulating|Accumulating|Still\s+Holding|Whale\s+Added|Whale\s+Bought\s+More|Adding\s+More/i;
+const ENTRY_PATTERN =
+  /New\s+Whale\s+Buy|New\s+Trending|New\s+Early|New\s+Token|New\s+Buy|New\s+Signal|Entry\s+Signal|Just\s+Launched|Fresh\s+Launch|New\s+Gem|New\s+Call/i;
+
+/** Classify a channel post. Order matters: leaderboard and victory laps also
+ * contain words like "Trending"/"Entry Signal". */
+export function classifySignal(messageText: string): SignalKind {
+  const text = messageText ?? "";
+  if (RECAP_PATTERN.test(text)) return "recap";
+  if (LEADERBOARD_PATTERN.test(text)) return "leaderboard";
+  if (VICTORY_PATTERN.test(text)) return "victory_lap";
+  if (FOLLOWUP_PATTERN.test(text)) return "followup";
+  if (ENTRY_PATTERN.test(text)) return "entry";
+  return "other";
 }
 
 const BASE58_ADDRESS = /(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{32,44}(?![1-9A-HJ-NP-Za-km-z])/g;
@@ -96,6 +135,62 @@ function extractTicker(messageText: string): string | null {
  * Returns one entry per unique mint, in discovery order (text first, then
  * button links).
  */
+/**
+ * Rank announced mints by how strongly the post points at them.
+ *
+ * A post can carry links to more than one token: the channel's own bot links
+ * (buy/track/scan) all reference the announced token, while an incidental
+ * `pump.fun/coin/...` link can reference something else entirely (a related
+ * ad, an embed). Taking the first mint seen picked the wrong token in the
+ * Chrome-Chan capture: it resolved `CyvQzpKz…` from a single pump.fun link
+ * while `Fzjm4mx…` appeared in every bot action link.
+ *
+ * So: the channel's own `start=` deep links vote strongest, launchpad/explorer
+ * links vote weakly, and bare base58 in text votes weakest.
+ */
+const BOT_LINK_PATTERN = /[?&]start=(?:[A-Za-z0-9]+_)+([1-9A-HJ-NP-Za-km-z]{32,44})|[?&]start=([1-9A-HJ-NP-Za-km-z]{32,44})(?:[-_][A-Za-z0-9]*)?/i;
+
+function mintWeightsFromUrls(urls: string[]): Map<string, number> {
+  const scores = new Map<string, number>();
+  const bump = (mint: string, weight: number): void => {
+    if (!isSolanaPublicKey(mint)) return;
+    scores.set(mint, (scores.get(mint) ?? 0) + weight);
+  };
+
+  for (const url of urls) {
+    let matched = false;
+    for (const match of url.matchAll(new RegExp(BOT_LINK_PATTERN.source, "gi"))) {
+      const mint = match[1] ?? match[2];
+      if (mint) {
+        bump(mint, 3); // channel's own action link — strongest signal
+        matched = true;
+      }
+    }
+    if (matched) continue;
+    for (const pattern of MINT_URL_PATTERNS) {
+      for (const match of url.matchAll(new RegExp(pattern.source, "gi"))) {
+        const mint = match[1];
+        if (mint) bump(mint, 1);
+      }
+    }
+  }
+  return scores;
+}
+
+/** Merge mint sources into one ranking: highest total weight first, ties keep
+ * first-seen order. */
+function rankMints(
+  scores: Map<string, number>,
+  orderedMints: string[]
+): string[] {
+  const rank = (mint: string): number => scores.get(mint) ?? 0;
+  return [...new Set(orderedMints)].sort((left, right) => {
+    const diff = rank(right) - rank(left);
+    if (diff !== 0) return diff;
+    return orderedMints.indexOf(left) - orderedMints.indexOf(right);
+  });
+}
+
 export function parseTelegramSignals(
   source: string,
   messageId: number,
@@ -110,11 +205,17 @@ export function parseTelegramSignals(
     return [];
   }
 
-  const mints = extractMintsFromText(normalizedText);
-  for (const mint of extractMintsFromUrls(buttonUrls)) {
-    if (!mints.includes(mint)) mints.push(mint);
+  const textMints = extractMintsFromText(normalizedText);
+  const urlMints = extractMintsFromUrls(buttonUrls);
+  const ordered = [...textMints, ...urlMints];
+  if (ordered.length === 0) return [];
+
+  // Weight by strength of evidence, then de-duplicate.
+  const scores = mintWeightsFromUrls(buttonUrls);
+  for (const mint of textMints) {
+    scores.set(mint, Math.max(scores.get(mint) ?? 0, 1));
   }
-  if (mints.length === 0) return [];
+  const mints = rankMints(scores, ordered);
 
   const ticker = extractTicker(normalizedText);
   const telegramDateUnixMs =
@@ -122,6 +223,7 @@ export function parseTelegramSignals(
       ? telegramDateUnixSeconds * 1000
       : null;
   const receivedAtUnixMs = Date.now();
+  const kind = classifySignal(normalizedText);
 
   return mints.map((mint) => ({
     source: normalizedSource,
@@ -131,6 +233,7 @@ export function parseTelegramSignals(
     messageText: normalizedText.slice(0, 8192),
     telegramDateUnixMs,
     receivedAtUnixMs,
+    kind,
   }));
 }
 

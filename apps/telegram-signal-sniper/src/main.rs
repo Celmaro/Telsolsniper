@@ -67,6 +67,15 @@ struct TelegramSignal {
     message_text: String,
     telegram_date_unix_ms: Option<i64>,
     received_at_unix_ms: i64,
+    /// What kind of post this is ("entry", "followup", "victory_lap",
+    /// "leaderboard", "other"). Older listeners omit it; default to entry so
+    /// existing deployments keep working.
+    #[serde(default = "default_signal_kind")]
+    kind: String,
+}
+
+fn default_signal_kind() -> String {
+    "entry".to_string()
 }
 
 impl TelegramSignal {
@@ -317,6 +326,11 @@ fn validate_signal(mut signal: TelegramSignal, config: &Config) -> Result<Telegr
     Ok(signal)
 }
 
+/// Only a post that announces a token *now* may trigger a buy.
+fn is_tradeable_kind(kind: &str) -> bool {
+    matches!(kind.trim().to_ascii_lowercase().as_str(), "entry")
+}
+
 async fn handle_connection(
     stream: UnixStream,
     store: Arc<SignalStore>,
@@ -352,6 +366,20 @@ async fn handle_connection(
                 continue;
             }
         };
+
+        // Defence in depth: the listener already filters non-entry posts, but
+        // the intake is the last gate before a buy. Never broadcast a mint
+        // that came from a victory lap, follow-up or leaderboard recap.
+        if !is_tradeable_kind(&signal.kind) {
+            info!(
+                source = %signal.source,
+                message_id = signal.message_id,
+                kind = %signal.kind,
+                mint = %signal.mint,
+                "non-entry post; recorded without broadcasting"
+            );
+            continue;
+        }
 
         match store.ingest(&signal) {
             Ok(IngestOutcome::NewMint) => {

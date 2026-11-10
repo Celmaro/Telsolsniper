@@ -6,6 +6,8 @@ export interface ListenerConfig {
   socketPath: string;
   /** Max mints to act on from a single post (list posts announce several). */
   maxMintsPerMessage: number;
+  /** Post kinds allowed to trigger a buy (entry, followup, ...). */
+  tradeKinds: Set<string>;
 }
 
 function required(name: string): string {
@@ -38,6 +40,14 @@ export function loadConfig(): ListenerConfig {
     sessionFile: process.env.TELEGRAM_SESSION_FILE ?? "./data/telegram.session",
     channels: [...new Set(channels)],
     socketPath: process.env.SIGNAL_SOCKET_PATH ?? "/tmp/telsolsniper.sock",
-    maxMintsPerMessage: Number(process.env.SIGNAL_MAX_MINTS_PER_MESSAGE ?? "1")
+    maxMintsPerMessage: Number(process.env.SIGNAL_MAX_MINTS_PER_MESSAGE ?? "1"),
+    // Which post types may trigger a buy. Default: entry posts only.
+    // Comma-separated so a follow-up can be opted into without a code change.
+    tradeKinds: new Set(
+      (process.env.SIGNAL_TRADE_KINDS ?? "entry")
+        .split(",")
+        .map((kind) => kind.trim().toLowerCase())
+        .filter(Boolean)
+    ),
   };
 }

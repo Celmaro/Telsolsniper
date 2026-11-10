@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { parseTelegramSignal, parseTelegramSignals } from "./parser.js";
+import { parseTelegramSignal, parseTelegramSignals, classifySignal } from "./parser.js";
 
 const MINT = "So11111111111111111111111111111111111111112";
 
@@ -183,7 +183,7 @@ test("hidden-link bot prefixes beyond tts_ resolve to the mint", () => {
       [`https://telegram.me/soul_scanner_bot?start=${prefix}_${mint}-abc123`]
     );
     assert.equal(signals.length, 1, `prefix ${prefix} should resolve`);
-    assert.equal(signals[0].mint, mint);
+    assert.equal(signals[0]!.mint, mint);
   }
 });
 
@@ -197,7 +197,7 @@ test("bare ?start=<mint> deep links resolve", () => {
     [`https://t.me/soul_scanner_bot?start=${mint}`]
   );
   assert.equal(signals.length, 1);
-  assert.equal(signals[0].mint, mint);
+  assert.equal(signals[0]!.mint, mint);
 });
 
 test("leaderboard post announces every mint in order", () => {
@@ -217,5 +217,73 @@ test("leaderboard post announces every mint in order", () => {
     signals.map((signal) => signal.mint),
     [first, second]
   );
-  assert.equal(signals[0].ticker, "HIGH");
+  assert.equal(signals[0]!.ticker, "HIGH");
+});
+
+test("classifies entry vs victory lap vs leaderboard vs follow-up", () => {
+  assert.equal(
+    classifySignal("🔥 \u200eTHE WLFI Files New Whale Buy!\n🐳 Wallet: 195 SOL"),
+    "entry"
+  );
+  assert.equal(
+    classifySignal("🌊🐳 Another Whale Aped \u200e$TIRED!\n🐳 Wallet: 194 SOL"),
+    "followup"
+  );
+  assert.equal(
+    classifySignal("📈 \u200eTIRED is up 2X 📈\nfrom ⚡️ Entry Signal\n\n$90.7K —> $182K 💵"),
+    "victory_lap"
+  );
+  assert.equal(
+    classifySignal("🏆 Top Whale Trending 🐳\n\n🥇 \u200eDessa | $\u200eDESSA • \u200e301X [X]"),
+    "leaderboard"
+  );
+});
+
+test("24hr stats posts are recaps, not entries", () => {
+  for (const text of [
+    "💰 24hr Trench Trending Stats 💰",
+    "💰 24hr Whale Trending Stats 💰",
+  ]) {
+    assert.equal(classifySignal(text), "recap", text);
+  }
+});
+
+test("victory laps are never classified as entries", () => {
+  // "Entry Signal" appears in the victory-lap template, so ordering matters.
+  for (const text of [
+    "📈 \u200eCOGE is up 54% 📈\nfrom ⚡️ Entry Signal",
+    "📈 \u200eTIRED is up 50% 📈\nfrom ⚡️ Entry Signal\n\n$90.7K —> $137K 💵",
+  ]) {
+    assert.equal(classifySignal(text), "victory_lap", text);
+  }
+});
+
+test("multi-token post prefers the mint in the channel's own bot links", () => {
+  // Real capture: solearlytrending message 484519 (Chrome-Chan). The post
+  // carried one pump.fun link for an unrelated coin and four bot action links
+  // for the announced token. Taking the first mint seen bought the wrong coin.
+  const announced = "Fzjm4mxAPbTqxYdTrgRisbXVRPZcG9oeFzCzDxiQpump";
+  const unrelated = "CyvQzpKzVGnF4wPGsf9Q8cvWLCfsMLL6Hykp6RwMpump";
+  const text = "🔥 \u200eChrome-Chan New Trending\n🕒 Age: 2m | Security: 🚨";
+  const links = [
+    `https://telegram.me/Soul_Sniper_Bot?start=15_etb_${announced}`,
+    `https://pump.fun/coin/${unrelated}`,
+    `https://soulterminal.ai/token/${announced}`,
+    `https://telegram.me/soul_scanner_bot?start=fakevol_${announced}`,
+    `https://telegram.me/Soul_Sniper_Bot?start=ett_track_${announced}`,
+  ];
+  const parsed = parseTelegramSignals("solearlytrending", 484519, text, 1, links);
+  assert.equal(parsed[0]?.mint, announced, "must buy the announced token, not the side link");
+  assert.ok(parsed.some((entry) => entry.mint === unrelated), "other mints are still reported");
+});
+
+test("every parsed signal carries its kind", () => {
+  const mint = "Fzjm4mxAPbTqxYdTrgRisbXVRPZcG9oeFzCzDxiQpump";
+  const parsed = parseTelegramSignals(
+    "solwhaletrending",
+    1,
+    `🔥 New Whale Buy!\n💸 2 SOL \u200e$ABC\nhttps://pump.fun/coin/${mint}`,
+    1
+  );
+  assert.equal(parsed[0]?.kind, "entry");
 });
