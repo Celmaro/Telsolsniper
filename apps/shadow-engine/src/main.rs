@@ -47,6 +47,10 @@ struct ShadowConfig {
     tp2_fraction: f64,
     moon_trail_pct: f64,
     initial_stop_pct: f64,
+    /// Exit near entry if TP1 has not fired within this many seconds (0 = off).
+    time_stop_secs: u64,
+    /// Time-stop only fires below this multiple; above it the ladder runs.
+    time_stop_min_x: f64,
     breakeven_after_tp1: bool,
     max_hold_secs: u64,
     poll_interval_secs: u64,
@@ -80,6 +84,8 @@ impl ShadowConfig {
             tp2_fraction: f("SHADOW_TP2_SELL_PCT", "40").parse()?,
             moon_trail_pct: f("SHADOW_MOON_TRAIL_PCT", "35").parse()?,
             initial_stop_pct: f("SHADOW_STOP_LOSS_PCT", "35").parse()?,
+            time_stop_secs: f("SHADOW_TIME_STOP_SECS", "90").parse()?,
+            time_stop_min_x: f("SHADOW_TIME_STOP_MIN_X", "1.2").parse()?,
             breakeven_after_tp1: f("SHADOW_BREAKEVEN_AFTER_TP1", "true")
                 .eq_ignore_ascii_case("true"),
             max_hold_secs: f("SHADOW_MAX_HOLD_SECS", "0").parse()?,
@@ -556,6 +562,7 @@ async fn open_position(
 enum ExitReason {
     TakeProfit,
     StopLoss,
+    TimeStop,
     TrailingStop,
     MaxHold,
     Graduated,
@@ -566,6 +573,7 @@ impl ExitReason {
         match self {
             ExitReason::TakeProfit => "take_profit",
             ExitReason::StopLoss => "stop_loss",
+            ExitReason::TimeStop => "time_stop",
             ExitReason::TrailingStop => "trailing_stop",
             ExitReason::MaxHold => "max_hold",
             ExitReason::Graduated => "graduated",
@@ -618,6 +626,7 @@ fn evaluate_staged_exits(
     trade: &ShadowTrade,
     curve: &CurveSnapshot,
     config: &ShadowConfig,
+    now_ms: i64,
 ) -> (Vec<(&'static str, f64, f64)>, Option<ExitReason>) {
     // Each fill: (kind, tokens, fill_price_sol). TP/stop fills execute at
     // the level price (+slippage), not the observed snapshot — models a
@@ -628,6 +637,20 @@ fn evaluate_staged_exits(
     if curve.complete {
         fills.push(("graduated", trade.tokens_at_entry(), curve.price_sol));
         return (fills, Some(ExitReason::Graduated));
+    }
+
+    // Time stop: a signal that has not reached TP1 within the window is dead
+    // weight — it is far more likely to bleed to the stop than to lift off.
+    // Mirrors live's LIVE_TIME_STOP_SECS/LIVE_TIME_STOP_MIN_X exactly.
+    let age_secs = (now_ms.saturating_sub(trade.entry_time_unix_ms)) / 1_000;
+    if !trade.tp1_done
+        && config.time_stop_secs > 0
+        && multiple < config.time_stop_min_x
+        && age_secs >= config.time_stop_secs as i64
+    {
+        let fill_price = curve.price_sol * (1.0 - LEVEL_FILL_SLIPPAGE);
+        fills.push(("time_stop", trade.tokens_at_entry(), fill_price));
+        return (fills, Some(ExitReason::TimeStop));
     }
 
     if !trade.tp1_done && multiple >= config.tp1_multiple {
@@ -713,7 +736,7 @@ async fn poll_position(
     }
     let peak = trade.peak_price_sol.max(curve.price_sol);
     let trade_for_eval = ShadowTrade { peak_price_sol: peak, ..trade.clone() };
-    let (fills, close_reason) = evaluate_staged_exits(&trade_for_eval, &curve, config);
+    let (fills, close_reason) = evaluate_staged_exits(&trade_for_eval, &curve, config, now_ms());
 
     let mut realized = trade.realized_pnl_sol;
     let mut remaining = trade.tokens_at_entry();
@@ -964,6 +987,10 @@ async fn main() -> Result<()> {
 mod tests {
     use super::*;
 
+    /// All test trades enter at this timestamp; tests pass it as `now_ms`
+    /// unless they are specifically exercising the time stop.
+    const ENTRY_MS: i64 = 1_700_000_000_000;
+
     fn trade() -> ShadowTrade {
         ShadowTrade {
             id: 1,
@@ -971,7 +998,7 @@ mod tests {
             ticker: Some("TEST".into()),
             source: "soltrenchtrending".into(),
             message_id: 1,
-            entry_time_unix_ms: 0,
+            entry_time_unix_ms: ENTRY_MS,
             entry_price_sol: 1e-6,
             entry_market_cap_sol: 100.0,
             buy_sol_amount: 0.5,
@@ -1007,6 +1034,8 @@ mod tests {
             tp2_fraction: 40.0,
             moon_trail_pct: 35.0,
             initial_stop_pct: 35.0,
+            time_stop_secs: 90,
+            time_stop_min_x: 1.2,
             breakeven_after_tp1: true,
             max_hold_secs: 0,
             poll_interval_secs: 5,
@@ -1017,7 +1046,7 @@ mod tests {
 
     #[test]
     fn tp1_fires_at_1_1x_sells_40pct() {
-        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.15, false), &config());
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.15, false), &config(), ENTRY_MS);
         assert_eq!(fills.len(), 1);
         assert_eq!(fills[0].0, "tp1");
         assert!((fills[0].1 - 200_000.0).abs() < 1.0); // 40% of 500k
@@ -1026,7 +1055,7 @@ mod tests {
 
     #[test]
     fn stop_before_tp1_dumps_everything() {
-        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(0.60, false), &config());
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(0.60, false), &config(), ENTRY_MS);
         assert_eq!(fills.len(), 1);
         assert_eq!(fills[0].0, "stop");
         assert_eq!(close, Some(ExitReason::StopLoss));
@@ -1038,7 +1067,7 @@ mod tests {
         t.tp1_done = true;
         t.remaining_tokens = 300_000.0;
         // price fell back to entry: breakeven stop
-        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.0, false), &config());
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.0, false), &config(), ENTRY_MS);
         assert_eq!(fills[0].0, "stop");
         assert_eq!(close, Some(ExitReason::StopLoss));
     }
@@ -1048,7 +1077,7 @@ mod tests {
         let mut t = trade();
         t.tp1_done = true;
         t.remaining_tokens = 300_000.0;
-        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.6, false), &config());
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.6, false), &config(), ENTRY_MS);
         assert_eq!(fills.len(), 1);
         assert_eq!(fills[0].0, "tp2");
         assert!((fills[0].1 - 120_000.0).abs() < 1.0); // 40% of 300k
@@ -1063,7 +1092,7 @@ mod tests {
         t.remaining_tokens = 100_000.0;
         t.peak_price_sol = t.entry_price_sol * 3.0;
         // trailing 35% off peak: 3.0 * 0.65 = 1.95x -> price at 1.9x triggers
-        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.9, false), &config());
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.9, false), &config(), ENTRY_MS);
         assert_eq!(fills[0].0, "moon_bag");
         assert_eq!(close, Some(ExitReason::TrailingStop));
     }
@@ -1073,7 +1102,7 @@ mod tests {
         let mut t = trade();
         t.remaining_tokens = t.token_amount;
         // no TP1 yet, price collapsed to 0.6x (below the 35% test stop)
-        let (fills, close) = evaluate_staged_exits(&t, &snapshot(0.6, false), &config());
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(0.6, false), &config(), ENTRY_MS);
         assert_eq!(fills[0].0, "stop");
         assert_eq!(close, Some(ExitReason::StopLoss));
     }
@@ -1086,13 +1115,13 @@ mod tests {
         t.remaining_tokens = 100_000.0;
         t.peak_price_sol = t.entry_price_sol * 3.0;
         // above trail level (1.95x), below new peak -> hold
-        let (_, close) = evaluate_staged_exits(&t, &snapshot(2.5, false), &config());
+        let (_, close) = evaluate_staged_exits(&t, &snapshot(2.5, false), &config(), ENTRY_MS);
         assert!(close.is_none());
     }
 
     #[test]
     fn graduation_dumps_all() {
-        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.05, true), &config());
+        let (fills, close) = evaluate_staged_exits(&trade(), &snapshot(1.05, true), &config(), ENTRY_MS);
         assert_eq!(fills[0].0, "graduated");
         assert_eq!(close, Some(ExitReason::Graduated));
         assert!((fills[0].1 - 500_000.0).abs() < 1.0);
@@ -1105,4 +1134,50 @@ mod tests {
         c.tp2_fraction = 40.0; // 100% total -> no moon bag -> invalid
         assert!(ShadowConfig::validate(&c).is_err());
     }
+
+    #[test]
+    fn time_stop_fires_when_tp1_is_missed() {
+        let mut t = trade();
+        t.remaining_tokens = t.token_amount;
+        // 120s old, still at 0.95x -> dead signal, exit
+        let (fills, close) =
+            evaluate_staged_exits(&t, &snapshot(0.95, false), &config(), ENTRY_MS + 120_000);
+        assert_eq!(fills[0].0, "time_stop");
+        assert_eq!(close, Some(ExitReason::TimeStop));
+    }
+
+    #[test]
+    fn time_stop_does_not_fire_before_the_window() {
+        let mut t = trade();
+        t.remaining_tokens = t.token_amount;
+        // only 30s old: still has time to run
+        let (fills, close) =
+            evaluate_staged_exits(&t, &snapshot(0.95, false), &config(), ENTRY_MS + 30_000);
+        assert!(fills.is_empty());
+        assert_eq!(close, None);
+    }
+
+    #[test]
+    fn time_stop_leaves_runners_alone() {
+        let mut t = trade();
+        t.remaining_tokens = t.token_amount;
+        // old, but above the 1.2x floor: let the ladder work
+        let (fills, close) =
+            evaluate_staged_exits(&t, &snapshot(1.3, false), &config(), ENTRY_MS + 600_000);
+        assert!(fills.iter().all(|f| f.0 != "time_stop"), "must not cut a runner");
+        assert_ne!(close, Some(ExitReason::TimeStop));
+    }
+
+    #[test]
+    fn time_stop_is_disabled_at_zero() {
+        let mut cfg = config();
+        cfg.time_stop_secs = 0;
+        let mut t = trade();
+        t.remaining_tokens = t.token_amount;
+        let (fills, close) =
+            evaluate_staged_exits(&t, &snapshot(0.95, false), &cfg, ENTRY_MS + 600_000);
+        assert!(fills.is_empty());
+        assert_eq!(close, None);
+    }
+
 }
