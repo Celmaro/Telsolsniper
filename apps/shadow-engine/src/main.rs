@@ -667,6 +667,13 @@ fn evaluate_staged_exits(
         // Stop fills at the stop level minus slippage, never at the crash
         // bottom a 5s poller happened to observe.
         let fill_price = level * (1.0 - LEVEL_FILL_SLIPPAGE);
+        if trailing_stage {
+            // Post-TP1 remainder leaving on the trail is a moon-bag exit, not
+            // a stop loss. Labelling it "stop" made every winner look like a
+            // loss in the stats.
+            fills.push(("moon_bag", trade.tokens_at_entry(), fill_price));
+            return (fills, Some(ExitReason::TrailingStop));
+        }
         fills.push(("stop", trade.tokens_at_entry(), fill_price));
         return (fills, Some(ExitReason::StopLoss));
     }
@@ -1057,6 +1064,16 @@ mod tests {
         t.peak_price_sol = t.entry_price_sol * 3.0;
         // trailing 35% off peak: 3.0 * 0.65 = 1.95x -> price at 1.9x triggers
         let (fills, close) = evaluate_staged_exits(&t, &snapshot(1.9, false), &config());
+        assert_eq!(fills[0].0, "moon_bag");
+        assert_eq!(close, Some(ExitReason::TrailingStop));
+    }
+
+    #[test]
+    fn stop_label_used_before_tp1() {
+        let mut t = trade();
+        t.remaining_tokens = t.token_amount;
+        // no TP1 yet, price collapsed to 0.6x (below the 35% test stop)
+        let (fills, close) = evaluate_staged_exits(&t, &snapshot(0.6, false), &config());
         assert_eq!(fills[0].0, "stop");
         assert_eq!(close, Some(ExitReason::StopLoss));
     }
