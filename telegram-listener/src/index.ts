@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
 import { dirname } from "node:path";
 import { TelegramClient } from "teleproto";
 import { StringSession } from "teleproto/sessions";
+import { NewMessage } from "teleproto/events";
 import { loadConfig } from "./config.js";
 import { parseTelegramSignals } from "./parser.js";
 import { SignalSocketPublisher } from "./signal-socket.js";
@@ -127,12 +128,41 @@ async function main(): Promise<void> {
   console.info("Telegram listener connected to Rust signal intake.");
   console.info("Watching channels:", config.channels.join(", "));
 
-  const stopWatchers = config.channels.map((channel) =>
-    client.updates.watch(channel, (update) => {
-      const message = (update as TelegramMessageUpdate).message;
-      if (!message || typeof message.id !== "number") {
-        return;
+  // ---------------------------------------------------------------------
+  // Two delivery paths, first arrival wins.
+  //
+  // `updates.watch()` polls updates.getChannelDifference: it is the reliable
+  // path (no server-side push required, works without joining) but its floor
+  // is channelPollInterval = 1s, so a post can sit unseen for up to a second.
+  //
+  // The MTProto push path delivers the same post over the socket in ms, but
+  // has a documented 10-20s tail on some channels (teleproto #36). Running
+  // both and deduping on (channel, message id) means we take the fast one
+  // when push works and still get the message when only polling works.
+  //
+  // Both paths log lag = receipt - message.date. message.date is whole
+  // seconds, so lag_s is quantised to ~1s; it is still enough to show which
+  // path arrives first.
+  const seenMessages = new Map<string, number>();
+  const DEDUPE_TTL_MS = 10 * 60 * 1000;
+
+  function alreadyHandled(channel: string, messageId: number): boolean {
+    const key = `${channel}:${messageId}`;
+    const now = Date.now();
+    if (seenMessages.has(key)) return true;
+    seenMessages.set(key, now);
+    if (seenMessages.size > 4096) {
+      for (const [k, at] of seenMessages) {
+        if (now - at > DEDUPE_TTL_MS) seenMessages.delete(k);
       }
+    }
+    return false;
+  }
+
+  const handleMessage = (channel: string, message: any, via: "push" | "poll"): void => {
+      if (!message || typeof message.id !== "number") return;
+      if (alreadyHandled(channel, message.id)) return;
+      const lagS = typeof message.date === "number" ? Math.round((Date.now() / 1000 - message.date) * 10) / 10 : -1;
 
       const linkUrls = [
         ...collectHiddenUrls(message.entities),
@@ -149,6 +179,7 @@ async function main(): Promise<void> {
         message.date,
         linkUrls
       );
+
       const maxMints = config.maxMintsPerMessage;
       const kind = parseable[0]?.kind ?? "other";
       // Only an entry post announces a token the channel is calling now.
@@ -158,7 +189,7 @@ async function main(): Promise<void> {
       const signals = tradeable ? parseable.slice(0, maxMints) : [];
       if (parseable.length > 0 && !tradeable) {
         console.info(
-          `not an entry post source=${channel} message=${message.id} kind=${kind} mints=${parseable.length}`
+          `not an entry post source=${channel} message=${message.id} kind=${kind} mints=${parseable.length} via=${via} lag_s=${lagS}`
         );
       }
       if (parseable.length > maxMints) {
@@ -171,7 +202,7 @@ async function main(): Promise<void> {
         void publisher.publish(signal).then(
           () => {
             console.info(
-              `signal forwarded source=${signal.source} message=${signal.messageId} mint=${signal.mint} ticker=${signal.ticker ?? "n/a"}`
+              `signal forwarded source=${signal.source} message=${signal.messageId} mint=${signal.mint} ticker=${signal.ticker ?? "n/a"} via=${via} lag_s=${lagS}`
             );
           },
           (error: unknown) => {
@@ -179,8 +210,30 @@ async function main(): Promise<void> {
           }
         );
       }
+  };
+
+  const stopWatchers = config.channels.map((channel) =>
+    client.updates.watch(channel, (update) => {
+      const message = (update as TelegramMessageUpdate).message;
+      handleMessage(channel, message, "poll");
     })
   );
+
+  // Push path. NewMessage fires straight off the socket; if the account is not
+  // a member of a channel this simply never fires and polling stays in charge.
+  client.addEventHandler(async (event: any) => {
+    const message = event?.message;
+    if (!message) return;
+    let username: string | undefined;
+    try {
+      const chat = await message.getChat();
+      username = chat?.username;
+    } catch {
+      return;
+    }
+    if (!username || !config.channels.includes(username)) return;
+    handleMessage(username, message, "push");
+  }, new NewMessage({}));
 
   const shutdown = async (): Promise<void> => {
     for (const stop of stopWatchers) stop();
