@@ -1917,6 +1917,21 @@ async fn main() -> Result<()> {
 
     let balance = client.infrastructure.rpc.get_balance(&wallet).await? as f64 / LAMPORTS_PER_SOL;
     info!(%wallet, balance_sol = balance, buy_sol = config.buy_sol, "LIVE engine starting — real trades");
+    // Rent reclaimer runs BEFORE the funding check: a wallet sitting just
+    // under the trading threshold may hold dozens of rent-exempt token
+    // accounts, and closing them can be what makes it tradeable again.
+    // Returns the 0.00203928 SOL locked in every token account ever created.
+    ata_janitor::spawn(
+        config.rpc_url.clone(),
+        Arc::clone(&client.payer),
+        config.ata_janitor_secs,
+    );
+    // Give the first pass a moment to land before deciding the wallet is poor.
+    tokio::time::sleep(std::time::Duration::from_secs(
+        if config.ata_janitor_secs > 0 { 20 } else { 0 },
+    ))
+    .await;
+    let balance = client.infrastructure.rpc.get_balance(&wallet).await? as f64 / LAMPORTS_PER_SOL;
     if balance < config.buy_sol * 3.0 + 0.01 {
         bail!("wallet balance {:.6} SOL too low for live trading", balance);
     }
@@ -1950,13 +1965,6 @@ async fn main() -> Result<()> {
         Arc::clone(&config),
         wallet,
     ));
-    // Returns the 0.00203928 SOL of rent locked in every token account the
-    // wallet has ever created. Nothing else reclaims it.
-    ata_janitor::spawn(
-        config.rpc_url.clone(),
-        Arc::clone(&client.payer),
-        config.ata_janitor_secs,
-    );
 
     // Persistent reader task -> channel
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<NewMintEvent>();

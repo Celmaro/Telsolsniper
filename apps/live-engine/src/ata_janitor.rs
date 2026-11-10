@@ -38,6 +38,7 @@ pub fn spawn(rpc_url: String, payer: Arc<Keypair>, interval_secs: u64) {
         info!("ata janitor disabled");
         return;
     }
+    info!(interval_secs, "ata janitor started");
     tokio::spawn(async move {
         // First pass shortly after start so leftovers are reclaimed early.
         tokio::time::sleep(Duration::from_secs(15)).await;
@@ -250,6 +251,21 @@ mod tests {
         assert!(ix.accounts[1].is_writable, "lamport destination must be writable");
         assert!(ix.accounts[2].is_signer, "owner must sign");
         assert_eq!(ix.program_id.to_string(), TOKEN_PROGRAM);
+    }
+
+    /// Hits mainnet. Run manually:
+    /// `cargo test -p live-engine -- --ignored scan_probe --nocapture`
+    #[tokio::test]
+    #[ignore = "network: queries mainnet RPC"]
+    async fn scan_probe() {
+        let owner: Pubkey = "JBbfbuUT1Z5wKLwTPjxnkgiuC1XRxxP5nGwSVVCpbqy8".parse().unwrap();
+        let empty = empty_token_accounts("https://api.mainnet-beta.solana.com", &owner)
+            .await
+            .expect("scan failed");
+        println!("zero-balance token accounts: {}", empty.len());
+        for ata in &empty {
+            println!("  {ata}");
+        }
     }
 
     #[test]
