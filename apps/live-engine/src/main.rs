@@ -9,7 +9,6 @@
 //! and refuses to start if wallet balance < 2 x per-trade size + rent.
 
 mod journal;
-mod price_feed;
 mod redact;
 
 use anyhow::{bail, Context, Result};
@@ -1726,12 +1725,52 @@ async fn reconcile_loop(
 
 /// Independent exit task: position management never shares a loop with entry,
 /// so a slow buy or a blocked RPC call cannot delay a stop.
+#[derive(Debug, PartialEq, Eq)]
+enum EvalDue {
+    /// Re-price this position now.
+    Poll,
+    /// Not scheduled yet and no fresh tick for this pool.
+    Wait,
+    /// A tick or the interval wants a poll, but MIN_GAP_MS has not elapsed.
+    RateLimited,
+}
+
+/// Decide whether a position should be re-priced.
+///
+/// `tick_at_ms` is when the pool last traded (from the price feed), already
+/// converted to the same clock as `now_ms`. A tick newer than the last
+/// evaluation wakes the position early; the scheduled interval still applies
+/// as a floor so a quiet pool is checked on the regular cadence.
+fn eval_due(
+    now_ms: i64,
+    last_eval_ms: i64,
+    tick_at_ms: Option<i64>,
+    scheduled_ms: i64,
+    min_gap_ms: i64,
+) -> EvalDue {
+    let since = now_ms.saturating_sub(last_eval_ms);
+    let scheduled_due = since >= scheduled_ms;
+    let tick_new = tick_at_ms.map(|at| at > last_eval_ms).unwrap_or(false);
+    if !scheduled_due && !tick_new {
+        return EvalDue::Wait;
+    }
+    if since < min_gap_ms {
+        return EvalDue::RateLimited;
+    }
+    EvalDue::Poll
+}
+
 async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<LiveConfig>) {
     // Per-mint last evaluation, so a busy pool cannot hammer RPC: the stream
     // can push 20+ ticks/s for a hot token.
     const MIN_GAP_MS: i64 = 250;
     const WAKE_SLICE_MS: u64 = 100;
     let mut last_eval: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    // Observability: proves the stream drives polls rather than merely
+    // connecting. Logged once a minute.
+    let mut tick_polls: u64 = 0;
+    let mut scheduled_polls: u64 = 0;
+    let mut last_stats = std::time::Instant::now();
 
     loop {
         let trades = match store.open_trades() {
@@ -1789,18 +1828,23 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
             // flooding the RPC with reads.
             let now = now_ms();
             let last = last_eval.get(&trade.mint).copied().unwrap_or(0);
-            let since = now.saturating_sub(last);
-            let ticked = price_feed::last_tick(&trade.mint)
-                .map(|at| now.saturating_sub(at.elapsed().as_millis() as i64) > last)
-                .unwrap_or(false);
-            if since < scheduled_ms && !ticked {
-                continue;
+            let tick_at_ms = price_feed::last_tick(&trade.mint)
+                .map(|at| now.saturating_sub(at.elapsed().as_millis() as i64));
+            match eval_due(now, last, tick_at_ms, scheduled_ms, MIN_GAP_MS) {
+                EvalDue::Poll => {
+                    last_eval.insert(trade.mint.clone(), now);
+                    if tick_at_ms.map(|at| at > last).unwrap_or(false) {
+                        tick_polls += 1;
+                    } else {
+                        scheduled_polls += 1;
+                    }
+                }
+                EvalDue::RateLimited => {
+                    any_due = true;
+                    continue;
+                }
+                EvalDue::Wait => continue,
             }
-            if since < MIN_GAP_MS {
-                any_due = true;
-                continue;
-            }
-            last_eval.insert(trade.mint.clone(), now);
 
             if let Err(error) = poll_live_position(&client, &store, &config, trade).await {
                 warn!(
@@ -1815,6 +1859,19 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
         // but was rate-limited, so re-check immediately.
         let slice = if any_due { 0 } else { WAKE_SLICE_MS };
         tokio::time::sleep(std::time::Duration::from_millis(slice)).await;
+
+        if last_stats.elapsed() >= std::time::Duration::from_secs(60) {
+            last_stats = std::time::Instant::now();
+            info!(
+                tick_polls,
+                scheduled_polls,
+                open = store.open_trades().map(|t| t.len()).unwrap_or(0),
+                tracked_mints = price_feed::probe_count().unwrap_or(0),
+                "exit wake stats (tick-driven vs scheduled polls in the last minute)"
+            );
+            tick_polls = 0;
+            scheduled_polls = 0;
+        }
     }
 }
 
@@ -1941,5 +1998,65 @@ async fn main() -> Result<()> {
 
         // Exits run in their own task; this loop only takes entries.
         tokio::time::sleep(std::time::Duration::from_millis(config.entry_tick_ms)).await;
+    }
+}
+#[cfg(test)]
+mod exit_wake_tests {
+    use super::{eval_due, EvalDue};
+
+    const SCHEDULED: i64 = 2_000;
+    const GAP: i64 = 250;
+
+    #[test]
+    fn waits_when_not_scheduled_and_no_tick() {
+        // last eval 500ms ago, interval 2s, no tick
+        assert_eq!(eval_due(10_500, 10_000, None, SCHEDULED, GAP), EvalDue::Wait);
+    }
+
+    #[test]
+    fn polls_on_schedule_even_without_ticks() {
+        // last eval 2s ago: scheduled floor reached
+        assert_eq!(eval_due(12_000, 10_000, None, SCHEDULED, GAP), EvalDue::Poll);
+    }
+
+    #[test]
+    fn a_new_tick_wakes_long_before_the_interval() {
+        // interval 2s, but the pool traded 100ms after the last eval
+        assert_eq!(
+            eval_due(10_300, 10_000, Some(10_100), SCHEDULED, GAP),
+            EvalDue::Poll,
+            "a fresh tick must re-price immediately, not wait out 2s"
+        );
+    }
+
+    #[test]
+    fn a_stale_tick_does_not_wake() {
+        // tick predates the last evaluation: already acted on
+        assert_eq!(
+            eval_due(10_300, 10_000, Some(9_000), SCHEDULED, GAP),
+            EvalDue::Wait
+        );
+    }
+
+    #[test]
+    fn min_gap_protects_the_rpc_from_a_hot_pool() {
+        // tick arrived 50ms after last eval; 20 ticks/s must not become 20 polls/s
+        assert_eq!(
+            eval_due(10_050, 10_000, Some(10_020), SCHEDULED, GAP),
+            EvalDue::RateLimited
+        );
+    }
+
+    #[test]
+    fn rate_limit_clears_once_the_gap_passes() {
+        assert_eq!(
+            eval_due(10_300, 10_000, Some(10_020), SCHEDULED, GAP),
+            EvalDue::Poll
+        );
+    }
+
+    #[test]
+    fn first_evaluation_of_a_new_position_polls_immediately() {
+        assert_eq!(eval_due(10_000, 0, None, SCHEDULED, GAP), EvalDue::Poll);
     }
 }

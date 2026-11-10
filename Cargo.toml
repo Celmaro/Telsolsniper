@@ -39,6 +39,7 @@ members = [
     "apps/telegram-signal-sniper",
     "apps/shadow-engine",
     "apps/live-engine",
+    "apps/price-feed",
     "apps/venue-probe",
     "apps/feed-monitor",
 ]

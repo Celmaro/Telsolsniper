@@ -22,10 +22,11 @@ use sol_trade_sdk::utils::calc::pumpswap::{
 };
 use solana_sdk::pubkey::Pubkey;
 use std::{
+    collections::HashMap,
     env,
     str::FromStr,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
@@ -749,6 +750,19 @@ async fn poll_positions(
     store: Arc<ShadowStore>,
     config: Arc<ShadowConfig>,
 ) -> Result<()> {
+    poll_positions_filtered(rpc, store, config, None).await
+}
+
+/// Poll open positions, optionally limited to `only` mints.
+///
+/// The stream-driven path passes a filter so a single tick costs one position
+/// poll, not one per open trade — a hot pool can tick 3x/s.
+async fn poll_positions_filtered(
+    rpc: &HedgedRpc,
+    store: Arc<ShadowStore>,
+    config: Arc<ShadowConfig>,
+    only: Option<&std::collections::HashSet<String>>,
+) -> Result<()> {
     let open = store.open_trades()?;
     if open.is_empty() {
         return Ok(());
@@ -756,6 +770,11 @@ async fn poll_positions(
     let semaphore = Arc::new(tokio::sync::Semaphore::new(config.poll_concurrency));
     let mut handles = Vec::with_capacity(open.len());
     for trade in open {
+        if let Some(filter) = only {
+            if !filter.contains(&trade.mint) {
+                continue;
+            }
+        }
         let permit = Arc::clone(&semaphore).acquire_owned().await?;
         let rpc = rpc.clone();
         let store = Arc::clone(&store);
@@ -830,6 +849,23 @@ async fn run() -> Result<()> {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
 
+    // Free pumpapi.io trade ticks: an open position is re-priced within ~100ms
+    // of its pool trading instead of waiting out the poll interval. Read-only,
+    // no key; the tick is a wake signal, never a price (see price-feed docs).
+    tokio::spawn(price_feed::run(Vec::new()));
+    const WAKE_SLICE: Duration = Duration::from_millis(100);
+    const MIN_GAP: Duration = Duration::from_millis(250);
+    let interval = Duration::from_secs(config.poll_interval_secs);
+    let mut last_poll = Instant::now();
+    // mint -> last tick we already acted on, so one trade event triggers
+    // exactly one re-price rather than repeating for the tick's lifetime.
+    let mut acted: HashMap<String, Instant> = HashMap::new();
+    // Observability: proves the stream is actually driving polls, not just
+    // connecting. Logged once a minute.
+    let mut tick_polls: u64 = 0;
+    let mut scheduled_polls: u64 = 0;
+    let mut last_stats = Instant::now();
+
     loop {
         tokio::select! {
             read = reader.read_line(&mut line) => {
@@ -853,9 +889,55 @@ async fn run() -> Result<()> {
                     Err(error) => return Err(error.into()),
                 }
             }
-            _ = tokio::time::sleep(Duration::from_secs(config.poll_interval_secs)) => {
-                if let Err(error) = poll_positions(&rpc, Arc::clone(&store), Arc::clone(&config)).await {
-                    error!(%error, "position polling failed");
+            _ = tokio::time::sleep(WAKE_SLICE) => {
+                // Which open positions just traded? Cheap in-memory check.
+                let mut due: std::collections::HashSet<String> = std::collections::HashSet::new();
+                if let Ok(open) = store.open_trades() {
+                    for trade in &open {
+                        if let Some(tick_at) = price_feed::last_tick(&trade.mint) {
+                            let is_new = acted.get(&trade.mint).map(|seen| tick_at > *seen).unwrap_or(true);
+                            let gap_ok = acted
+                                .get(&trade.mint)
+                                .map(|seen| seen.elapsed() >= MIN_GAP)
+                                .unwrap_or(true);
+                            if is_new && gap_ok {
+                                due.insert(trade.mint.clone());
+                            }
+                        }
+                    }
+                }
+
+                let interval_due = last_poll.elapsed() >= interval;
+                if interval_due {
+                    last_poll = Instant::now();
+                    acted.clear();
+                    scheduled_polls += 1;
+                    if let Err(error) = poll_positions(&rpc, Arc::clone(&store), Arc::clone(&config)).await {
+                        error!(%error, "position polling failed");
+                    }
+                } else if !due.is_empty() {
+                    let now = Instant::now();
+                    for mint in &due {
+                        acted.insert(mint.clone(), now);
+                    }
+                    tick_polls += 1;
+                    if let Err(error) =
+                        poll_positions_filtered(&rpc, Arc::clone(&store), Arc::clone(&config), Some(&due)).await
+                    {
+                        warn!(%error, "tick-driven poll failed");
+                    }
+                }
+
+                if last_stats.elapsed() >= Duration::from_secs(60) {
+                    last_stats = Instant::now();
+                    info!(
+                        tick_polls,
+                        scheduled_polls,
+                        open = store.open_trades().map(|t| t.len()).unwrap_or(0),
+                        "exit wake stats (tick-driven vs scheduled polls in the last minute)"
+                    );
+                    tick_polls = 0;
+                    scheduled_polls = 0;
                 }
             }
         }

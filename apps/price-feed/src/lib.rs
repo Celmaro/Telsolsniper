@@ -1,12 +1,19 @@
-//! Live price feed from pumpapi.io's free WebSocket stream.
+//! Trade ticks from pumpapi.io's free WebSocket stream, used as an exit
+//! **wake signal** for the Telsolsniper engines.
 //!
-//! Why: exits currently poll an RPC every 2s for the pool price. That 2s is
-//! the dominant exit latency and it is the reason a trailing stop gives back
-//! ~42% off the peak instead of the 35% it intends. This stream pushes every
-//! trade with `priceSol` already computed, so the exit loop can read the latest
-//! price from memory (microseconds) and refresh from RPC only as a fallback.
+//! Why: exits poll the pool over RPC on a fixed interval (2s live, 5s shadow).
+//! That interval is the dominant exit latency and the reason a trailing stop
+//! gives back ~42% off the peak instead of the 35% it intends. This stream
+//! pushes every trade, so a position can be re-priced within ~100ms of a pool
+//! trade instead of waiting out the interval.
 //!
-//! Scope: read-only. No key, no funds, no orders — we only consume prices.
+//! Important: the stream's `priceSol` is NOT used as a price. Measured against
+//! the pool's true token-account ratio on 12 simultaneous samples it runs
+//! 7-22% high (e.g. 4.84e-7 vs 3.97e-7), which would fire TP1 at a real 1.37x
+//! while claiming 1.5x and would weaken the stop. Only the tick timestamp is
+//! exposed; pricing stays on RPC, where it is exact.
+//!
+//! Scope: read-only. No key, no funds, no orders.
 //! Filtering happens client-side because the server sends every event.
 
 use futures_util::StreamExt;
@@ -32,16 +39,10 @@ fn store() -> &'static RwLock<PriceMap> {
     PRICES.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-/// Latest streamed SOL price for a mint, if it arrived recently.
-/// `max_age_ms` guards against trading on a stale tick.
-pub fn latest_price(mint: &str, max_age_ms: u64) -> Option<f64> {
-    let guard = store().read().ok()?;
-    let (price, at) = guard.get(mint)?;
-    if at.elapsed() > Duration::from_millis(max_age_ms) {
-        return None;
-    }
-    Some(*price)
-}
+// NOTE: there is deliberately no `latest_price()` accessor. The stream's
+// priceSol measures 7-22% above the pool's true token-account ratio on
+// measured samples, so it is not a price source. Only the tick timestamp is
+// exposed — the exit loop re-prices over RPC when a trade is seen.
 
 /// When a tick last arrived for this mint — used as a wake signal.
 ///
@@ -182,16 +183,9 @@ mod tests {
     }
 
     #[test]
-    fn latest_price_respects_staleness() {
-        remember("Stale".into(), 1.0);
-        assert!(latest_price("Stale", 60_000).is_some());
-        assert!(latest_price("Stale", 0).is_none());
-        assert!(latest_price("Never", 60_000).is_none());
-    }
-
-    #[test]
-    fn last_tick_is_recorded() {
+    fn tick_timestamp_is_recorded() {
         remember("Ticked".into(), 1.0);
         assert!(last_tick("Ticked").is_some());
+        assert!(last_tick("NeverSeen").is_none());
     }
 }
