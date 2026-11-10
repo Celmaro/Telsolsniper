@@ -9,6 +9,7 @@
 //! and refuses to start if wallet balance < 2 x per-trade size + rent.
 
 mod journal;
+mod price_feed;
 mod redact;
 
 use anyhow::{bail, Context, Result};
@@ -1227,11 +1228,15 @@ async fn poll_live_position(
     let Ok(mint) = Pubkey::from_str(&trade.mint) else { return Ok(()) };
     let rpc = &client.infrastructure.rpc;
 
-    // Price check via curve (active) or pool (graduated).
+    // Price is always read from the pool over RPC: the stream's priceSol
+    // measures 7-22% above the true token-account ratio, so it is used only
+    // to trigger this call earlier (see price_feed::last_tick), never as the
+    // price itself.
     let price = match PumpFunParams::from_mint_by_rpc(rpc, &mint).await {
         Ok(p) if !p.bonding_curve.as_ref().complete => {
             let c = p.bonding_curve.as_ref();
-            (c.virtual_sol_reserves as f64 / LAMPORTS_PER_SOL) / (c.virtual_token_reserves as f64 / TOKEN_DECIMALS)
+            (c.virtual_sol_reserves as f64 / LAMPORTS_PER_SOL)
+                / (c.virtual_token_reserves as f64 / TOKEN_DECIMALS)
         }
         _ => match quote_pumpswap_price(rpc, &mint).await {
             Ok(p) => p,
@@ -1722,6 +1727,12 @@ async fn reconcile_loop(
 /// Independent exit task: position management never shares a loop with entry,
 /// so a slow buy or a blocked RPC call cannot delay a stop.
 async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<LiveConfig>) {
+    // Per-mint last evaluation, so a busy pool cannot hammer RPC: the stream
+    // can push 20+ ticks/s for a hot token.
+    const MIN_GAP_MS: i64 = 250;
+    const WAKE_SLICE_MS: u64 = 100;
+    let mut last_eval: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+
     loop {
         let trades = match store.open_trades() {
             Ok(trades) => trades,
@@ -1734,6 +1745,8 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
                 continue;
             }
         };
+        let scheduled_ms = (config.poll_interval_secs as i64) * 1_000;
+        let mut any_due = false;
         for trade in trades {
             // Backstop: a position that never resolves (no price, no balance)
             // must still be closed so it cannot linger for hours.
@@ -1771,6 +1784,24 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
                 }
                 continue;
             }
+            // Due when the scheduled interval elapsed OR the stream just
+            // showed a trade for this pool. MIN_GAP_MS keeps a hot pool from
+            // flooding the RPC with reads.
+            let now = now_ms();
+            let last = last_eval.get(&trade.mint).copied().unwrap_or(0);
+            let since = now.saturating_sub(last);
+            let ticked = price_feed::last_tick(&trade.mint)
+                .map(|at| now.saturating_sub(at.elapsed().as_millis() as i64) > last)
+                .unwrap_or(false);
+            if since < scheduled_ms && !ticked {
+                continue;
+            }
+            if since < MIN_GAP_MS {
+                any_due = true;
+                continue;
+            }
+            last_eval.insert(trade.mint.clone(), now);
+
             if let Err(error) = poll_live_position(&client, &store, &config, trade).await {
                 warn!(
                     error = %redact::redact_error(&error.to_string(), &[config.private_key.as_str()]),
@@ -1778,7 +1809,12 @@ async fn exit_loop(store: Arc<LiveStore>, client: Arc<SolanaTrade>, config: Arc<
                 );
             }
         }
-        tokio::time::sleep(std::time::Duration::from_secs(config.poll_interval_secs)).await;
+
+        // Short slice so a stream tick wakes us in ~100ms instead of waiting
+        // out the whole poll interval. any_due means a position wanted to run
+        // but was rate-limited, so re-check immediately.
+        let slice = if any_due { 0 } else { WAKE_SLICE_MS };
+        tokio::time::sleep(std::time::Duration::from_millis(slice)).await;
     }
 }
 
@@ -1788,6 +1824,25 @@ async fn main() -> Result<()> {
         tracing_subscriber::EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| "info".into()),
     ).init();
+
+    // Read-only diagnostic: verify the free price stream connects and ticks
+    // without touching funds or requiring LIVE_ENABLED.
+    if std::env::args().any(|a| a == "--price-probe") {
+        info!("price probe: connecting to pumpapi.io stream for 20s (read-only)");
+        price_feed::ensure_tls();
+        tokio::spawn(price_feed::run(Vec::new()));
+        let mut seen = 0usize;
+        for _ in 0..20 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if let Some(tracked) = price_feed::probe_count() {
+                if tracked > seen {
+                    seen = tracked;
+                }
+            }
+        }
+        info!(mints_tracked = seen, "price probe finished");
+        return Ok(());
+    }
 
     if std::env::var("LIVE_ENABLED").ok().as_deref() != Some("true") {
         bail!("LIVE_ENABLED=true required — this engine spends real SOL");
@@ -1822,6 +1877,9 @@ async fn main() -> Result<()> {
         Arc::clone(&config),
     ));
     let _fee_task = tokio::spawn(fee_refresh_loop(Arc::clone(&config)));
+    // Free pumpapi.io data stream: pushes priceSol per trade so exits read a
+    // cached tick instead of waiting on a 2s RPC poll. Read-only.
+    let _price_task = tokio::spawn(price_feed::run(Vec::new()));
     let _hash_task = tokio::spawn(blockhash_refresh_loop(Arc::clone(&client)));
     let _reconcile_task = tokio::spawn(reconcile_loop(
         Arc::clone(&store),
