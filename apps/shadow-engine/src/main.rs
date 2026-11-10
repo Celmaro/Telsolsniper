@@ -34,6 +34,9 @@ use tracing::{error, info, warn};
 
 const LAMPORTS_PER_SOL: f64 = 100_000_000.0;
 
+/// Measured cost of one transaction: CU 130k + p75 priority fee + 0.00002 tip.
+const TX_FEE_SOL: f64 = 0.0000445;
+
 #[derive(Debug, Clone)]
 struct ShadowConfig {
     event_socket_path: String,
@@ -750,7 +753,10 @@ async fn poll_position(
             tokens_sold * fill_price
         };
         record_fill(store, &trade_for_eval, kind, *fill_price, *tokens_sold)?;
-        realized += proceeds - trade.buy_sol_amount * (tokens_sold / trade.token_amount);
+        // Charge the sell transaction so shadow PnL means the same thing as
+        // live PnL. Measured cost: 44,500 lamports per tx (CU 130k + p75
+        // priority + 0.00002 tip).
+        realized += proceeds - trade.buy_sol_amount * (tokens_sold / trade.token_amount) - TX_FEE_SOL;
         remaining -= tokens_sold;
         let fractional = remaining > 1.0 && close_reason.is_none();
         store.update_stage(trade_for_eval.id, kind, realized, remaining, fractional)?;
@@ -758,7 +764,10 @@ async fn poll_position(
 
     if let Some(reason) = close_reason {
         let exit_price = fills.last().map(|(_, _, p)| *p).unwrap_or(curve.price_sol);
-        let pnl_sol = realized;
+        // Buy fee + the ATA close that reclaims rent. The 0.00203928 SOL rent
+        // itself is a round trip (locked on buy, returned on close) so it
+        // cancels; only the transactions are a real cost.
+        let pnl_sol = realized - 2.0 * TX_FEE_SOL;
         let pnl_pct = (realized / trade.buy_sol_amount) * 100.0;
         store.record_exit(trade_for_eval.id, exit_price, reason.as_str(), pnl_sol, pnl_pct)?;
         info!(

@@ -8,6 +8,7 @@
 //! SAFETY: requires LIVE_ENABLED=true, a funded wallet in PRIVATE_KEY,
 //! and refuses to start if wallet balance < 2 x per-trade size + rent.
 
+mod ata_janitor;
 mod journal;
 mod redact;
 
@@ -89,6 +90,8 @@ struct LiveConfig {
     entry_tick_ms: u64,
     entry_timeout_ms: u64,
     max_open_positions: usize,
+    /// How often the ATA rent reclaimer runs (0 = disabled).
+    ata_janitor_secs: u64,
 }
 
 impl LiveConfig {
@@ -130,6 +133,10 @@ impl LiveConfig {
             entry_tick_ms: f("LIVE_ENTRY_TICK_MS", "250").parse()?,
             entry_timeout_ms: f("LIVE_ENTRY_TIMEOUT_MS", "2500").parse()?,
             max_open_positions: f("LIVE_MAX_OPEN", "5").parse()?,
+            // Reclaim the 0.00203928 SOL of rent locked in every token account
+            // we ever bought. At small position sizes this is the difference
+            // between profit and loss (4% of a 0.05 SOL trade).
+            ata_janitor_secs: f("LIVE_ATA_JANITOR_SECS", "120").parse()?,
         };
         // TP2 is optional: LIVE_TP2_X=0 selects single-TP mode, where the
         // remainder becomes the moon bag.
@@ -1943,6 +1950,13 @@ async fn main() -> Result<()> {
         Arc::clone(&config),
         wallet,
     ));
+    // Returns the 0.00203928 SOL of rent locked in every token account the
+    // wallet has ever created. Nothing else reclaims it.
+    ata_janitor::spawn(
+        config.rpc_url.clone(),
+        Arc::clone(&client.payer),
+        config.ata_janitor_secs,
+    );
 
     // Persistent reader task -> channel
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel::<NewMintEvent>();
